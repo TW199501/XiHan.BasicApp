@@ -1,0 +1,62 @@
+frontend/packages/locales/langs/ja-JP.ts
+  s_056e925fade48c::t_18fb4980fec792 1-27
+frontend/packages/locales/index.ts
+  s_056e925fade48c::t_703d47275417f2 7-13
+  s_056e925fade48c::t_11ce85fd774bff 23-25
+frontend/packages/locales/langs/ja-JP/check_updates.ts
+  s_056e925fade48c::t_c334a2cfa1c654 1-5
+frontend/packages/locales/langs/ja-JP/common.ts
+  s_056e925fade48c::t_e95a2ffd38d81c 1-72
+frontend/packages/locales/langs/ja-JP/component.ts
+  s_056e925fade48c::t_3ae8a04fb57743 1-689
+frontend/packages/locales/langs/ja-JP/error.ts
+  s_056e925fade48c::t_d32ce37c7e7ebd 1-32
+frontend/packages/locales/langs/ja-JP/header.ts
+  s_056e925fade48c::t_7e51d27bbdbed3 1-93
+frontend/packages/locales/langs/ja-JP/island.ts
+  s_056e925fade48c::t_bf0121acad1f7a 1-57
+frontend/packages/locales/langs/ja-JP/menu.ts
+  s_056e925fade48c::t_f9ef9ac134e7a5 1-95
+frontend/packages/locales/langs/ja-JP/page.ts
+  s_056e925fade48c::t_442a2a83c2dd51 1-150
+frontend/packages/locales/langs/ja-JP/preference.ts
+  s_056e925fade48c::t_4f6739d3146f14 1-358
+frontend/packages/locales/langs/ja-JP/tabbar.ts
+  s_056e925fade48c::t_4c4f68a6cb5510 1-32
+frontend/packages/locales/langs/zh-TW/check_updates.ts
+  s_056e925fade48c::t_596dfb2ceb831d 1-5
+frontend/packages/locales/langs/zh-TW/common.ts
+  s_056e925fade48c::t_e40dd4db63689b 1-72
+frontend/packages/locales/langs/zh-TW/component.ts
+  s_056e925fade48c::t_1fb4e71c89b89b 1-689
+frontend/packages/locales/langs/zh-TW/error.ts
+  s_056e925fade48c::t_f8aabed565d983 1-32
+frontend/packages/locales/langs/zh-TW/header.ts
+  s_056e925fade48c::t_6d8e639060380b 1-93
+frontend/packages/locales/langs/zh-TW/island.ts
+  s_056e925fade48c::t_2b6056dbc293ed 1-57
+frontend/packages/locales/langs/zh-TW/menu.ts
+  s_056e925fade48c::t_c20907a1ba2776 1-95
+frontend/packages/locales/langs/zh-TW/page.ts
+  s_056e925fade48c::t_456b8534ca17fa 1-149
+frontend/packages/locales/langs/zh-TW/preference.ts
+  s_056e925fade48c::t_bc8c44d16af3dc 1-337
+frontend/packages/locales/langs/zh-TW/tabbar.ts
+  s_056e925fade48c::t_f69934a45a6881 1-32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "fbfb2e80bd53190d8267cfa0f038f9de8cfba565",
+  "prompts": {},
+  "sessions": {
+    "s_056e925fade48c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1f15b658-dd71-4e19-a8d8-5bb8fd77e516",
+        "model": "claude-opus-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
