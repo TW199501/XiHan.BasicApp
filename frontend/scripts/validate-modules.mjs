@@ -6,7 +6,7 @@
 //   1. 模块目录只允许出现约定条目：views/ api/ locales/ setup.ts README.md；
 //   2. 模块视图重键后（/src/modules/<m>/views/** → /src/views/**）不得与 src/views
 //      既有文件同键，模块之间也不得互相同键——冲突即构建门禁失败；
-//   3. locales/ 下只允许 zh-CN.ts / en-US.ts，且两语言文件必须成对。
+//   3. locales/ 下只允许 ALLOWED_LOCALES 内的文件，且各语言文件必须齐备。
 // 退出码非 0 表示校验失败，挂 CI。
 // ----------------------------------------------------------------
 import { existsSync, readdirSync, statSync } from 'node:fs'
@@ -18,7 +18,8 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const MODULES = join(ROOT, 'src/modules')
 const VIEWS = join(ROOT, 'src/views')
 const ALLOWED_ENTRIES = new Set(['views', 'api', 'locales', 'setup.ts', 'README.md'])
-const ALLOWED_LOCALES = ['zh-CN.ts', 'en-US.ts']
+// 新增语言时在此登记，模块 locales 必须同步补齐，否则门禁失败
+const ALLOWED_LOCALES = ['zh-CN.ts', 'en-US.ts', 'ja-JP.ts']
 
 function walkVues(dir, out = []) {
   if (!existsSync(dir))
@@ -74,7 +75,7 @@ function main() {
       }
       for (const required of ALLOWED_LOCALES) {
         if (files.length > 0 && !files.includes(required))
-          errors.push(`模块 ${m} 的 locales 缺少 ${required}（两语言必须成对）`)
+          errors.push(`模块 ${m} 的 locales 缺少 ${required}（各语言必须齐备）`)
       }
     }
   }
