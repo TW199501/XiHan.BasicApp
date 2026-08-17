@@ -1,0 +1,33 @@
+frontend/packages/components/common/LocaleFlag.vue
+  s_056e925fade48c::t_9ec4d903a7b0e8 64-69
+frontend/packages/locales/langs/zh-TW/header.ts
+  s_056e925fade48c::t_c8e4aabf187098 16
+frontend/packages/locales/langs/en-US/header.ts
+  s_056e925fade48c::t_e83b7ba4a402e3 16
+frontend/packages/locales/langs/zh-CN/header.ts
+  s_056e925fade48c::t_12dc8217a8c12c 16
+frontend/packages/locales/langs/ja-JP/header.ts
+  s_056e925fade48c::t_065b39daa313d4 16
+frontend/packages/hooks/useI18n.ts
+  s_056e925fade48c::t_3f617f2d2a426c 1-2,12-15,17,19-21,27-28
+  s_056e925fade48c::t_b10e490d115712 26
+  s_056e925fade48c::t_62bdf4e187a8b6 6-11,16,18
+frontend/packages/components/common/LocaleSwitcher.vue
+  s_056e925fade48c::t_dcae671120b37e 46,50
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "edd51d8a6e66b4801be6e0c640ab1eb9921f6fed",
+  "prompts": {},
+  "sessions": {
+    "s_056e925fade48c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1f15b658-dd71-4e19-a8d8-5bb8fd77e516",
+        "model": "claude-opus-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
