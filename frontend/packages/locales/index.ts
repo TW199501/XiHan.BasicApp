@@ -3,12 +3,14 @@ import { createI18n } from 'vue-i18n'
 import { DEFAULT_LOCALE, LOCALE_KEY } from '~/constants'
 import { LocalStorage } from '~/utils'
 import enUS from './langs/en-US'
-import zhCN from './langs/zh-CN'
-// TODO(i18n): 语言包补齐后逐个解开注释（langs/<locale>/ 下需与 en-US/ 同名的 10 个命名空间文件）
-import zhTW from './langs/zh-TW'
 import jaJP from './langs/ja-JP'
-import koKR from './langs/ko-KR'
-import deDE from './langs/de-DE'
+import zhCN from './langs/zh-CN'
+// TODO(i18n): 语言包译完后逐个解开注释——未译完的语言不上架，避免用户遇到半中半外的界面。
+// zh-TW：langs/zh-TW/ 的 10 个命名空间文件已就位，但仍是 zh-CN 副本，待译为繁体。
+// ko-KR / de-DE：langs/<locale>/ 目录与聚合档尚未建立。
+// import zhTW from './langs/zh-TW'
+// import koKR from './langs/ko-KR'
+// import deDE from './langs/de-DE'
 
 export const i18n = createI18n({
   legacy: false,
@@ -17,10 +19,10 @@ export const i18n = createI18n({
   messages: {
     'zh-CN': zhCN,
     'en-US': enUS,
-    'zh-TW': zhTW,
     'ja-JP': jaJP,
-    'ko-KR': koKR,
-    'de-DE': deDE,
+    // 'zh-TW': zhTW,
+    // 'ko-KR': koKR,
+    // 'de-DE': deDE,
   },
 })
 
