@@ -1,0 +1,23 @@
+frontend/packages/hooks/useEnumService.ts
+  s_056e925fade48c::t_9bc535d87807ca 7
+  s_056e925fade48c::t_0579ae43432771 47
+frontend/src/views/workbench/dashboard/components/ClockWidget.vue
+  s_056e925fade48c::t_15a6b650710255 4,10
+  s_056e925fade48c::t_7127bee407b30a 22-24,26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "e378a01f2c28132befbe8badab60c3d2b470062f",
+  "prompts": {},
+  "sessions": {
+    "s_056e925fade48c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1f15b658-dd71-4e19-a8d8-5bb8fd77e516",
+        "model": "claude-opus-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
