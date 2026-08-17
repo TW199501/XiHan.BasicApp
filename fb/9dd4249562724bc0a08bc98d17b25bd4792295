@@ -1,0 +1,41 @@
+frontend/src/modules/ai/locales/zh-TW.ts
+  s_056e925fade48c::t_b1eab3843ab552 119
+frontend/packages/locales/langs/zh-TW/component.ts
+  s_40db6c87d11995::t_dc1a02eea62c98 154-155,218,220,232,241,243,246,629,632-633,639,660-661
+frontend/packages/locales/langs/zh-TW/menu.ts
+  s_40db6c87d11995::t_7e32ac087cab1a 84
+frontend/packages/locales/langs/zh-TW/page.ts
+  s_40db6c87d11995::t_ce9ecc7ee2d6cd 41-42,101
+frontend/packages/locales/langs/zh-TW/preference.ts
+  s_40db6c87d11995::t_ec20884961c8a3 38,127
+frontend/src/modules/codegen/locales/zh-TW.ts
+  s_40db6c87d11995::t_b33aea44ed87b4 30,200
+frontend/src/modules/printing/locales/zh-TW.ts
+  s_40db6c87d11995::t_468d8754a049a8 94,98,101,142
+frontend/src/modules/workflow/locales/zh-TW.ts
+  s_40db6c87d11995::t_a57f02cfbd4e87 137,208
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "fb9dd4249562724bc0a08bc98d17b25bd4792295",
+  "prompts": {},
+  "sessions": {
+    "s_056e925fade48c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1f15b658-dd71-4e19-a8d8-5bb8fd77e516",
+        "model": "claude-opus-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    },
+    "s_40db6c87d11995": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-azhTW-shell-modules-8c3a97f700f57976",
+        "model": "unknown"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
