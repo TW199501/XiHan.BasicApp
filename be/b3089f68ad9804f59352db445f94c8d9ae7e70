@@ -1,0 +1,23 @@
+frontend/src/locales/langs/ja-JP/tenant.ts
+  s_056e925fade48c::t_555db36cce4b73 3,5-17,19-48,50-51,53-60,62-88,90-102,104-124,127,129-138,140-150,152-159,161-163,165-176,178-193,195-200,202-210
+frontend/src/locales/langs/ja-JP/approval.ts
+  s_056e925fade48c::t_f8da590077e971 3-74,77-191
+frontend/src/locales/langs/ja-JP/openapi.ts
+  s_056e925fade48c::t_d56e1e2bd48ff1 3,5-6,8-10,12-15,17-23,25-30,32-33,35-38,40-55,57-58,60-82,84,87-89,91-94,96-112
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "beb3089f68ad9804f59352db445f94c8d9ae7e70",
+  "prompts": {},
+  "sessions": {
+    "s_056e925fade48c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1f15b658-dd71-4e19-a8d8-5bb8fd77e516",
+        "model": "claude-opus-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
