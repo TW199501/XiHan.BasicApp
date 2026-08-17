@@ -1,0 +1,21 @@
+frontend/src/locales/langs/ja-JP/identity.ts
+  s_056e925fade48c::t_2d3cda5ba828a5 3-67,69-79,81-84,88-94,96,98-148,151-264,267-336,339-360,363-431,433-489,492-553,556-611,614-649
+frontend/src/locales/langs/ja-JP/workbench.ts
+  s_056e925fade48c::t_bf9a28aa73abae 3-23,25-31,34-44,47-72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "67a323d082c924a22a72d61d91d288654cf87211",
+  "prompts": {},
+  "sessions": {
+    "s_056e925fade48c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1f15b658-dd71-4e19-a8d8-5bb8fd77e516",
+        "model": "claude-opus-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
