@@ -1,0 +1,52 @@
+frontend/scripts/validate-i18n.mjs
+  s_056e925fade48c::t_0025341b5d540d 24
+frontend/packages/locales/langs/zh-TW/header.ts
+  s_056e925fade48c::t_0cd79ebc3d0b00 15,18
+frontend/packages/locales/langs/ko-KR/header.ts
+  s_056e925fade48c::t_d16ea3f472fca3 15,18
+frontend/packages/locales/langs/zh-TW/component.ts
+  s_056e925fade48c::t_2a2812b6e4acb6 437
+frontend/packages/locales/langs/ja-JP/header.ts
+  s_056e925fade48c::t_4b179b86827230 15,18
+frontend/packages/locales/langs/zh-CN/component.ts
+  s_056e925fade48c::t_cb81787f2ca24d 437
+frontend/packages/hooks/useI18n.ts
+  s_056e925fade48c::t_f47c8931b7cbb5 18,21
+  s_056e925fade48c::t_afe9c014b074a3 2
+frontend/packages/components/common/LocaleSwitcher.vue
+  s_056e925fade48c::t_61ce857fa84c0d 49,52
+frontend/src/locales/index.ts
+  s_056e925fade48c::t_2d1b7e96438503 17,19
+  s_056e925fade48c::t_4406372149b0f3 27,30
+frontend/packages/locales/langs/zh-CN/header.ts
+  s_056e925fade48c::t_90ab9053a2042e 15,18
+frontend/packages/locales/langs/en-US/component.ts
+  s_056e925fade48c::t_f50cc6077539fa 437
+frontend/scripts/validate-modules.mjs
+  s_056e925fade48c::t_bbe1650a4dd126 21-24
+frontend/packages/locales/index.ts
+  s_056e925fade48c::t_b84228ac03c34b 7,9,11
+  s_056e925fade48c::t_8d912046abeb40 20,23
+frontend/packages/components/common/LocaleFlag.vue
+  s_056e925fade48c::t_f696f29e27297b 70-130
+frontend/packages/locales/langs/ja-JP/component.ts
+  s_056e925fade48c::t_5804032a475769 437
+frontend/packages/locales/langs/en-US/header.ts
+  s_056e925fade48c::t_0c66d6c7143c3b 15,18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "c09d7aa6367b06660e6bdea69bb204d1e5de931b",
+  "prompts": {},
+  "sessions": {
+    "s_056e925fade48c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1f15b658-dd71-4e19-a8d8-5bb8fd77e516",
+        "model": "claude-opus-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
