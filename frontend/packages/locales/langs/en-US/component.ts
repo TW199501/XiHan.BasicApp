@@ -434,7 +434,7 @@ export default {
     feature_stability_value: 'Production Ready',
     feature_data_label: 'Data Layer',
     feature_i18n_label: 'i18n',
-    feature_i18n_value: 'EN / ZH',
+    feature_i18n_value: 'EN / ZH / JA',
     feature_architecture_label: 'Architecture',
     feature_architecture_value: 'Modular Layered',
     backend_dependencies: 'Backend Production Dependencies (NuGet)',
