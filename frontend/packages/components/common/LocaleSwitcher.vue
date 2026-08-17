@@ -46,8 +46,10 @@ const { t } = useI18n()
 // 已上架语言。新增语言时此处、LocaleFlag 的国旗、useNaiveLocale 的映射表三处需同步
 const LOCALES = [
   { value: 'zh-CN', labelKey: 'header.locale.zh_cn' },
+  { value: 'zh-TW', labelKey: 'header.locale.zh_tw' },
   { value: 'en-US', labelKey: 'header.locale.en_us' },
   { value: 'ja-JP', labelKey: 'header.locale.ja_jp' },
+  { value: 'ko-KR', labelKey: 'header.locale.ko_kr' },
 ] as const
 
 /** 当前选中：apply 取应用语言，否则取受控值（兜底应用语言） */

@@ -4,12 +4,11 @@ import { DEFAULT_LOCALE, LOCALE_KEY } from '~/constants'
 import { LocalStorage } from '~/utils'
 import enUS from './langs/en-US'
 import jaJP from './langs/ja-JP'
+import koKR from './langs/ko-KR'
 import zhCN from './langs/zh-CN'
+import zhTW from './langs/zh-TW'
 // TODO(i18n): 语言包译完后逐个解开注释——未译完的语言不上架，避免用户遇到半中半外的界面。
-// zh-TW：langs/zh-TW/ 的 10 个命名空间文件已就位，但仍是 zh-CN 副本，待译为繁体。
-// ko-KR / de-DE：langs/<locale>/ 目录与聚合档尚未建立。
-// import zhTW from './langs/zh-TW'
-// import koKR from './langs/ko-KR'
+// de-DE：langs/de-DE/ 目录与聚合档尚未建立（业务层文件在 src/locales 下已存在但仍是英文副本）。
 // import deDE from './langs/de-DE'
 
 export const i18n = createI18n({
@@ -18,10 +17,10 @@ export const i18n = createI18n({
   fallbackLocale: 'zh-CN',
   messages: {
     'zh-CN': zhCN,
+    'zh-TW': zhTW,
     'en-US': enUS,
     'ja-JP': jaJP,
-    // 'zh-TW': zhTW,
-    // 'ko-KR': koKR,
+    'ko-KR': koKR,
     // 'de-DE': deDE,
   },
 })

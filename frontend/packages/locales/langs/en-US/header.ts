@@ -12,8 +12,10 @@ export default {
   },
   locale: {
     zh_cn: '简体中文',
+    zh_tw: '繁體中文',
     en_us: 'English',
     ja_jp: '日本語',
+    ko_kr: '한국어',
   },
   timezone: {
     switch_success: 'Timezone switched: {timezone}',

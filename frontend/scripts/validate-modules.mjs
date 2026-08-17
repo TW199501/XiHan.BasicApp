@@ -18,8 +18,10 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const MODULES = join(ROOT, 'src/modules')
 const VIEWS = join(ROOT, 'src/views')
 const ALLOWED_ENTRIES = new Set(['views', 'api', 'locales', 'setup.ts', 'README.md'])
-// 新增语言时在此登记，模块 locales 必须同步补齐，否则门禁失败
-const ALLOWED_LOCALES = ['zh-CN.ts', 'en-US.ts', 'ja-JP.ts']
+// 新增语言时在此登记，模块 locales 必须同步补齐，否则门禁失败。
+// 这是严格白名单：未登记的语言文件出现在模块 locales/ 下同样报错，
+// 所以「先建骨架、后登记」的顺序会让门禁短暂变红——建档时就要一并补这里。
+const ALLOWED_LOCALES = ['zh-CN.ts', 'en-US.ts', 'ja-JP.ts', 'ko-KR.ts', 'zh-TW.ts']
 
 function walkVues(dir, out = []) {
   if (!existsSync(dir))

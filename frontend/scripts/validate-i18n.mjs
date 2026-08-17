@@ -21,7 +21,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const LANGS_ROOTS = [join(ROOT, 'packages/locales/langs'), join(ROOT, 'src/locales/langs')]
 // 已上架语言。新增语言在此登记后，其键集必须与既有语言完全对称，否则门禁失败。
 // 未译完、尚未在 packages/locales/index.ts 解开注释的语言不要提前登记。
-const LOCALES = ['zh-CN', 'en-US', 'ja-JP']
+const LOCALES = ['zh-CN', 'zh-TW', 'en-US', 'ja-JP', 'ko-KR']
 // 对称性与孤儿键的基准语言：它的键集就是本项目的文案事实源
 const BASE_LOCALE = 'zh-CN'
 

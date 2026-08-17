@@ -1,5 +1,5 @@
 import type { NDateLocale, NLocale } from 'naive-ui'
-import { dateEnUS, dateJaJP, dateZhCN, enUS, jaJP, zhCN } from 'naive-ui'
+import { dateEnUS, dateJaJP, dateKoKR, dateZhCN, dateZhTW, enUS, jaJP, koKR, zhCN, zhTW } from 'naive-ui'
 import { computed } from 'vue'
 import { useAppStore } from '~/stores'
 
@@ -15,8 +15,10 @@ const FALLBACK_NAIVE_LOCALE: NaiveLocaleEntry = { ui: enUS, date: dateEnUS }
  */
 const NAIVE_LOCALES: Record<string, NaiveLocaleEntry> = {
   'zh-CN': { ui: zhCN, date: dateZhCN },
+  'zh-TW': { ui: zhTW, date: dateZhTW },
   'en-US': FALLBACK_NAIVE_LOCALE,
   'ja-JP': { ui: jaJP, date: dateJaJP },
+  'ko-KR': { ui: koKR, date: dateKoKR },
 }
 
 export function useNaiveLocale() {

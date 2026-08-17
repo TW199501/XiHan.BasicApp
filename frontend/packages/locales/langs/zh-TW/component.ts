@@ -434,7 +434,7 @@ export default {
     feature_stability_value: '生產可用',
     feature_data_label: '資料層',
     feature_i18n_label: '國際化',
-    feature_i18n_value: '中英日繁四語',
+    feature_i18n_value: '五種語言',
     feature_architecture_label: '架構模式',
     feature_architecture_value: '模組化分層',
     backend_dependencies: '後端生產環境依賴 (NuGet)',

@@ -434,7 +434,7 @@ export default {
     feature_stability_value: '本番運用可能',
     feature_data_label: 'データ層',
     feature_i18n_label: '多言語対応',
-    feature_i18n_value: '日本語・中国語・英語',
+    feature_i18n_value: '5 言語',
     feature_architecture_label: 'アーキテクチャ',
     feature_architecture_value: 'モジュール化レイヤード',
     backend_dependencies: 'バックエンド本番依存（NuGet）',
