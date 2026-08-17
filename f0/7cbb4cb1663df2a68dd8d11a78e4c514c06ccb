@@ -1,0 +1,28 @@
+frontend/packages/components/common/MdEditor.vue
+  s_056e925fade48c::t_9e0ce8f97d5dbb 64-69
+  s_056e925fade48c::t_99ed381c133da7 21
+  s_056e925fade48c::t_d84853ac8a5699 87,97
+  s_056e925fade48c::t_6c74f066686dd2 38
+frontend/packages/locales/langs/en-US/component.ts
+  s_056e925fade48c::t_14c04713e0a17a 437
+frontend/packages/locales/langs/zh-CN/component.ts
+  s_056e925fade48c::t_c8d4cbd0b5e8b5 437
+frontend/src/app/context.ts
+  s_056e925fade48c::t_c336b3424b79d1 68-69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "f07cbb4cb1663df2a68dd8d11a78e4c514c06ccb",
+  "prompts": {},
+  "sessions": {
+    "s_056e925fade48c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1f15b658-dd71-4e19-a8d8-5bb8fd77e516",
+        "model": "claude-opus-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
