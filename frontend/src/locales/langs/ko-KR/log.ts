@@ -73,7 +73,7 @@ export default {
     result_success: '성공',
     result_failed: '실패',
     result_forbidden: '접근 거부',
-    result_unauthorized: '인증 필요',
+    result_unauthorized: '미인증',
     result_not_found: '찾을 수 없음',
     result_server_error: '서버 오류',
     resource_path: '리소스 경로',

@@ -24,7 +24,7 @@ export default {
     welcome_github: 'GitHub',
     greeting_morning: '좋은 아침입니다',
     greeting_noon: '점심시간입니다',
-    greeting_afternoon: '안녕하세요',
+    greeting_afternoon: '좋은 오후입니다',
     greeting_evening: '좋은 저녁입니다',
     todo_placeholder: '할 일을 입력하고 Enter를 누르세요',
     todo_empty: '할 일이 없습니다. 잠시 쉬어 가세요',
