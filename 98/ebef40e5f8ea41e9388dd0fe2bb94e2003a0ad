@@ -1,0 +1,25 @@
+frontend/scripts/validate-i18n.mjs
+  s_056e925fade48c::t_e282bd82029e4a 141-151
+  s_056e925fade48c::t_4c57dbb8848dc6 154
+  s_056e925fade48c::t_4031c4a81bd2ca 22-24
+  s_056e925fade48c::t_c8c700ff16a5c4 6-8
+  s_056e925fade48c::t_6a77888ef7df53 175
+  s_056e925fade48c::t_b15156bb08ae11 178,180,182-185,188
+  s_056e925fade48c::t_f9a469992663a6 25-26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "98ebef40e5f8ea41e9388dd0fe2bb94e2003a0ad",
+  "prompts": {},
+  "sessions": {
+    "s_056e925fade48c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1f15b658-dd71-4e19-a8d8-5bb8fd77e516",
+        "model": "claude-opus-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
