@@ -1,7 +1,7 @@
 export default {
   // Common actions
   actions: {
-    edit: '수정',
+    edit: '편집',
     delete: '삭제',
     view: '보기',
     detail: '상세',
