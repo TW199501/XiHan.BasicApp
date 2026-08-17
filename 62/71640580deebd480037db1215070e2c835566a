@@ -1,0 +1,35 @@
+frontend/scripts/validate-modules.mjs
+  s_056e925fade48c::t_340ea1d995a18a 9
+  s_056e925fade48c::t_33e057262594c4 21-22
+  s_056e925fade48c::t_31fdfcfbee220a 78
+frontend/src/locales/index.ts
+  s_056e925fade48c::t_1fa796c42ccb0f 26
+  s_056e925fade48c::t_03b3eaa3c10e31 16
+  s_056e925fade48c::t_c3b3ae9e430f45 8
+frontend/src/modules/ai/locales/ja-JP.ts
+  s_056e925fade48c::t_bfcbaabb21fbeb 1-186
+frontend/src/modules/chat/locales/ja-JP.ts
+  s_056e925fade48c::t_ba4b4ef8eddf8b 1-188
+frontend/src/modules/codegen/locales/ja-JP.ts
+  s_056e925fade48c::t_66ad6bf728b47f 1-266
+frontend/src/modules/printing/locales/ja-JP.ts
+  s_056e925fade48c::t_419891ac845f8e 1-209
+frontend/src/modules/workflow/locales/ja-JP.ts
+  s_056e925fade48c::t_9c810f77b56362 1-322
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "6271640580deebd480037db1215070e2c835566a",
+  "prompts": {},
+  "sessions": {
+    "s_056e925fade48c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1f15b658-dd71-4e19-a8d8-5bb8fd77e516",
+        "model": "claude-opus-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
