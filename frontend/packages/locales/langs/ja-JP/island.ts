@@ -41,7 +41,7 @@ export default {
       table: 'テーブル設定',
       search: '検索設定',
       views: 'ビュー',
-      widgets: 'ダッシュボードボード',
+      widgets: 'ダッシュボード',
     },
   },
   auth: {

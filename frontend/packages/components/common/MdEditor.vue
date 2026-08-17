@@ -62,9 +62,10 @@ const resolvedTheme = computed(() => props.theme ?? (appStore.isDark ? 'dark' : 
 const resolvedPlaceholder = computed(() => props.placeholder ?? t('component.md_editor.placeholder'))
 
 // 编辑器语言：外部未传时跟随应用语言。md-editor-v3 只内置 zh-CN / en-US 两套界面文案，
+// 中文语系（zh-CN / zh-TW）统一用 zh-CN——繁中用户读简中工具栏比读英文更顺；
 // 其余语言回退 en-US——回退中文会让中文工具栏混进外语界面。
 const resolvedLanguage = computed<'zh-CN' | 'en-US'>(
-  () => props.language ?? (appStore.locale === 'zh-CN' ? 'zh-CN' : 'en-US'),
+  () => props.language ?? (appStore.locale.startsWith('zh') ? 'zh-CN' : 'en-US'),
 )
 
 function handleSave(val: string) {

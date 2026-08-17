@@ -500,7 +500,7 @@ export default {
     total_space: '合計 {value}',
     free_space: '空き {value}',
     gpu_info: 'GPU 情報',
-    count_unit: '{count}',
+    count_unit: '{count} 台',
     gpu_memory: 'VRAM',
     driver_version: 'ドライバーバージョン',
     resolution: '解像度',

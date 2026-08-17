@@ -46,7 +46,7 @@ export default {
     builtin: '組み込み',
     not_builtin: '非組み込み',
     builtin_tag: '組み込み',
-    default_tag: 'デフォルト',
+    default_tag: '既定',
     loading: '読み込み中…',
     no_data: 'データなし',
   },

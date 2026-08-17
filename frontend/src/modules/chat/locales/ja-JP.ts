@@ -99,8 +99,8 @@ export default {
       remove: 'グループから削除',
     },
     composer: {
-      placeholder_enter: 'メッセージを入力。Enter で送信 / Shift+Enter で改行',
-      placeholder_ctrl_enter: 'メッセージを入力。Ctrl+Enter で送信',
+      placeholder_enter: 'メッセージを入力してください。Enter で送信 / Shift+Enter で改行',
+      placeholder_ctrl_enter: 'メッセージを入力してください。Ctrl+Enter で送信',
       send: '送信',
       send_key_enter: 'Enter で送信',
       send_key_ctrl_enter: 'Ctrl + Enter で送信',

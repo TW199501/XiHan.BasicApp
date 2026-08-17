@@ -26,9 +26,9 @@ export default {
     code_login_subtitle: '電話番号を入力すると確認コードが送信されます',
     // Email login
     email_login_subtitle: 'メールアドレスを入力すると確認コードが送信されます',
-    phone_placeholder: '電話番号を入力',
+    phone_placeholder: '電話番号を入力してください',
     phone_invalid: '11 桁の有効な電話番号を入力してください',
-    code_placeholder: '確認コードを入力',
+    code_placeholder: '確認コードを入力してください',
     code_length_tip: '6 桁の確認コードを入力してください',
     send_code: 'コードを送信',
     code_sent: '確認コードを送信しました',
@@ -44,7 +44,7 @@ export default {
     // Forget password
     forget_password_title: 'パスワードをお忘れの方',
     forget_password_subtitle: '登録済みのメールアドレスを入力すると再設定リンクが送信されます',
-    email_placeholder: 'メールアドレスを入力',
+    email_placeholder: 'メールアドレスを入力してください',
     email_invalid: '有効なメールアドレスを入力してください',
     send_reset_link: '再設定リンクを送信',
     reset_link_sent: '再設定リンクをメールに送信しました',

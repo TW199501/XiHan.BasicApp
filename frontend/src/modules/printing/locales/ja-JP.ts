@@ -14,7 +14,7 @@ export default {
       template_code_placeholder: '例：outbound-order',
       template_code_immutable: '作成後は変更できません',
       template_name: 'テンプレート名',
-      template_name_placeholder: '識別しやすいテンプレート名を入力',
+      template_name_placeholder: '識別しやすいテンプレート名を入力してください',
       data_source: 'データソース',
       optional: '任意',
       free_template: 'フリーテンプレート',
