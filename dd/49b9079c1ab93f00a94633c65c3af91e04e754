@@ -1,0 +1,24 @@
+frontend/src/modules/chat/locales/ja-JP.ts
+  s_056e925fade48c::t_7f10aac5550e12 141
+  s_056e925fade48c::t_7d72af538f3efe 6-7,9-10,13-33,36-43,46-48,51-53,56-88,91-92,95-99,102-126,129-140,142-152,155,158-180,184-186
+frontend/src/modules/printing/locales/ja-JP.ts
+  s_056e925fade48c::t_480885b527cea5 7-134,136-203,207
+frontend/src/modules/ai/locales/ja-JP.ts
+  s_056e925fade48c::t_4c30efdc9c4e22 4-43,46-73,76-93,95-114,116-120,122-131,135-136,138-166,168-176,180-184
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "dd49b9079c1ab93f00a94633c65c3af91e04e754",
+  "prompts": {},
+  "sessions": {
+    "s_056e925fade48c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1f15b658-dd71-4e19-a8d8-5bb8fd77e516",
+        "model": "unknown"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
