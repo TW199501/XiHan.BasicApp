@@ -37,7 +37,7 @@ export default {
     tenant_status_placeholder: 'テナント状態',
     config_status: '設定状態',
     config_status_placeholder: '設定状態',
-    is_expired: '期限',
+    is_expired: '期限切れ',
     user_limit: 'ユーザー上限',
     storage_limit: 'ストレージ上限',
     storage_limit_mb: 'ストレージ上限（MB）',
