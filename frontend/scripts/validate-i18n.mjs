@@ -3,8 +3,9 @@
 // i18n 校验门禁（零依赖）。每次改 locale/组件后必跑：
 //   node scripts/validate-i18n.mjs
 // 校验三件事：
-//   1. 按 langs/<locale>/index.ts 的实际合并逻辑（自动识别 nest `x,` 与 spread `...x`）重建 zh-CN/en-US，
-//      flatten 成扁平 key 集；两语言 key 集必须完全对称（互无缺失）。
+//   1. 按 langs/<locale>/index.ts 的实际合并逻辑（自动识别 nest `x,` 与 spread `...x`）重建 LOCALES
+//      内的每个语言，flatten 成扁平 key 集；以 zh-CN 为基准逐语言比对，各语言 key 集必须完全对称
+//      （互无缺失）。新增语言只需登记进 LOCALES，比对自动覆盖。
 //   2. 全库（packages + src）扫描 t('...') / $t('...') 字面量 key，凡“首段是已知模块、但完整 key 不在 locale”
 //      的即“孤儿键”（引用了但未定义，vue-i18n 运行期只返回 key 字符串、type-check/eslint 抓不到）。孤儿必须为 0。
 //   3. 退出码非 0 表示校验失败，可挂 CI / 批末门禁。
@@ -18,7 +19,11 @@ import { fileURLToPath } from 'node:url'
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 // 两处文案聚合根：壳层（packages）与应用业务层（src），结构同为 langs/<locale>.ts 聚合 langs/<locale>/*.ts
 const LANGS_ROOTS = [join(ROOT, 'packages/locales/langs'), join(ROOT, 'src/locales/langs')]
-const LOCALES = ['zh-CN', 'en-US']
+// 已上架语言。新增语言在此登记后，其键集必须与既有语言完全对称，否则门禁失败。
+// 未译完、尚未在 packages/locales/index.ts 解开注释的语言不要提前登记。
+const LOCALES = ['zh-CN', 'en-US', 'ja-JP']
+// 对称性与孤儿键的基准语言：它的键集就是本项目的文案事实源
+const BASE_LOCALE = 'zh-CN'
 
 function read(p) {
   return readFileSync(p, 'utf8')
@@ -133,12 +138,20 @@ function main() {
     keys[loc] = new Set(Object.keys(merged[loc]))
   }
 
-  // 1) 对称性
-  const onlyZh = [...keys['zh-CN']].filter(k => !keys['en-US'].has(k))
-  const onlyEn = [...keys['en-US']].filter(k => !keys['zh-CN'].has(k))
+  // 1) 对称性：以 zh-CN 为基准逐语言比对。早先写死 zh-CN/en-US 两方，
+  //    新语言登记进 LOCALES 也只是被加载、不受校验，等于没有防护。
+  const asymmetry = []
+  for (const loc of LOCALES) {
+    if (loc === BASE_LOCALE)
+      continue
+    const missing = [...keys[BASE_LOCALE]].filter(k => !keys[loc].has(k))
+    const extra = [...keys[loc]].filter(k => !keys[BASE_LOCALE].has(k))
+    if (missing.length > 0 || extra.length > 0)
+      asymmetry.push({ loc, missing, extra })
+  }
 
   // 2) 孤儿键：扫全库 t()/$t() 字面量
-  const topModules = new Set([...keys['zh-CN']].map(k => k.split('.')[0]))
+  const topModules = new Set([...keys[BASE_LOCALE]].map(k => k.split('.')[0]))
   const re = /(?:^|[^\w$])\$?t\(\s*['"]([a-z]\w*(?:\.\w+)+)['"]/g
   const used = new Map()
   for (const dir of ['packages', 'src']) {
@@ -159,18 +172,20 @@ function main() {
       }
     }
   }
-  const orphans = [...used].filter(([k]) => !keys['zh-CN'].has(k))
+  const orphans = [...used].filter(([k]) => !keys[BASE_LOCALE].has(k))
 
   // 报告
-  console.log(`locale keys: zh-CN=${keys['zh-CN'].size} en-US=${keys['en-US'].size}`)
+  console.log(`locale keys: ${LOCALES.map(l => `${l}=${keys[l].size}`).join(' ')}`)
   console.log(`t() refs (known-module, static): ${used.size}`)
-  console.log(`asymmetry: onlyZh=${onlyZh.length} onlyEn=${onlyEn.length}`)
+  console.log(`asymmetry (base=${BASE_LOCALE}): ${asymmetry.length === 0 ? 'none' : asymmetry.map(a => `${a.loc} -${a.missing.length}/+${a.extra.length}`).join('  ')}`)
   console.log(`orphans (referenced but undefined): ${orphans.length}`)
-  for (const k of onlyZh.slice(0, 30)) console.log(`  onlyZh: ${k}`)
-  for (const k of onlyEn.slice(0, 30)) console.log(`  onlyEn: ${k}`)
+  for (const a of asymmetry) {
+    for (const k of a.missing.slice(0, 30)) console.log(`  ${a.loc} 缺少: ${k}`)
+    for (const k of a.extra.slice(0, 30)) console.log(`  ${a.loc} 多出: ${k}`)
+  }
   for (const [k, f] of orphans.slice(0, 50)) console.log(`  ORPHAN: ${k}  <- ${f.replace(ROOT, '').replace(/^[\\/]/, '')}`)
 
-  const ok = onlyZh.length === 0 && onlyEn.length === 0 && orphans.length === 0
+  const ok = asymmetry.length === 0 && orphans.length === 0
   console.log(ok ? 'PASS' : 'FAIL')
   process.exit(ok ? 0 : 1)
 }
