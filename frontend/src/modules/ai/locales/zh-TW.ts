@@ -116,7 +116,7 @@ export default {
       form_base_url_placeholder: '留空用官方端點；OpenAI 相容端點填此處',
       form_api_key: 'API 金鑰',
       form_api_key_edit: 'API 金鑰（留空保留原金鑰）',
-      form_api_key_placeholder: '明文提交，服務端加密落庫',
+      form_api_key_placeholder: '明文提交，伺服器端加密後存入資料庫',
       form_max_output_tokens: '最大輸出 Token',
       form_temperature: '取樣溫度',
       form_timeout_seconds: '超時（秒）',

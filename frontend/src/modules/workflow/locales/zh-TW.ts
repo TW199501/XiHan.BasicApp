@@ -134,7 +134,7 @@ export default {
       edge_condition: '條件表示式',
       edge_condition_placeholder: '如 amount > 10000 或 outcome == \'approved\'（為空表示無條件）',
       edge_priority: '優先順序（獨佔閘道升序求值）',
-      edge_is_default: '預設分支（獨佔閘道兜底）',
+      edge_is_default: '預設分支（獨佔閘道後備）',
       edge_name: '連線名稱',
       node_name: '節點名稱',
       node_timeout: '掛起超時（秒）',
@@ -205,7 +205,7 @@ export default {
         dup_node: '節點 id 重複',
         dead_end: '非終止節點沒有出邊（死路）',
         no_incoming: '節點沒有入邊（不可達入口）',
-        decision_no_default: '獨佔閘道缺少預設/兜底分支',
+        decision_no_default: '獨佔閘道缺少預設/後備分支',
         unreachable: '節點從開始節點不可達',
       },
       category: {

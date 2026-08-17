@@ -81,7 +81,7 @@ export default {
   playground_theme: '主題示例',
   playground_table: '表格示例',
   playground_table_basic: '基礎表格',
-  playground_table_advanced: '高階表格',
+  playground_table_advanced: '進階表格',
   playground_table_virtual: '虛擬滾動',
   playground_form: '表單示例',
   playground_form_basic: '基礎表單',

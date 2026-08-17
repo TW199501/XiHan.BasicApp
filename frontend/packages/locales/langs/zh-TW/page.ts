@@ -38,8 +38,8 @@ export default {
     two_factor_hint: '開啟 Google Authenticator / Microsoft Authenticator 等應用檢視驗證碼',
     two_factor_verify: '驗證並登入',
     // 扫码登录
-    qrcode_subtitle: '使用手機掃描二維碼快速登入',
-    qrcode_prompt: '開啟手機APP，掃描二維碼後即可登入',
+    qrcode_subtitle: '使用手機掃描 QR Code 快速登入',
+    qrcode_prompt: '開啟手機APP，掃描 QR Code 後即可登入',
     // 忘记密码
     forget_password_title: '忘記密碼',
     forget_password_subtitle: '輸入您的註冊信箱，我們將傳送密碼重置連結',
@@ -98,7 +98,7 @@ export default {
     release_time: '發布時間',
     homepage: '專案主頁',
     docs: '官方文件',
-    repository: '倉庫地址',
+    repository: '程式碼庫網址',
     keywords: '關鍵詞',
     empty_keywords: '暫無關鍵詞',
   },

@@ -35,7 +35,7 @@ export default {
       default: '預設',
       custom: '自定義',
       dynamic: 'Material You 動態取色',
-      dynamic_tip: '從品牌色自動推匯出整套和諧色階（輔色 / 容器 / 前景 / 邊框等），關閉則僅改主色',
+      dynamic_tip: '從品牌色自動推導整套和諧色階（輔色 / 容器 / 前景 / 邊框等），關閉則僅改主色',
       family: {
         red: '紅',
         orange: '橙',
@@ -124,7 +124,7 @@ export default {
       fluid: '流式',
       fixed: '定寬',
       fluid_tip: '內容區隨視窗寬度自由伸縮，充分利用螢幕空間',
-      fixed_tip: '內容區設定最大寬度並置中，適合寬屏閱讀場景',
+      fixed_tip: '內容區設定最大寬度並置中，適合寬螢幕閱讀場景',
     },
     sidebar: {
       title: '側邊欄',
