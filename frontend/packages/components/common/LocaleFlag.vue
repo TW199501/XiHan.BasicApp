@@ -61,6 +61,12 @@ const height = computed(() => Math.round((props.size * 2) / 3))
         <circle cx="8.2" cy="8.1" r="0.7" />
       </g>
     </svg>
+
+    <!-- 日本語：日本国旗（日章旗：白地、中央に紅の円、直径は高さの 3/5） -->
+    <svg v-else-if="locale === 'ja-JP'" viewBox="0 0 30 20" xmlns="http://www.w3.org/2000/svg">
+      <rect width="30" height="20" fill="#FFFFFF" />
+      <circle cx="15" cy="10" r="6" fill="#BC002D" />
+    </svg>
   </span>
 </template>
 

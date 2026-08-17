@@ -1,13 +1,31 @@
-import { dateEnUS, dateZhCN, enUS, zhCN } from 'naive-ui'
+import type { NDateLocale, NLocale } from 'naive-ui'
+import { dateEnUS, dateJaJP, dateZhCN, enUS, jaJP, zhCN } from 'naive-ui'
 import { computed } from 'vue'
 import { useAppStore } from '~/stores'
+
+interface NaiveLocaleEntry { ui: NLocale, date: NDateLocale }
+
+// 未登记语言的兜底：回退英文而非中文，否则中文组件文案会混进外语界面。
+// 抽成具名常量而非内联，是为了让索引取值的 undefined 分支能收窄到确定类型。
+const FALLBACK_NAIVE_LOCALE: NaiveLocaleEntry = { ui: enUS, date: dateEnUS }
+
+/**
+ * locale → naive-ui 语系对象。新增语言在此加一行即可。
+ * 早先是 `locale === 'zh-CN' ? zhCN : enUS` 的三元式，多加一个语言就要改判断。
+ */
+const NAIVE_LOCALES: Record<string, NaiveLocaleEntry> = {
+  'zh-CN': { ui: zhCN, date: dateZhCN },
+  'en-US': FALLBACK_NAIVE_LOCALE,
+  'ja-JP': { ui: jaJP, date: dateJaJP },
+}
 
 export function useNaiveLocale() {
   const appStore = useAppStore()
   const locale = computed(() => appStore.locale)
 
-  const naiveLocale = computed(() => (locale.value === 'zh-CN' ? zhCN : enUS))
-  const naiveDateLocale = computed(() => (locale.value === 'zh-CN' ? dateZhCN : dateEnUS))
+  const entry = computed(() => NAIVE_LOCALES[locale.value] ?? FALLBACK_NAIVE_LOCALE)
+  const naiveLocale = computed(() => entry.value.ui)
+  const naiveDateLocale = computed(() => entry.value.date)
 
   return {
     locale,
