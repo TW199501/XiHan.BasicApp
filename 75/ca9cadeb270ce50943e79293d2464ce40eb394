@@ -1,0 +1,73 @@
+frontend/packages/locales/langs/ko-KR/component.ts
+  s_056e925fade48c::t_15e8df68398270 669
+  s_056e925fade48c::t_b6c3f7832934f7 670
+frontend/src/locales/langs/ja-JP/tenant.ts
+  s_056e925fade48c::t_dfd4607c02c6e4 166
+  s_056e925fade48c::t_6feade02338a3c 82
+  s_056e925fade48c::t_65b07d1b05f705 174
+  s_056e925fade48c::t_b34b854cb69d64 86
+  s_056e925fade48c::t_7d203eb8dac5fa 92
+  s_056e925fade48c::t_c801c4d5287bb4 40
+  s_056e925fade48c::t_12d9870472b2d7 90
+  s_056e925fade48c::t_785956e1bbec17 88,101,176
+frontend/src/modules/chat/locales/ja-JP.ts
+  s_056e925fade48c::t_da6e3959770c52 102-103
+frontend/packages/locales/langs/ja-JP/island.ts
+  s_056e925fade48c::t_8dccc5a4e58fcf 44
+frontend/src/locales/langs/zh-TW/workbench.ts
+  s_056e925fade48c::t_233a34e67d9585 25-26,28
+frontend/packages/components/common/MdEditor.vue
+  s_056e925fade48c::t_c2e25e3852c836 65,68
+frontend/packages/locales/langs/ja-JP/page.ts
+  s_056e925fade48c::t_0603d88ba2ed0d 47
+  s_056e925fade48c::t_0adf7350383210 29
+  s_056e925fade48c::t_fb4d99638c18c9 31
+frontend/packages/locales/langs/ja-JP/component.ts
+  s_056e925fade48c::t_58e40bf798d3d2 135
+  s_056e925fade48c::t_80ff53394ed8f7 63-64
+  s_056e925fade48c::t_9cb2a30c66441c 79
+  s_056e925fade48c::t_36bdd9d8525173 583
+  s_056e925fade48c::t_df5bb1e20f8002 210
+  s_056e925fade48c::t_1f3e4c1c3ecc82 72
+  s_056e925fade48c::t_8d206682496b03 131
+  s_056e925fade48c::t_cbc27ac8f13061 133
+  s_056e925fade48c::t_b64a3ecb9aa21c 669
+frontend/packages/locales/langs/ja-JP/common.ts
+  s_056e925fade48c::t_e5b19be405ea8d 49
+frontend/src/locales/langs/ja-JP/approval.ts
+  s_056e925fade48c::t_9f00cbcfca7aac 28-29
+frontend/src/modules/printing/locales/ja-JP.ts
+  s_056e925fade48c::t_f5cdc20ccfbb1e 17
+frontend/src/locales/langs/ja-JP/setting.ts
+  s_056e925fade48c::t_a76a9fefa22e46 503
+frontend/src/modules/workflow/locales/ja-JP.ts
+  s_056e925fade48c::t_41e50c60dc11c6 71,73,75
+frontend/src/locales/langs/ja-JP/identity.ts
+  s_056e925fade48c::t_d650d5e274816f 645
+  s_056e925fade48c::t_6b5230f5551226 358
+  s_056e925fade48c::t_a108b6ccc7ca9b 335-336
+  s_056e925fade48c::t_80afdf4186f4ff 360
+frontend/src/locales/langs/ja-JP/log.ts
+  s_056e925fade48c::t_318d6693f96abf 280-284
+frontend/src/locales/langs/ja-JP/message.ts
+  s_056e925fade48c::t_29446e09d32c7c 351
+  s_056e925fade48c::t_1147432388ba2c 66
+  s_056e925fade48c::t_ffb5ea1daf2425 257
+  s_056e925fade48c::t_f8c803391f2b44 64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "75ca9cadeb270ce50943e79293d2464ce40eb394",
+  "prompts": {},
+  "sessions": {
+    "s_056e925fade48c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1f15b658-dd71-4e19-a8d8-5bb8fd77e516",
+        "model": "claude-opus-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
