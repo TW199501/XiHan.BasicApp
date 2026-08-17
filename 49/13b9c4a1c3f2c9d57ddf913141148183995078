@@ -1,0 +1,26 @@
+frontend/src/modules/chat/locales/ko-KR.ts
+  s_056e925fade48c::t_0043f4a4439973 139
+  s_056e925fade48c::t_40d48ebc8f8139 62
+frontend/packages/locales/langs/ko-KR/common.ts
+  s_056e925fade48c::t_b28edc74dad47a 4
+frontend/packages/locales/langs/ko-KR/component.ts
+  s_056e925fade48c::t_efea9bbbff4e1b 437
+  s_056e925fade48c::t_6b28e5eae693e2 222,251
+  s_056e925fade48c::t_9037b4c8534f27 151,221,250
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.22",
+  "base_commit_sha": "4913b9c4a1c3f2c9d57ddf913141148183995078",
+  "prompts": {},
+  "sessions": {
+    "s_056e925fade48c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1f15b658-dd71-4e19-a8d8-5bb8fd77e516",
+        "model": "claude-opus-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
