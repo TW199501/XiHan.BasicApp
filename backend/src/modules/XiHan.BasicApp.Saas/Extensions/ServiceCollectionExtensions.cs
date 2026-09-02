@@ -44,6 +44,7 @@ using XiHan.Framework.Upgrade.Abstractions;
 using XiHan.Framework.Utils.Collections;
 using XiHan.Framework.Web.Api.Security.OpenApi;
 using XiHan.Framework.Web.Api.Session;
+using XiHan.Framework.Web.Core.Session;
 
 namespace XiHan.BasicApp.Saas.Extensions;
 
@@ -84,6 +85,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IUserDomainService, UserDomainService>();
         services.AddScoped<IPasswordHistoryDomainService, PasswordHistoryDomainService>();
         services.AddScoped<IConstraintRuleDomainService, ConstraintRuleDomainService>();
+        services.AddScoped<IConstraintRuleEnforcementDomainService, ConstraintRuleEnforcementDomainService>();
         services.AddScoped<IFieldLevelSecurityDomainService, FieldLevelSecurityDomainService>();
         services.AddScoped<IFileDomainService, FileDomainService>();
         services.AddScoped<IStorageConfigDomainService, StorageConfigDomainService>();
@@ -102,6 +104,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IDictDomainService, DictDomainService>();
         services.AddScoped<IVersionDomainService, VersionDomainService>();
         services.AddScoped<ITenantProvisionDomainService, TenantProvisionDomainService>();
+        services.AddScoped<ITenantQuotaDomainService, TenantQuotaDomainService>();
         services.AddScoped<IRoleHierarchyDomainService, RoleHierarchyDomainService>();
         services.AddScoped<IPermissionMergeDomainService, PermissionMergeDomainService>();
         services.AddScoped<IPermissionCatalogDomainService, PermissionCatalogDomainService>();
@@ -164,7 +167,11 @@ public static class ServiceCollectionExtensions
                 "/api/Auth/UnlockSession",
                 "/api/Auth/LockSession",
                 "/api/Auth/Logout",
-                "/api/Auth/RefreshToken"
+                "/api/Auth/RefreshToken",
+                // 模仿态被锁定时仍须能退出模仿回到发起人身份
+                "/api/Auth/StopImpersonation",
+                // 强制改密锁（PasswordChangeRequired）的解锁方式就是改密：改密端点必须在锁定期间可达
+                "/api/Profile/ChangePassword"
             ];
         });
         services.AddScoped<IMenuRouteQueryService, MenuRouteQueryService>();
@@ -178,6 +185,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IEnumMetadataQueryService, EnumMetadataQueryService>();
         services.AddScoped<IServerInfoQueryService, ServerInfoQueryService>();
         services.AddScoped<IMessageDeliveryService, MessageDeliveryService>();
+        services.AddScoped<ILoginThrottleService, LoginThrottleService>();
+        services.AddScoped<ICaptchaService, CaptchaService>();
         // 通知多渠道扇出：发布后按投递渠道扇出到 邮箱/短信（发件箱异步）与 机器人（UoW 提交后广播）
         services.AddScoped<INotificationFanoutService, NotificationFanoutService>();
         services.AddScoped<IMessageTemplateRenderer, MessageTemplateRenderer>();
@@ -203,6 +212,7 @@ public static class ServiceCollectionExtensions
         services.AddTelegramBotBuiltinHandlers();
         services.AddScoped<IFileTransferService, FileTransferService>();
         services.AddScoped<IAuthTokenIssueService, AuthTokenIssueService>();
+        services.AddScoped<IImpersonationPolicyService, ImpersonationPolicyService>();
         // OAuth2 授权服务端协议服务：普通 Scoped（非 [DynamicApi]/不被代理），供同意页 AppService 与匿名 /connect/token 端点直接调用
         services.AddScoped<IOAuthServerService, OAuthServerService>();
         // OpenAPI 安全客户端存储：以数据库凭证（SysUserApiCredential）实现覆盖框架默认配置源实现

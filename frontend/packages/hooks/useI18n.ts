@@ -1,39 +1,16 @@
-import type { NDateLocale, NLocale } from 'naive-ui'
-import { dateEnUS, dateJaJP, dateKoKR, dateZhCN, dateZhTW, enUS, jaJP, koKR, zhCN, zhTW } from 'naive-ui'
 import { computed } from 'vue'
+import { xhConfigValue } from '~/composables/xh-config'
 import { useAppStore } from '~/stores'
 
-interface NaiveLocaleEntry { ui: NLocale, date: NDateLocale }
-
-// 未登记语言的兜底：回退英文而非中文，否则中文组件文案会混进外语界面。
-// 抽成具名常量而非内联，是为了让索引取值的 undefined 分支能收窄到确定类型。
-const FALLBACK_NAIVE_LOCALE: NaiveLocaleEntry = { ui: enUS, date: dateEnUS }
-
 /**
- * locale → naive-ui 语系对象。新增语言在此加一行即可。
- * 早先是 `locale === 'zh-CN' ? zhCN : enUS` 的三元式，多加一个语言就要改判断。
+ * 喂给 provideXhConfig 的全局配置：语言标记、组件内建文案与滚动源。
+ *
+ * 返回的是 computed，切语言时组件库跟着重渲——日期系组件按 locale 排星期、
+ * 其余组件换掉 aria-label 那几句。App 根组件调一次即可。
+ * 值本身与命令式服务共用一份，见 ~/composables/xh-config。
  */
-const NAIVE_LOCALES: Record<string, NaiveLocaleEntry> = {
-  'zh-CN': { ui: zhCN, date: dateZhCN },
-  'zh-TW': { ui: zhTW, date: dateZhTW },
-  'en-US': FALLBACK_NAIVE_LOCALE,
-  'ja-JP': { ui: jaJP, date: dateJaJP },
-  'ko-KR': { ui: koKR, date: dateKoKR },
-}
-
-export function useNaiveLocale() {
-  const appStore = useAppStore()
-  const locale = computed(() => appStore.locale)
-
-  const entry = computed(() => NAIVE_LOCALES[locale.value] ?? FALLBACK_NAIVE_LOCALE)
-  const naiveLocale = computed(() => entry.value.ui)
-  const naiveDateLocale = computed(() => entry.value.date)
-
-  return {
-    locale,
-    naiveLocale,
-    naiveDateLocale,
-  }
+export function useXhUiConfig() {
+  return computed(xhConfigValue)
 }
 
 export function useLocale() {

@@ -1,14 +1,13 @@
 import type { Router, RouteRecordRaw } from 'vue-router'
 import type { PermissionInfo } from '~/types'
-import { createDiscreteApi } from 'naive-ui'
+
+import { isLockedState, loadingBar } from '~/composables'
 import { AUTH_PATH, FORBIDDEN_PATH, HOME_PATH, LOGIN_PATH, NOT_FOUND_PATH, SERVER_ERROR_PATH } from '~/constants'
 import { i18n } from '~/locales'
 import { hydratePreferencesFromBackend, useAccessStore, useAppStore, useTabbarStore, useUserStore } from '~/stores'
 import { useAppContext } from '~/stores/app-context'
 import { mapMenuToRoutes } from './dynamic'
 import { filterRoutesByPermission, isStaticRouteMode } from './static'
-
-const { loadingBar } = createDiscreteApi(['loadingBar'])
 
 const WHITE_LIST = [FORBIDDEN_PATH, NOT_FOUND_PATH, SERVER_ERROR_PATH]
 
@@ -20,9 +19,16 @@ export function setupRouterGuard(router: Router) {
       const routeName = route.name ? String(route.name) : ''
       const routePathExists = router.getRoutes().some(item => item.path === route.path)
       if (routePathExists) {
+        // 路径已装载：正常的去重，静默跳过
         continue
       }
-      if (routeName && !router.hasRoute(routeName)) {
+      if (!routeName) {
+        // 后端菜单表允许 name 为空，这类菜单装不上。侧边栏照样渲染出条目，点进去却落 404，
+        // 而整条链路一行日志都没有——配错的人无从查起。这里必须出声，与下面加载失败的日志同级。
+        console.error('[router] 菜单缺少路由名，已跳过装载，导航到该路径会落 404', route.path)
+        continue
+      }
+      if (!router.hasRoute(routeName)) {
         router.addRoute('RootLayout', route)
       }
     }
@@ -76,8 +82,15 @@ export function setupRouterGuard(router: Router) {
           permissions: authPermission.permissions,
         })
         accessStore.setAccessCodes(authPermission.permissions)
+        accessStore.setAccessButtons(authPermission.buttons ?? [])
       }
       catch {
+        // 会话锁定（423）：令牌仍有效，放行进入壳层，锁定遮罩（LockScreen）接管 UI；
+        // 解锁后守卫会重新拉取用户信息与权限。
+        if (isLockedState()) {
+          return true
+        }
+
         accessStore.$reset()
         userStore.$reset()
         return {
@@ -88,11 +101,16 @@ export function setupRouterGuard(router: Router) {
       }
     }
 
-    if (!accessStore.isRoutesLoaded) {
+    // 白名单页对已登录用户同样是终点，不能再触发装载：
+    // 装载失败时会重定向到 /500，若 /500 自身又进装载分支（isRoutesLoaded 仍为假），
+    // 就是失败 → /500 → 再装载 → 再失败的自我循环，最终被 vue-router 判为无限重定向而中止，
+    // 用户既看不到 500 页也停在白屏，权限接口还被连打多次。后端菜单接口整体不可用时必然命中。
+    if (!accessStore.isRoutesLoaded && !WHITE_LIST.includes(to.path)) {
       try {
         if (!permissionInfo) {
           permissionInfo = await ctx.apis.getPermissionsApi()
           accessStore.setAccessCodes(permissionInfo.permissions)
+          accessStore.setAccessButtons(permissionInfo.buttons ?? [])
           if (userStore.userInfo) {
             userStore.setUserInfo({
               ...userStore.userInfo,
@@ -123,6 +141,12 @@ export function setupRouterGuard(router: Router) {
         }
       }
       catch (error) {
+        // 会话锁定（423）：权限/菜单接口在解锁前拿不到，直接放行挂壳（遮罩盖住空白内容区），
+        // 解锁改密成功后重新走守卫即可完整加载。
+        if (isLockedState()) {
+          return true
+        }
+
         // 不能静默吞掉：这里失败等于整个会话拿不到任何动态路由，
         // 之后每次导航都匹配不到而落 404，且无从查起
         console.error('[router] 动态路由加载失败', error)
@@ -140,7 +164,14 @@ export function setupRouterGuard(router: Router) {
       catch (error) {
         console.error('[preferences] 偏好同步失败，已跳过', error)
       }
-      return { path: to.fullPath, replace: true }
+      // 按 path + query + hash 三段重进，两种写法都不能用：
+      // 1) { path: to.fullPath }：vue-router 不解析 path 里的查询串，含 ?query#hash 的 fullPath
+      //    塞进 path 会把两者静默丢掉。这条分支只在「本次会话首次装载动态路由」时命中，
+      //    也就是刷新页面/直接打开深链——正是查询参数最要紧的场景：带筛选条件的分享链接、
+      //    OAuth 回调的 ?code=、登录后按 redirect 回跳的带参地址。
+      // 2) { ...to }：会把 name 与 matched 一并带上，而 vue-router 优先按 name 解析；
+      //    此刻动态路由刚装好、to 仍是装载前的匹配结果（通常是 404 兜底），重进会直接落回 404。
+      return { path: to.path, query: to.query, hash: to.hash, replace: true }
     }
 
     const resolvedHomePath = accessStore.homePath || HOME_PATH
@@ -211,9 +242,8 @@ export function setupRouterGuard(router: Router) {
   router.afterEach((to) => {
     const appStore = useAppStore()
 
-    if (appStore.transitionProgress) {
-      loadingBar.finish()
-    }
+    // 重定向链上 beforeEach 会连开好几笔而 afterEach 只走一次，一次清干净
+    loadingBar.finishAll()
     if (appStore.transitionLoading) {
       appStore.setPageLoading(false)
     }
@@ -231,9 +261,7 @@ export function setupRouterGuard(router: Router) {
 
   router.onError(() => {
     const appStore = useAppStore()
-    if (appStore.transitionProgress) {
-      loadingBar.error()
-    }
+    loadingBar.error()
     if (appStore.transitionLoading) {
       appStore.setPageLoading(false)
     }

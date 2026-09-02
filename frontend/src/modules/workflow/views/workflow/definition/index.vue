@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { Tone } from '@xihan-ui/kernel'
 import type {
   WorkflowDefinitionDetailDto,
   WorkflowDefinitionListItemDto,
@@ -7,27 +8,15 @@ import type {
   PageResult,
 } from '@/api'
 import type { ListFieldSchema, PageSchema, SchemaActionPayload } from '~/components'
-import {
-  NButton,
-  NDescriptions,
-  NDescriptionsItem,
-  NDrawer,
-  NDrawerContent,
-  NForm,
-  NFormItem,
-  NInput,
-  NInputNumber,
-  NModal,
-  NTag,
-  useMessage,
-} from 'naive-ui'
-import { computed, h, ref } from 'vue'
+import { XhButton, XhDescriptionsItem, XhDescriptionsLabel, XhDescriptionsRoot, XhDescriptionsValue, XhDialogCloseTrigger, XhDialogContent, XhDialogRoot, XhDialogTitle, XhDrawerCloseTrigger, XhDrawerContent, XhDrawerRoot, XhDrawerTitle, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFormFieldGroup, XhFormRoot, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
+import { computed, h, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   createPageRequest,
   querySortsFromSchema,
 } from '@/api'
-import { SchemaPage } from '~/components'
+import { SchemaPage, XEditModal, XInput, XJsonBlock, XNumberInput } from '~/components'
+import { toast } from '~/composables'
 import { formatDate } from '~/utils'
 import {
   workflowDefinitionApi,
@@ -39,10 +28,7 @@ import WorkflowGraphView from './designer/WorkflowGraphView.vue'
 
 defineOptions({ name: 'WorkflowDefinitionPage' })
 
-type TagType = 'default' | 'error' | 'info' | 'success' | 'warning'
-
 const { t } = useI18n()
-const message = useMessage()
 
 const schemaPageRef = ref<{ reload: () => Promise<void> } | null>(null)
 function reload() {
@@ -56,7 +42,7 @@ const statusOptions = computed(() => [
   { label: t('workflow.definition.status_archived'), value: WorkflowDefinitionStatus.Archived },
 ])
 
-function statusTag(status: WorkflowDefinitionStatus): TagType {
+function statusTag(status: WorkflowDefinitionStatus): Tone {
   switch (status) {
     case WorkflowDefinitionStatus.Published:
       return 'success'
@@ -65,7 +51,7 @@ function statusTag(status: WorkflowDefinitionStatus): TagType {
     case WorkflowDefinitionStatus.Disabled:
       return 'warning'
     default:
-      return 'default'
+      return 'neutral'
   }
 }
 
@@ -92,14 +78,14 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 1,
     render: (row) => {
       const r = row as unknown as WorkflowDefinitionListItemDto
-      return h(NTag, { size: 'small', round: true, bordered: false, type: statusTag(r.status) }, () => statusLabel(r.status))
+      return h(XhTagRoot, { variant: 'outline', tone: statusTag(r.status) }, () => h(XhTagLabel, () => statusLabel(r.status)))
     },
   },
   { key: 'code', title: t('workflow.definition.code'), dataType: 'string', sortable: true, minWidth: 160, order: 10 },
   { key: 'name', title: t('workflow.definition.name'), dataType: 'string', sortable: true, minWidth: 180, order: 11 },
   { key: 'version', title: t('workflow.definition.version'), dataType: 'number', sortable: true, width: 90, order: 12, render: (row) => {
     const r = row as unknown as WorkflowDefinitionListItemDto
-    return h(NTag, { size: 'small', bordered: false }, () => `v${r.version}`)
+    return h(XhTagRoot, { variant: 'outline', tone: 'neutral' }, () => h(XhTagLabel, () => `v${r.version}`))
   } },
   { key: 'category', title: t('workflow.definition.category'), dataType: 'string', searchable: true, minWidth: 120, order: 13 },
   { key: 'description', title: t('workflow.definition.description'), dataType: 'string', minWidth: 200, ellipsis: true, order: 14 },
@@ -114,7 +100,6 @@ const schema = computed<PageSchema>(() => ({
   pageCode: 'workflow.definition',
   pageName: t('workflow.definition.page_name'),
   rowKey: 'basicId',
-  scrollX: 1500,
   fields: fields.value,
   resource: {
     page: (params) => {
@@ -131,15 +116,15 @@ const schema = computed<PageSchema>(() => ({
     },
   },
   actions: [
-    { key: 'create', title: t('workflow.definition.action_create'), scope: 'page', type: 'primary', icon: 'lucide:plus', permission: 'workflow:create' },
+    { key: 'create', title: t('workflow.definition.action_create'), scope: 'page', type: 'primary', icon: 'lucide:plus', permission: 'workflow_definition.create' },
     { key: 'view', title: t('workflow.definition.action_view'), scope: 'row', icon: 'lucide:eye' },
-    { key: 'edit', title: t('workflow.definition.action_edit'), scope: 'row', permission: 'workflow:update', visible: row => (row as unknown as WorkflowDefinitionListItemDto).status === WorkflowDefinitionStatus.Draft },
-    { key: 'publish', title: t('workflow.definition.action_publish'), scope: 'row', type: 'success', permission: 'workflow:update', visible: row => (row as unknown as WorkflowDefinitionListItemDto).status === WorkflowDefinitionStatus.Draft },
-    { key: 'start', title: t('workflow.definition.action_start'), scope: 'row', type: 'primary', permission: 'workflow:execute', visible: row => (row as unknown as WorkflowDefinitionListItemDto).status === WorkflowDefinitionStatus.Published },
-    { key: 'newVersion', title: t('workflow.definition.action_new_version'), scope: 'row', permission: 'workflow:create', visible: row => (row as unknown as WorkflowDefinitionListItemDto).status !== WorkflowDefinitionStatus.Draft },
-    { key: 'disable', title: t('workflow.definition.action_disable'), scope: 'row', type: 'warning', permission: 'workflow:update', visible: row => (row as unknown as WorkflowDefinitionListItemDto).status === WorkflowDefinitionStatus.Published },
-    { key: 'archive', title: t('workflow.definition.action_archive'), scope: 'row', permission: 'workflow:update', visible: row => (row as unknown as WorkflowDefinitionListItemDto).status === WorkflowDefinitionStatus.Disabled },
-    { key: 'delete', title: t('workflow.definition.action_delete'), scope: 'row', type: 'error', permission: 'workflow:delete', visible: row => (row as unknown as WorkflowDefinitionListItemDto).status === WorkflowDefinitionStatus.Draft },
+    { key: 'edit', title: t('workflow.definition.action_edit'), scope: 'row', permission: 'workflow_definition.update', visible: row => (row as unknown as WorkflowDefinitionListItemDto).status === WorkflowDefinitionStatus.Draft },
+    { key: 'publish', title: t('workflow.definition.action_publish'), scope: 'row', type: 'success', permission: 'workflow_definition.update', visible: row => (row as unknown as WorkflowDefinitionListItemDto).status === WorkflowDefinitionStatus.Draft },
+    { key: 'start', title: t('workflow.definition.action_start'), scope: 'row', type: 'primary', permission: 'workflow_definition.execute', visible: row => (row as unknown as WorkflowDefinitionListItemDto).status === WorkflowDefinitionStatus.Published },
+    { key: 'newVersion', title: t('workflow.definition.action_new_version'), scope: 'row', permission: 'workflow_definition.create', visible: row => (row as unknown as WorkflowDefinitionListItemDto).status !== WorkflowDefinitionStatus.Draft },
+    { key: 'disable', title: t('workflow.definition.action_disable'), scope: 'row', type: 'warning', permission: 'workflow_definition.update', visible: row => (row as unknown as WorkflowDefinitionListItemDto).status === WorkflowDefinitionStatus.Published },
+    { key: 'archive', title: t('workflow.definition.action_archive'), scope: 'row', permission: 'workflow_definition.update', visible: row => (row as unknown as WorkflowDefinitionListItemDto).status === WorkflowDefinitionStatus.Disabled },
+    { key: 'delete', title: t('workflow.definition.action_delete'), scope: 'row', type: 'error', permission: 'workflow_definition.delete', visible: row => (row as unknown as WorkflowDefinitionListItemDto).status === WorkflowDefinitionStatus.Draft },
   ],
 }))
 
@@ -157,7 +142,7 @@ async function handleDetail(row: WorkflowDefinitionListItemDto) {
     detailData.value = await workflowDefinitionApi.detail(row.basicId) ?? null
   }
   catch (error) {
-    message.error((error as Error)?.message || t('workflow.definition.err_load_detail'))
+    toast.error((error as Error)?.message || t('workflow.definition.err_load_detail'))
   }
   finally {
     detailLoading.value = false
@@ -191,7 +176,7 @@ function openCreate() {
 async function openEdit(row: WorkflowDefinitionListItemDto) {
   const detail = await workflowDefinitionApi.detail(row.basicId)
   if (!detail) {
-    message.error(t('workflow.definition.err_load_detail'))
+    toast.error(t('workflow.definition.err_load_detail'))
     return
   }
   editMode.value = 'edit'
@@ -206,17 +191,17 @@ async function handleDesignerSave(json: string) {
   try {
     if (editMode.value === 'create') {
       await workflowDefinitionApi.create({ definitionJson: json })
-      message.success(t('workflow.definition.msg_created'))
+      toast.success(t('workflow.definition.msg_created'))
     }
     else if (editTargetId.value) {
       await workflowDefinitionApi.updateDraft({ basicId: editTargetId.value, definitionJson: json })
-      message.success(t('workflow.definition.msg_updated'))
+      toast.success(t('workflow.definition.msg_updated'))
     }
     editVisible.value = false
     reload()
   }
   catch (error) {
-    message.error((error as Error)?.message || t('workflow.definition.err_save'))
+    toast.error((error as Error)?.message || t('workflow.definition.err_save'))
   }
   finally {
     editLoading.value = false
@@ -224,6 +209,8 @@ async function handleDesignerSave(json: string) {
 }
 
 // ── 发起实例 ───────────────────────────────────────────────────
+/** 弹窗底部的发起钮靠这个 id 关联到表单，点它走表单提交 */
+const startFormId = useId()
 const startVisible = ref(false)
 const startLoading = ref(false)
 const startForm = ref({ definitionCode: '', definitionVersion: null as number | null, name: '', correlationId: '', variablesJson: '{}' })
@@ -243,11 +230,11 @@ async function handleStart() {
       correlationId: startForm.value.correlationId.trim() || undefined,
       variablesJson: startForm.value.variablesJson.trim() || undefined,
     })
-    message.success(t('workflow.definition.msg_started'))
+    toast.success(t('workflow.definition.msg_started'))
     startVisible.value = false
   }
   catch (error) {
-    message.error((error as Error)?.message || t('workflow.definition.err_start'))
+    toast.error((error as Error)?.message || t('workflow.definition.err_start'))
   }
   finally {
     startLoading.value = false
@@ -260,29 +247,29 @@ async function runLifecycle(action: 'publish' | 'newVersion' | 'disable' | 'arch
     switch (action) {
       case 'publish':
         await workflowDefinitionApi.publish({ basicId: row.basicId })
-        message.success(t('workflow.definition.msg_published'))
+        toast.success(t('workflow.definition.msg_published'))
         break
       case 'newVersion':
         await workflowDefinitionApi.newVersion({ code: row.code })
-        message.success(t('workflow.definition.msg_new_version'))
+        toast.success(t('workflow.definition.msg_new_version'))
         break
       case 'disable':
         await workflowDefinitionApi.disable({ basicId: row.basicId })
-        message.success(t('workflow.definition.msg_disabled'))
+        toast.success(t('workflow.definition.msg_disabled'))
         break
       case 'archive':
         await workflowDefinitionApi.archive({ basicId: row.basicId })
-        message.success(t('workflow.definition.msg_archived'))
+        toast.success(t('workflow.definition.msg_archived'))
         break
       case 'delete':
         await workflowDefinitionApi.delete(row.basicId)
-        message.success(t('workflow.definition.msg_deleted'))
+        toast.success(t('workflow.definition.msg_deleted'))
         break
     }
     reload()
   }
   catch (error) {
-    message.error((error as Error)?.message || t('workflow.definition.err_operation'))
+    toast.error((error as Error)?.message || t('workflow.definition.err_operation'))
   }
 }
 
@@ -319,88 +306,152 @@ function onAction(payload: SchemaActionPayload) {
 <template>
   <SchemaPage ref="schemaPageRef" :schema="schema" @action="onAction">
     <!-- 详情抽屉 -->
-    <NDrawer v-model:show="detailVisible" :width="720">
-      <NDrawerContent closable :title="t('workflow.definition.detail_title')">
+    <XhDrawerRoot v-model:open="detailVisible" side="right">
+      <XhDrawerContent style="--xh-drawer-size: 720px">
+        <XhDrawerTitle>{{ t('workflow.definition.detail_title') }}</XhDrawerTitle>
+        <XhDrawerCloseTrigger />
         <div v-if="detailLoading" class="py-8 text-center text-gray-400">
           {{ t('workflow.definition.loading') }}
         </div>
         <template v-else-if="detailData">
-          <NDescriptions :column="2" bordered label-placement="left" size="small">
-            <NDescriptionsItem :label="t('workflow.definition.code')">
-              {{ detailData.code }}
-            </NDescriptionsItem>
-            <NDescriptionsItem :label="t('workflow.definition.name')">
-              {{ detailData.name }}
-            </NDescriptionsItem>
-            <NDescriptionsItem :label="t('workflow.definition.version')">
-              v{{ detailData.version }}
-            </NDescriptionsItem>
-            <NDescriptionsItem :label="t('workflow.definition.status')">
-              <NTag :type="statusTag(detailData.status)" round size="small">
-                {{ statusLabel(detailData.status) }}
-              </NTag>
-            </NDescriptionsItem>
-            <NDescriptionsItem :label="t('workflow.definition.category')">
-              {{ detailData.category || '-' }}
-            </NDescriptionsItem>
-            <NDescriptionsItem :label="t('workflow.definition.publish_time')">
-              {{ detailData.publishTime ? formatDate(detailData.publishTime) : '-' }}
-            </NDescriptionsItem>
-            <NDescriptionsItem :label="t('workflow.definition.description')" :span="2">
-              {{ detailData.description || '-' }}
-            </NDescriptionsItem>
-          </NDescriptions>
+          <XhDescriptionsRoot :columns="2" bordered placement="left" size="sm">
+            <XhDescriptionsItem>
+              <XhDescriptionsLabel>{{ t('workflow.definition.code') }}</XhDescriptionsLabel>
+              <XhDescriptionsValue>
+                {{ detailData.code }}
+              </XhDescriptionsValue>
+            </XhDescriptionsItem>
+            <XhDescriptionsItem>
+              <XhDescriptionsLabel>{{ t('workflow.definition.name') }}</XhDescriptionsLabel>
+              <XhDescriptionsValue>
+                {{ detailData.name }}
+              </XhDescriptionsValue>
+            </XhDescriptionsItem>
+            <XhDescriptionsItem>
+              <XhDescriptionsLabel>{{ t('workflow.definition.version') }}</XhDescriptionsLabel>
+              <XhDescriptionsValue>
+                v{{ detailData.version }}
+              </XhDescriptionsValue>
+            </XhDescriptionsItem>
+            <XhDescriptionsItem>
+              <XhDescriptionsLabel>{{ t('workflow.definition.status') }}</XhDescriptionsLabel>
+              <XhDescriptionsValue>
+                <XhTagRoot variant="subtle" :tone="statusTag(detailData.status)" size="sm">
+                  <XhTagLabel>
+                    {{ statusLabel(detailData.status) }}
+                  </XhTagLabel>
+                </XhTagRoot>
+              </XhDescriptionsValue>
+            </XhDescriptionsItem>
+            <XhDescriptionsItem>
+              <XhDescriptionsLabel>{{ t('workflow.definition.category') }}</XhDescriptionsLabel>
+              <XhDescriptionsValue>
+                {{ detailData.category || '-' }}
+              </XhDescriptionsValue>
+            </XhDescriptionsItem>
+            <XhDescriptionsItem>
+              <XhDescriptionsLabel>{{ t('workflow.definition.publish_time') }}</XhDescriptionsLabel>
+              <XhDescriptionsValue>
+                {{ detailData.publishTime ? formatDate(detailData.publishTime) : '-' }}
+              </XhDescriptionsValue>
+            </XhDescriptionsItem>
+            <XhDescriptionsItem style="grid-column: span 2">
+              <XhDescriptionsLabel>{{ t('workflow.definition.description') }}</XhDescriptionsLabel>
+              <XhDescriptionsValue>
+                {{ detailData.description || '-' }}
+              </XhDescriptionsValue>
+            </XhDescriptionsItem>
+          </XhDescriptionsRoot>
           <div class="mb-2 mt-4 flex items-center justify-between">
             <span class="text-sm font-medium">{{ t('workflow.definition.graph_label') }}</span>
-            <NButton text size="tiny" @click="showDetailJson = !showDetailJson">
+            <XhButton text size="sm" @click="showDetailJson = !showDetailJson">
               {{ showDetailJson ? t('workflow.definition.hide_json') : t('workflow.definition.show_json') }}
-            </NButton>
+            </XhButton>
           </div>
           <div class="h-[440px] overflow-hidden rounded border border-gray-200 dark:border-gray-700">
             <WorkflowGraphView :definition-json="detailData.definitionJson" />
           </div>
-          <pre v-if="showDetailJson" class="m-0 mt-2 max-h-96 overflow-auto whitespace-pre-wrap break-all rounded bg-gray-50 p-3 text-xs dark:bg-gray-800">{{ detailData.definitionJson }}</pre>
+          <template v-if="showDetailJson">
+            <XJsonBlock class="mt-2" :raw="detailData.definitionJson" :default-expanded-depth="2" max-height="24rem" />
+          </template>
         </template>
-      </NDrawerContent>
-    </NDrawer>
+      </XhDrawerContent>
+    </XhDrawerRoot>
 
     <!-- 创建/编辑（可视化设计器，内置 JSON 视图） -->
-    <NModal
-      v-model:show="editVisible"
-      preset="card"
-      :title="editMode === 'create' ? t('workflow.definition.create_title') : t('workflow.definition.edit_title')"
-      style="width: 96vw; max-width: 1600px"
-    >
-      <WorkflowDesigner
-        :key="designerKey"
-        :initial-json="editJson"
-        :saving="editLoading"
-        @save="handleDesignerSave"
-      />
-    </NModal>
+    <XhDialogRoot v-model:open="editVisible">
+      <XhDialogContent style="--xh-dialog-max-w: min(96vw, 1600px)">
+        <XhDialogTitle>{{ editMode === 'create' ? t('workflow.definition.create_title') : t('workflow.definition.edit_title') }}</XhDialogTitle>
+        <XhDialogCloseTrigger />
+        <WorkflowDesigner
+          :key="designerKey"
+          :initial-json="editJson"
+          :saving="editLoading"
+          @save="handleDesignerSave"
+        />
+      </XhDialogContent>
+    </XhDialogRoot>
 
     <!-- 发起实例 -->
-    <NModal v-model:show="startVisible" preset="card" :title="t('workflow.definition.start_title')" style="width: 560px">
-      <NForm label-placement="left" :label-width="100">
-        <NFormItem :label="t('workflow.definition.code')">
-          <NInput v-model:value="startForm.definitionCode" disabled />
-        </NFormItem>
-        <NFormItem :label="t('workflow.definition.version')">
-          <NInputNumber v-model:value="startForm.definitionVersion" :min="1" class="w-full" />
-        </NFormItem>
-        <NFormItem :label="t('workflow.definition.instance_name')">
-          <NInput v-model:value="startForm.name" :placeholder="t('workflow.definition.instance_name_placeholder')" />
-        </NFormItem>
-        <NFormItem :label="t('workflow.definition.correlation_id')">
-          <NInput v-model:value="startForm.correlationId" :placeholder="t('workflow.definition.correlation_placeholder')" />
-        </NFormItem>
-        <NFormItem :label="t('workflow.definition.variables')">
-          <NInput v-model:value="startForm.variablesJson" type="textarea" :autosize="{ minRows: 4, maxRows: 10 }" class="font-mono" />
-        </NFormItem>
-      </NForm>
-      <NButton block type="primary" :loading="startLoading" @click="handleStart">
-        {{ t('workflow.definition.btn_start') }}
-      </NButton>
-    </NModal>
+    <XEditModal
+      v-model:show="startVisible"
+      :title="t('workflow.definition.start_title')"
+      :loading="startLoading"
+      :save-text="t('workflow.definition.btn_start')"
+      :form-id="startFormId"
+    >
+      <!-- 必填由提交处理器判定；这里不配 rules，错误文本槽位留着备用 -->
+      <XhFormRoot
+        :id="startFormId"
+        class="xh-edit-form-grid"
+        @submit="handleStart"
+      >
+        <XhFormFieldGroup value="definitionCode">
+          <XhFieldRoot>
+            <XhFieldLabel>{{ t('workflow.definition.code') }}</XhFieldLabel>
+            <XhFieldControl>
+              <XInput v-model:value="startForm.definitionCode" disabled />
+            </XhFieldControl>
+            <XhFieldErrorText />
+          </XhFieldRoot>
+        </XhFormFieldGroup>
+        <XhFormFieldGroup value="definitionVersion">
+          <XhFieldRoot>
+            <XhFieldLabel>{{ t('workflow.definition.version') }}</XhFieldLabel>
+            <XhFieldControl>
+              <XNumberInput v-model:value="startForm.definitionVersion" :min="1" class="w-full" />
+            </XhFieldControl>
+            <XhFieldErrorText />
+          </XhFieldRoot>
+        </XhFormFieldGroup>
+        <XhFormFieldGroup value="name">
+          <XhFieldRoot>
+            <XhFieldLabel>{{ t('workflow.definition.instance_name') }}</XhFieldLabel>
+            <XhFieldControl>
+              <XInput v-model:value="startForm.name" :placeholder="t('workflow.definition.instance_name_placeholder')" />
+            </XhFieldControl>
+            <XhFieldErrorText />
+          </XhFieldRoot>
+        </XhFormFieldGroup>
+        <XhFormFieldGroup value="correlationId">
+          <XhFieldRoot>
+            <XhFieldLabel>{{ t('workflow.definition.correlation_id') }}</XhFieldLabel>
+            <XhFieldControl>
+              <XInput v-model:value="startForm.correlationId" :placeholder="t('workflow.definition.correlation_placeholder')" />
+            </XhFieldControl>
+            <XhFieldErrorText />
+          </XhFieldRoot>
+        </XhFormFieldGroup>
+        <XhFormFieldGroup value="variablesJson" class="xh-span-2">
+          <XhFieldRoot>
+            <XhFieldLabel>{{ t('workflow.definition.variables') }}</XhFieldLabel>
+            <XhFieldControl>
+              <XInput v-model:value="startForm.variablesJson" type="textarea" :autosize="{ minRows: 4, maxRows: 10 }" class="font-mono" />
+            </XhFieldControl>
+            <XhFieldErrorText />
+          </XhFieldRoot>
+        </XhFormFieldGroup>
+      </XhFormRoot>
+    </XEditModal>
   </SchemaPage>
 </template>

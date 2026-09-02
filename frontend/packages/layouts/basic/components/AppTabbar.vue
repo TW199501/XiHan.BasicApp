@@ -1,13 +1,12 @@
 <script lang="ts" setup>
-import type { DragEndEvent } from '@dnd-kit/vue'
 import type { TabItem } from '~/types'
-import { DragDropProvider } from '@dnd-kit/vue'
 import { useDebounceFn } from '@vueuse/core'
-import { NButton, NIcon } from 'naive-ui'
+import { resolveMotionPreference } from '@xihan-ui/motion'
+import { XhButton, XhSortableLiveRegion, XhSortableRoot } from '@xihan-ui/vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { resolveSortMove } from '~/components/common/sortable'
+import { GLOBAL_HOTKEYS } from '~/composables/useGlobalShortcuts'
 import { usePlatform } from '~/composables/usePlatform'
 import { useContentMaximize, useRefresh } from '~/hooks'
 import { Icon } from '~/iconify'
@@ -33,6 +32,8 @@ const favoritesStore = useFavoritesStore()
 const splitViewStore = useSplitViewStore()
 const layoutBridgeStore = useLayoutBridgeStore()
 const { formatShortcut } = usePlatform()
+// 标签总览按钮 title 里的键位提示，键位取自全局快捷键声明。
+const tabOverviewShortcut = formatShortcut(GLOBAL_HOTKEYS.tabOverview.join('+'))
 
 // 隐藏被合并到右侧分屏的标签（视为已并入分屏锚定标签）
 const visibleTabs = computed(() => tabbarStore.tabs.filter(tab => !splitViewStore.isMergedTab(tab.path)))
@@ -323,12 +324,8 @@ function onTabLeaveCancelled(el: Element) {
 
 // 拖拽结束：按路径提交新顺序。固定标签（pinned）在 TabbarTabItem 中已被禁用拖拽，
 // 此处再以数据校验「固定 / 非固定不互换」，保证最终顺序不破坏约束。
-function onTabDragEnd(event: DragEndEvent) {
+function onTabSort(move: { from: number, to: number }) {
   const tabs = localizedTabs.value
-  const move = resolveSortMove(event, tabs.map(tab => tab.path))
-  if (!move) {
-    return
-  }
   if (Boolean(tabs[move.from]?.pinned) !== Boolean(tabs[move.to]?.pinned)) {
     return
   }
@@ -363,12 +360,17 @@ const debouncedCalc = useDebounceFn(() => {
 
 const debouncedEdge = useDebounceFn(updateScrollEdge, 80)
 
+/** 减少动效时改为瞬时滚动。 */
+function scrollBehavior(): ScrollBehavior {
+  return resolveMotionPreference() === 'reduce' ? 'instant' : 'smooth'
+}
+
 function scrollDirection(dir: 'left' | 'right', distance = 150) {
   const vp = scrollViewportRef.value
   if (!vp)
     return
   vp.scrollBy({
-    behavior: 'smooth',
+    behavior: scrollBehavior(),
     left: dir === 'left' ? -(vp.clientWidth - distance) : +(vp.clientWidth - distance),
   })
 }
@@ -382,7 +384,7 @@ async function scrollToActive() {
     return
   requestAnimationFrame(() => {
     const activeEl = vp.querySelector('.is-active') as HTMLElement | null
-    activeEl?.scrollIntoView({ behavior: 'smooth', inline: 'nearest' })
+    activeEl?.scrollIntoView({ behavior: scrollBehavior(), inline: 'nearest' })
   })
 }
 
@@ -466,20 +468,15 @@ watch(() => tabbarStore.tabs.map(tab => tab.path).join('|'), () => {
     :class="appStore.tabbarStyle === 'chrome' ? 'h-10 pt-[4px] pb-0' : 'h-[38px] py-0'"
   >
     <!-- 左侧滚动箭头 -->
-    <NButton
+    <XhButton
       v-show="showScrollBtn"
-      quaternary
-      size="tiny"
-      :focusable="false"
+      variant="ghost"
+      size="sm"
       :disabled="scrollAtLeft"
       @click="scrollDirection('left')"
     >
-      <template #icon>
-        <NIcon>
-          <Icon icon="lucide:chevrons-left" width="14" />
-        </NIcon>
-      </template>
-    </NButton>
+      <Icon icon="lucide:chevrons-left" width="14" />
+    </XhButton>
     <span v-show="showScrollBtn" class="tab-divider" />
 
     <!-- 标签列表（无滚动条，通过箭头控制） -->
@@ -491,63 +488,61 @@ watch(() => tabbarStore.tabs.map(tab => tab.path).join('|'), () => {
         ref="scrollViewportRef"
         class="tabbar-viewport h-full overflow-x-auto"
       >
-        <div
+        <XhSortableRoot
+          orientation="horizontal"
+          :ids="localizedTabs.map(tab => tab.path)"
           class="pr-2"
           :class="appStore.tabbarStyle === 'chrome'
-            ? 'flex h-full min-w-max items-end'
-            : 'flex h-full min-w-max items-stretch'"
+            ? 'h-full min-w-max items-end'
+            : 'h-full min-w-max items-stretch'"
+          style="--xh-sortable-gap: 0"
+          @sort="onTabSort"
         >
-          <DragDropProvider @drag-end="onTabDragEnd">
-            <TransitionGroup
-              name="tabs-slide"
-              :css="false"
-              @before-enter="onTabBeforeEnter"
-              @enter="onTabEnter"
-              @before-leave="onTabBeforeLeave"
-              @leave="onTabLeave"
-              @enter-cancelled="onTabEnterCancelled"
-              @leave-cancelled="onTabLeaveCancelled"
-            >
-              <TabbarTabItem
-                v-for="(item, index) in localizedTabs"
-                :key="item.key"
-                :item="item"
-                :index="index"
-                :active="route.fullPath === item.path"
-                :is-last="index === localizedTabs.length - 1"
-                :draggable="tabbarPreferences.tabbarDraggable.value && !item.pinned"
-                :show-icon="appStore.tabbarShowIcon"
-                :middle-close-enabled="appStore.tabbarMiddleClickClose"
-                :style-type="appStore.tabbarStyle"
-                data-tab-item="true"
-                @jump="handleJump"
-                @contextmenu="openContextMenu"
-                @close="handleClose"
-                @toggle-pin="tabbarStore.togglePin"
-                @middle-close="handleMiddleClose"
-              />
-            </TransitionGroup>
-          </DragDropProvider>
-        </div>
+          <TransitionGroup
+            name="tabs-slide"
+            :css="false"
+            @before-enter="onTabBeforeEnter"
+            @enter="onTabEnter"
+            @before-leave="onTabBeforeLeave"
+            @leave="onTabLeave"
+            @enter-cancelled="onTabEnterCancelled"
+            @leave-cancelled="onTabLeaveCancelled"
+          >
+            <TabbarTabItem
+              v-for="(item, index) in localizedTabs"
+              :key="item.key"
+              :item="item"
+              :index="index"
+              :active="route.fullPath === item.path"
+              :is-last="index === localizedTabs.length - 1"
+              :draggable="tabbarPreferences.tabbarDraggable.value && !item.pinned"
+              :show-icon="appStore.tabbarShowIcon"
+              :middle-close-enabled="appStore.tabbarMiddleClickClose"
+              :style-type="appStore.tabbarStyle"
+              data-tab-item="true"
+              @jump="handleJump"
+              @contextmenu="openContextMenu"
+              @close="handleClose"
+              @toggle-pin="tabbarStore.togglePin"
+              @middle-close="handleMiddleClose"
+            />
+          </TransitionGroup>
+          <XhSortableLiveRegion />
+        </XhSortableRoot>
       </div>
     </div>
 
     <!-- 右侧滚动箭头 -->
     <span v-show="showScrollBtn" class="tab-divider" />
-    <NButton
+    <XhButton
       v-show="showScrollBtn"
-      quaternary
-      size="tiny"
-      :focusable="false"
+      variant="ghost"
+      size="sm"
       :disabled="scrollAtRight"
       @click="scrollDirection('right')"
     >
-      <template #icon>
-        <NIcon>
-          <Icon icon="lucide:chevrons-right" width="14" />
-        </NIcon>
-      </template>
-    </NButton>
+      <Icon icon="lucide:chevrons-right" width="14" />
+    </XhButton>
 
     <TabbarContextMenu
       :show="contextMenuVisible"
@@ -558,64 +553,48 @@ watch(() => tabbarStore.tabs.map(tab => tab.path).join('|'), () => {
       @select="handleDropdownSelect"
     />
     <span class="tab-divider" />
-    <NButton
+    <XhButton
       v-if="tabbarPreferences.tabbarShowMore.value"
-      quaternary
-      size="tiny"
+      variant="ghost"
+      size="sm"
       @click="openActiveTabMenu"
     >
-      <template #icon>
-        <NIcon>
-          <Icon icon="lucide:layout-grid" width="14" />
-        </NIcon>
-      </template>
-    </NButton>
+      <Icon icon="lucide:layout-grid" width="14" />
+    </XhButton>
     <span v-if="tabbarPreferences.tabbarShowOverview.value" class="tab-divider" />
-    <NButton
+    <XhButton
       v-if="tabbarPreferences.tabbarShowOverview.value"
-      quaternary
-      size="tiny"
-      :title="`${t('tabbar.overview')} (${formatShortcut('Alt+B')})`"
+      variant="ghost"
+      size="sm"
+      :title="`${t('tabbar.overview')} (${tabOverviewShortcut})`"
       @click="layoutBridgeStore.requestOpenTabOverview()"
     >
-      <template #icon>
-        <NIcon>
-          <Icon icon="lucide:layers" width="14" />
-        </NIcon>
-      </template>
-    </NButton>
+      <Icon icon="lucide:layers" width="14" />
+    </XhButton>
     <span
       v-if="tabbarPreferences.tabbarShowMore.value && (appStore.widgetRefresh || tabbarPreferences.tabbarShowMaximize.value)"
       class="tab-divider"
     />
-    <NButton
+    <XhButton
       v-if="appStore.widgetRefresh"
-      quaternary
-      size="tiny"
+      variant="ghost"
+      size="sm"
       @click="refreshCurrentTab"
     >
-      <template #icon>
-        <NIcon>
-          <Icon icon="lucide:rotate-cw" width="14" />
-        </NIcon>
-      </template>
-    </NButton>
+      <Icon icon="lucide:rotate-cw" width="14" />
+    </XhButton>
     <span v-if="appStore.widgetRefresh && tabbarPreferences.tabbarShowMaximize.value" class="tab-divider" />
-    <NButton
+    <XhButton
       v-if="tabbarPreferences.tabbarShowMaximize.value"
-      quaternary
-      size="tiny"
+      variant="ghost"
+      size="sm"
       @click="toggleMaximize"
     >
-      <template #icon>
-        <NIcon>
-          <Icon
-            :icon="isContentMaximized ? 'lucide:minimize' : 'lucide:maximize'"
-            width="14"
-          />
-        </NIcon>
-      </template>
-    </NButton>
+      <Icon
+        :icon="isContentMaximized ? 'lucide:minimize' : 'lucide:maximize'"
+        width="14"
+      />
+    </XhButton>
   </div>
 </template>
 

@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import type { MenuRoute } from '~/types'
 import { useFullscreen } from '@vueuse/core'
-import { NIcon } from 'naive-ui'
+import { XhHotkeys } from '@xihan-ui/vue'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
+import { GLOBAL_HOTKEYS } from '~/composables/useGlobalShortcuts'
 import { ensurePinyin, getPinyinIndex, usePinyinReady } from '~/composables/usePinyin'
-import { usePlatform } from '~/composables/usePlatform'
 import { useRecentRoutes } from '~/composables/useRecentRoutes'
 import { AUTH_PATH, LAYOUT_EVENT_OPEN_GLOBAL_SEARCH } from '~/constants'
 import { useRefresh, useTheme } from '~/hooks'
@@ -27,7 +27,6 @@ const { isDark, toggleThemeWithTransition } = useTheme()
 const { refresh: refreshCurrentTab } = useRefresh()
 const { isFullscreen, toggle: toggleFullscreen } = useFullscreen()
 const { recent, recordRecent } = useRecentRoutes()
-const { formatShortcut } = usePlatform()
 const pinyinReady = usePinyinReady()
 
 // 仅在快捷键启用时展示触发按钮上的 ⌘K/Ctrl+K 徽标
@@ -425,18 +424,16 @@ watch(
   <div v-bind="$attrs">
     <div class="hidden sm:block">
       <button type="button" class="search-trigger" @click="layoutBridgeStore.requestOpenGlobalSearch()">
-        <NIcon size="14" class="shrink-0 text-[hsl(var(--muted-foreground))]">
+        <span class="shrink-0 text-[hsl(var(--muted-foreground))]" style="display: inline-flex; font-size: 14px">
           <Icon icon="lucide:search" />
-        </NIcon>
+        </span>
         <span class="search-trigger-text">{{ t('header.search.placeholder') }}</span>
-        <kbd v-if="showShortcut" class="search-kbd">{{ formatShortcut('Ctrl+K') }}</kbd>
+        <XhHotkeys v-if="showShortcut" class="search-kbd" :keys="[...GLOBAL_HOTKEYS.search]" :prevent-default="false" />
       </button>
     </div>
     <div class="sm:hidden">
       <button type="button" class="search-trigger-icon" @click="layoutBridgeStore.requestOpenGlobalSearch()">
-        <NIcon size="16">
-          <Icon icon="lucide:search" />
-        </NIcon>
+        <Icon width="16" height="16" icon="lucide:search" />
       </button>
     </div>
   </div>
@@ -447,9 +444,9 @@ watch(
         <div class="cmdk-panel" role="dialog" aria-modal="true" @click.stop>
           <!-- 输入框 -->
           <div class="cmdk-input">
-            <NIcon size="17" class="cmdk-input__icon">
+            <span class="cmdk-input__icon" style="display: inline-flex; font-size: 17px">
               <Icon icon="lucide:search" />
-            </NIcon>
+            </span>
             <input
               ref="inputRef"
               v-model="keyword"
@@ -479,7 +476,7 @@ watch(
                 @mousemove="setActive(it)"
               >
                 <span class="cmdk-item__icon">
-                  <NIcon size="17"><Icon :icon="it.icon" /></NIcon>
+                  <Icon width="17" height="17" :icon="it.icon" />
                 </span>
                 <span class="cmdk-item__title">
                   <span
@@ -494,9 +491,9 @@ watch(
             </template>
 
             <div v-if="!flat.length" class="cmdk-empty">
-              <NIcon size="22" class="opacity-40">
+              <span class="opacity-40" style="display: inline-flex; font-size: 22px">
                 <Icon icon="lucide:search-x" />
-              </NIcon>
+              </span>
               <span>{{ t('header.search.empty') }}</span>
             </div>
           </div>
@@ -542,18 +539,8 @@ watch(
   user-select: none;
 }
 
+/* 键帽画在触发按钮里，点它等于点按钮 */
 .search-kbd {
-  display: inline-flex;
-  align-items: center;
-  padding: 1px 6px;
-  font-size: 11px;
-  font-family: ui-monospace, 'SFMono-Regular', monospace;
-  color: hsl(var(--muted-foreground));
-  background: hsl(var(--background));
-  border: 1px solid hsl(var(--border));
-  border-radius: 4px;
-  line-height: 1.6;
-  white-space: nowrap;
   pointer-events: none;
 }
 

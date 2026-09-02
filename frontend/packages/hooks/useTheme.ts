@@ -1,5 +1,5 @@
-import type { GlobalThemeOverrides } from 'naive-ui'
-import { darkTheme, lightTheme, useOsTheme } from 'naive-ui'
+import { usePreferredDark } from '@vueuse/core'
+import { deriveBrandScale, ON_COLOR_CROSSOVER, relativeLuminance } from '@xihan-ui/tokens'
 import { computed, nextTick, watch } from 'vue'
 import { THEME_AUTO } from '~/constants'
 import { setPendingPreferenceOrigin, useAppStore } from '~/stores'
@@ -85,13 +85,13 @@ function generatePrimaryScale(hex: string) {
   }
 }
 
-/** 计算 hex 的相对亮度（WCAG），用于决定主色上的前景文字取深/浅 */
-function relLuminance(hex: string): number {
-  const channel = (i: number) => {
-    const c = Number.parseInt(hex.slice(i, i + 2), 16) / 255
-    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
-  }
-  return 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5)
+/**
+ * 实心底上的前景文字：亮过交叉点用深字，暗于它用浅字。
+ * 判据与交叉点都取组件库的公共能力，别在这里另起一套。
+ * 传进来的要是实际当底色的那一档（色阶的 600），不是用户挑的原色。
+ */
+function onSolidFor(color: string): string {
+  return relativeLuminance(color) > ON_COLOR_CROSSOVER ? '220 12% 12%' : '0 0% 100%'
 }
 
 /**
@@ -106,13 +106,10 @@ function relLuminance(hex: string): number {
  */
 function deriveMaterialPalette(hex: string, dark: boolean): Record<string, string> {
   const [h, s, l] = hexToHsl(hex)
-  // 主色上的前景：主色偏亮用深字，偏暗用浅字（修复如黄色主色上白字看不清）
-  const onPrimary = relLuminance(hex) > 0.55 ? '220 12% 12%' : '0 0% 98%'
   const cs = (v: number) => Math.max(0, Math.min(100, Math.round(v)))
 
   if (dark) {
     return {
-      '--primary-foreground': onPrimary,
       '--ring': `${h} ${cs(Math.min(s, 80))}% ${cs(Math.max(l, 60))}%`,
       '--accent': `${h} ${cs(Math.min(s * 0.4, 40))}% 22%`,
       '--accent-foreground': `${h} 22% 90%`,
@@ -123,7 +120,6 @@ function deriveMaterialPalette(hex: string, dark: boolean): Record<string, strin
     }
   }
   return {
-    '--primary-foreground': onPrimary,
     '--ring': `${h} ${cs(Math.min(s, 85))}% ${cs(Math.max(Math.min(l, 55), 40))}%`,
     '--accent': `${h} ${cs(Math.min(s * 0.5, 45))}% 93%`,
     '--accent-foreground': `${h} ${cs(Math.min(s, 45))}% 24%`,
@@ -134,42 +130,18 @@ function deriveMaterialPalette(hex: string, dark: boolean): Record<string, strin
   }
 }
 
-/**
- * 读取 CSS 变量值并转换为 TinyColor 兼容的逗号格式 hsl()。
- * CSS 变量存储格式为 "H S% L%"（CSS Level 4 空格语法），
- * 而 Naive UI 内部的 TinyColor 只支持老式逗号语法 "hsl(H, S%, L%)"。
- */
-function getCssColorVar(varName: string, fallback = ''): string {
-  if (typeof document === 'undefined')
-    return fallback
-  const raw = getComputedStyle(document.documentElement).getPropertyValue(varName).trim()
-  if (!raw)
-    return fallback
-  // "142 71% 45%" → "hsl(142, 71%, 45%)"
-  const parts = raw.split(/\s+/)
-  if (parts.length >= 3) {
-    const [h = '', sRaw = '', lRaw = ''] = parts
-    const s = sRaw.endsWith('%') ? sRaw : `${sRaw}%`
-    const l = lRaw.endsWith('%') ? lRaw : `${lRaw}%`
-    return `hsl(${h}, ${s}, ${l})`
-  }
-  return fallback
-}
-
 export function useTheme() {
   const appStore = useAppStore()
-  const osTheme = useOsTheme()
+  const prefersDark = usePreferredDark()
 
   const isDark = computed(() => {
     if (appStore.themeMode === THEME_AUTO) {
-      return osTheme.value === 'dark'
+      return prefersDark.value
     }
     return appStore.themeMode === 'dark'
   })
 
-  const naiveTheme = computed(() => (isDark.value ? darkTheme : lightTheme))
-
-  /** 计算圆角像素值（供 CSS 变量同步及 Naive UI themeOverrides 共用） */
+  /** 计算圆角像素值（写入 --radius / --radius-card，组件库经令牌桥读它） */
   function calcRadius(r: number) {
     return {
       radius: `${Math.round(4 + r * 12)}px`,
@@ -177,7 +149,7 @@ export function useTheme() {
     }
   }
 
-  /** 将当前 uiRadius 同步到根元素 CSS 变量，供非 Naive UI 的自定义元素使用 */
+  /** 将当前 uiRadius 同步到根元素 CSS 变量，供组件库之外的自定义元素使用 */
   function syncRadiusCssVars(r: number) {
     if (typeof document === 'undefined')
       return
@@ -198,6 +170,14 @@ export function useTheme() {
     const el = document.documentElement
     // 主色：始终保持用户所选精确颜色
     el.style.setProperty('--primary', hexToHslVars(hex))
+    // 品牌色阶按组件库的固定明度曲线派生：实心底取的是 600 档而不是用户挑的原色，
+    // 明度定住，上面的字才能恒是白的
+    const brand = deriveBrandScale(hex)
+    for (const [step, value] of Object.entries(brand))
+      el.style.setProperty(`--xh-color-brand-${step}`, value)
+    // 主色上的前景跟着实心底那一档走，与 Material You 开关无关：它不是派生的装饰色，
+    // 而是「这个底上的字读不读得清」，关掉动态取色一样要算
+    el.style.setProperty('--primary-foreground', onSolidFor(brand['600']))
     el.style.setProperty('--primary-hover', hexToHslVars(scale.hover))
     el.style.setProperty('--primary-active', hexToHslVars(scale.active))
     el.style.setProperty('--primary-suppl', hexToHslVars(scale.suppl))
@@ -213,13 +193,6 @@ export function useTheme() {
     }
   }
 
-  /** 同步字号到 CSS 变量 */
-  function syncFontSize(size: number) {
-    if (typeof document === 'undefined')
-      return
-    document.documentElement.style.setProperty('--font-size-base', `${size}px`)
-  }
-
   watch(() => appStore.uiRadius, syncRadiusCssVars, { immediate: true })
   // 主色 / 明暗 / 动态取色开关 变化都需重算派生色阶（Material You 明暗自适应）
   watch(
@@ -227,55 +200,11 @@ export function useTheme() {
     ([hex, dark, dynamic]) => applyThemePalette(hex, dark, dynamic),
     { immediate: true },
   )
-  watch(() => appStore.fontSize, syncFontSize, { immediate: true })
-
-  const themeOverrides = computed((): GlobalThemeOverrides => {
-    const { radius } = calcRadius(appStore.uiRadius)
-    const scale = generatePrimaryScale(appStore.themeColor)
-    const [h, s, l] = hexToHsl(appStore.themeColor)
-    const primaryActive = `hsla(${h}, ${s}%, ${l}%, 0.15)`
-    return {
-      common: {
-        primaryColor: scale.base,
-        primaryColorHover: scale.hover,
-        primaryColorPressed: scale.active,
-        primaryColorSuppl: scale.suppl,
-        successColor: getCssColorVar('--success', '#18a058'),
-        successColorHover: getCssColorVar('--success', '#18a058'),
-        successColorPressed: getCssColorVar('--success', '#18a058'),
-        successColorSuppl: getCssColorVar('--success', '#18a058'),
-        warningColor: getCssColorVar('--warning', '#f0a020'),
-        warningColorHover: getCssColorVar('--warning', '#f0a020'),
-        warningColorPressed: getCssColorVar('--warning', '#f0a020'),
-        warningColorSuppl: getCssColorVar('--warning', '#f0a020'),
-        errorColor: getCssColorVar('--destructive', '#d03050'),
-        errorColorHover: getCssColorVar('--destructive', '#d03050'),
-        errorColorPressed: getCssColorVar('--destructive', '#d03050'),
-        errorColorSuppl: getCssColorVar('--destructive', '#d03050'),
-        infoColor: getCssColorVar('--info', '#2080f0'),
-        infoColorHover: getCssColorVar('--info', '#2080f0'),
-        infoColorPressed: getCssColorVar('--info', '#2080f0'),
-        infoColorSuppl: getCssColorVar('--info', '#2080f0'),
-        borderRadius: radius,
-      },
-      Menu: {
-        color: 'transparent',
-        colorInverted: 'transparent',
-        itemColorActive: primaryActive,
-        itemColorActiveHover: primaryActive,
-        itemColorActiveCollapsed: primaryActive,
-      },
-    }
-  })
-
-  function toggleTheme() {
-    appStore.toggleTheme()
-  }
 
   /** 解析目标模式切换后「实际呈现的明暗」（auto 取当前系统主题） */
   function resolveEffectiveDark(mode: 'light' | 'dark' | 'auto'): boolean {
     if (mode === THEME_AUTO) {
-      return osTheme.value === 'dark'
+      return prefersDark.value
     }
     return mode === 'dark'
   }
@@ -318,6 +247,10 @@ export function useTheme() {
     })
   }
 
+  function toggleTheme() {
+    appStore.toggleTheme()
+  }
+
   function toggleThemeWithTransition(e?: MouseEvent) {
     animateThemeTransition(isDark.value ? 'light' : 'dark', e)
   }
@@ -332,8 +265,6 @@ export function useTheme() {
 
   return {
     isDark,
-    naiveTheme,
-    themeOverrides,
     toggleTheme,
     toggleThemeWithTransition,
     animateThemeTransition,

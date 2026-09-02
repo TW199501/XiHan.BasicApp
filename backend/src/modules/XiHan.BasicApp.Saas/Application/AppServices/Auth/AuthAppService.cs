@@ -21,10 +21,12 @@ using XiHan.BasicApp.Saas.Domain.Entities;
 using XiHan.BasicApp.Saas.Domain.Enums;
 using XiHan.BasicApp.Saas.Domain.Events;
 using XiHan.BasicApp.Saas.Domain.Messaging;
+using XiHan.BasicApp.Saas.Domain.Permissions;
 using XiHan.BasicApp.Saas.Domain.Repositories;
 using XiHan.Framework.Application.Attributes;
 using XiHan.Framework.Authentication.OAuth;
 using XiHan.Framework.Authentication.Otp;
+using XiHan.Framework.Authorization.Permissions;
 using XiHan.Framework.Bot.Email.Abstractions;
 using XiHan.Framework.Bot.Email.Options;
 using XiHan.Framework.Core.Exceptions;
@@ -33,6 +35,7 @@ using XiHan.Framework.EventBus.Abstractions.Local;
 using XiHan.Framework.Localization.Abstractions;
 using XiHan.Framework.MultiTenancy.Abstractions;
 using XiHan.Framework.Security.Claims;
+using XiHan.Framework.Security.Extensions;
 using XiHan.Framework.Security.Users;
 using XiHan.Framework.Uow.Attributes;
 using XiHan.Framework.Web.Core.Clients;
@@ -43,7 +46,7 @@ namespace XiHan.BasicApp.Saas.Application.AppServices;
 /// 认证应用服务
 /// </summary>
 [DynamicApi(Group = "BasicApp.Saas", GroupName = "系统SaaS服务", Tag = "认证", RouteTemplate = "api/Auth")]
-public sealed class AuthAppService
+public sealed partial class AuthAppService
     : SaasApplicationService, IAuthAppService
 {
     /// <summary>
@@ -71,6 +74,8 @@ public sealed class AuthAppService
 
     private readonly IAuthEmailLoginCodeService _emailLoginCodeService;
 
+    private readonly IImpersonationPolicyService _impersonationPolicyService;
+
     private readonly IProfileVerificationService _profileVerificationService;
 
     private readonly IMessageDeliveryService _messageDeliveryService;
@@ -95,6 +100,8 @@ public sealed class AuthAppService
 
     private readonly IMenuRouteQueryService _menuRouteQueryService;
 
+    private readonly IPermissionChecker _permissionChecker;
+
     private readonly ISaasConfigurationService _saasConfigurationService;
 
     private readonly IUserRepository _userRepository;
@@ -117,6 +124,10 @@ public sealed class AuthAppService
 
     private readonly IWebHostEnvironment _webHostEnvironment;
 
+    private readonly ILoginThrottleService _loginThrottleService;
+
+    private readonly ICaptchaService _captchaService;
+
     private readonly IConfiguration _configuration;
 
     private readonly ILogger<AuthAppService> _logger;
@@ -130,9 +141,11 @@ public sealed class AuthAppService
         IAuthContextQueryService authContextQueryService,
         IAuthorizationSnapshotQueryService authorizationSnapshotQueryService,
         IMenuRouteQueryService menuRouteQueryService,
+        IPermissionChecker permissionChecker,
         ISaasConfigurationService saasConfigurationService,
         IAuthTokenIssueService authTokenIssueService,
         IAuthEmailLoginCodeService emailLoginCodeService,
+        IImpersonationPolicyService impersonationPolicyService,
         IProfileVerificationService profileVerificationService,
         IMessageDeliveryService messageDeliveryService,
         IOtpService otpService,
@@ -153,20 +166,26 @@ public sealed class AuthAppService
         IPasswordHasher passwordHasher,
         ISaasCacheInvalidator cacheInvalidator,
         IWebHostEnvironment webHostEnvironment,
+        ILoginThrottleService loginThrottleService,
+        ICaptchaService captchaService,
         IConfiguration configuration,
         ILogger<AuthAppService> logger)
     {
         _userSessionRepository = userSessionRepository;
         _passwordHasher = passwordHasher;
         _cacheInvalidator = cacheInvalidator;
+        _loginThrottleService = loginThrottleService;
+        _captchaService = captchaService;
         _authenticationDomainService = authenticationDomainService;
         _loginSessionDomainService = loginSessionDomainService;
         _authContextQueryService = authContextQueryService;
         _authorizationSnapshotQueryService = authorizationSnapshotQueryService;
         _menuRouteQueryService = menuRouteQueryService;
+        _permissionChecker = permissionChecker;
         _saasConfigurationService = saasConfigurationService;
         _authTokenIssueService = authTokenIssueService;
         _emailLoginCodeService = emailLoginCodeService;
+        _impersonationPolicyService = impersonationPolicyService;
         _profileVerificationService = profileVerificationService;
         _messageDeliveryService = messageDeliveryService;
         _otpService = otpService;
@@ -234,6 +253,7 @@ public sealed class AuthAppService
     [UnitOfWork(IsDisabled = true)]
     public async Task<string> CreateOAuthBindTicketAsync(CancellationToken cancellationToken = default)
     {
+        _currentUser.EnsureNotImpersonating("绑定第三方账号");
         cancellationToken.ThrowIfCancellationRequested();
         var userId = _currentUser.UserId ?? throw new InvalidOperationException("当前用户未登录。");
         var ticket = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
@@ -257,7 +277,21 @@ public sealed class AuthAppService
     public async Task<LoginConfigDto> GetLoginConfigAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return await _saasConfigurationService.GetLoginConfigAsync(cancellationToken);
+        var config = await _saasConfigurationService.GetLoginConfigAsync(cancellationToken);
+        config.CaptchaEnabled = _captchaService.IsEnabled;
+        return config;
+    }
+
+    /// <summary>
+    /// 获取登录图形验证码（匿名；数字码绘制为 SVG 图片，一次性校验、消费即销毁）
+    /// </summary>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>验证码挑战（标识 + 图片 + 有效秒数）</returns>
+    [AllowAnonymous]
+    public async Task<CaptchaChallengeDto> GetCaptchaAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return await _captchaService.GenerateAsync(cancellationToken);
     }
 
     /// <summary>
@@ -464,13 +498,32 @@ public sealed class AuthAppService
 
         var now = DateTimeOffset.UtcNow;
         var snapshot = await _authorizationSnapshotQueryService.BuildAsync(userId, now, cancellationToken);
-        var menus = await _menuRouteQueryService.GetRoutesAsync(snapshot, cancellationToken);
+
+        // 与鉴权入口同口径：模仿态下禁用清单里的码不下发
+        var deniedPermissionCodes = _currentUser.IsImpersonating() ? ImpersonationDefaults.DeniedPermissionCodes : null;
+        if (deniedPermissionCodes is not null)
+        {
+            snapshot = snapshot with
+            {
+                Permissions = [.. snapshot.Permissions.Where(permission => !deniedPermissionCodes.Contains(permission))]
+            };
+        }
+
+        // 菜单与按钮都要吃这份清单：过滤快照去掉的是权限码，而菜单可见性判的是权限主键，
+        // 只过滤快照裁不掉菜单
+        var menus = await _menuRouteQueryService.GetRoutesAsync(snapshot, deniedPermissionCodes, cancellationToken);
+        // 按钮门控由服务端判定后以按钮码下发，前端不持有权限码
+        var buttons = await _menuRouteQueryService.GetGrantedButtonCodesAsync(
+            snapshot,
+            deniedPermissionCodes,
+            cancellationToken);
 
         return new PermissionInfoDto
         {
             Roles = snapshot.Roles,
             Permissions = snapshot.Permissions,
-            Menus = menus
+            Menus = menus,
+            Buttons = buttons
         };
     }
 
@@ -485,11 +538,22 @@ public sealed class AuthAppService
         var userId = _currentUser.UserId ?? throw new InvalidOperationException("当前用户未登录。");
         using var tenantScope = _currentTenant.Change(_currentUser.TenantId, _currentUser.TenantId?.ToString());
 
-        return await _authContextQueryService.GetCurrentUserInfoAsync(
+        var userInfo = await _authContextQueryService.GetCurrentUserInfoAsync(
             userId,
             _currentUser.TenantId,
             _currentUser.Roles,
             cancellationToken);
+
+        var impersonatorUserId = _currentUser.FindImpersonatorUserId();
+        userInfo.IsImpersonating = impersonatorUserId.HasValue;
+        userInfo.ImpersonatorUserId = impersonatorUserId;
+        userInfo.ImpersonatorUserName = _currentUser.FindImpersonatorUserName();
+        // 能力位由服务端判定后下发，前端不持有权限码；模仿态下该码在检查器里被短路，因而恒为 false
+        userInfo.CanImpersonate = await _permissionChecker.IsGrantedAsync(
+            userId.ToString(),
+            SaasPermissionCodes.Impersonation.Start,
+            cancellationToken);
+        return userInfo;
     }
 
     /// <summary>
@@ -509,6 +573,15 @@ public sealed class AuthAppService
         var password = NormalizeRequired(input.Password, "密码不能为空。", 200, "密码不能超过 200 个字符。");
         var now = DateTimeOffset.UtcNow;
 
+        // 防爆破节流：账号+IP 与纯 IP 双维度固定窗口计数，先于昂贵/带副作用的认证流程执行
+        await _loginThrottleService.EnsureLoginAllowedAsync(login, _clientInfoProvider.GetCurrent().IpAddress, cancellationToken);
+
+        // 图形验证码（默认开启）：先于认证流程校验，消费即销毁——校验失败不可重试同一枚码
+        if (_captchaService.IsEnabled && !await _captchaService.TryConsumeAsync(input.CaptchaId, input.CaptchaCode, cancellationToken))
+        {
+            throw new InvalidOperationException("验证码错误或已过期，请重试。");
+        }
+
         // 先登录后选租户：登录页不再选择租户，统一在平台态完成身份认证
         // （邮箱全平台唯一定位；平台账号可用用户名），登录成功后按成员关系决定落点
         using var platformScope = _currentTenant.Change(null);
@@ -519,6 +592,9 @@ public sealed class AuthAppService
             tenantId: null,
             now,
             cancellationToken);
+
+        // 默认密码登录 → 会话创建即锁定（强制改密）；两条成功路径共用同一判定
+        var initialLockReason = ResolveInitialLockReason(password);
 
         if (authResult.RequiresTwoFactor)
         {
@@ -535,7 +611,8 @@ public sealed class AuthAppService
             // 已提交验证码：按所选方式校验，未通过抛出（记录失败事件）；通过则继续往下签发令牌
             await VerifyTwoFactorCodeOrThrowAsync(twoFactorUser, security, availableMethods, input.TwoFactorMethod, input.TwoFactorCode, tenantId: null, now, login, cancellationToken);
 
-            var twoFactorToken = await IssueLoginTokenWithLandingAsync(twoFactorUser, security, login, input.DeviceId, now, cancellationToken);
+            await NotifyDefaultPasswordLoginIfNeededAsync(twoFactorUser, initialLockReason, cancellationToken);
+            var twoFactorToken = await IssueLoginTokenWithLandingAsync(twoFactorUser, security, login, input.DeviceId, now, initialLockReason, cancellationToken);
             return new LoginResponseDto
             {
                 RequiresTwoFactor = false,
@@ -562,7 +639,8 @@ public sealed class AuthAppService
         }
 
         var user = authResult.User ?? throw new InvalidOperationException("认证用户不存在。");
-        var token = await IssueLoginTokenWithLandingAsync(user, authResult.Security, login, input.DeviceId, now, cancellationToken);
+        await NotifyDefaultPasswordLoginIfNeededAsync(user, initialLockReason, cancellationToken);
+        var token = await IssueLoginTokenWithLandingAsync(user, authResult.Security, login, input.DeviceId, now, initialLockReason, cancellationToken);
 
         return new LoginResponseDto
         {
@@ -655,7 +733,7 @@ public sealed class AuthAppService
         }
 
         var user = authResult.User ?? throw new InvalidOperationException("认证用户不存在。");
-        return await IssueLoginTokenWithLandingAsync(user, authResult.Security, user.UserName, input.DeviceId, now, cancellationToken);
+        return await IssueLoginTokenWithLandingAsync(user, authResult.Security, user.UserName, input.DeviceId, now, initialLockReason: null, cancellationToken);
     }
 
     /// <summary>
@@ -668,6 +746,9 @@ public sealed class AuthAppService
     [UnitOfWork(true)]
     public async Task<LoginTokenDto> SwitchTenantAsync(SwitchTenantRequestDto input, CancellationToken cancellationToken = default)
     {
+        // 模仿会话是一次性短会话，不参与上下文迁移：此处重签的令牌不带 impersonator_* 声明，
+        // 而模仿态的全部判定都读该声明，放行等于一次调用洗掉整套约束
+        _currentUser.EnsureNotImpersonating("切换租户");
         ArgumentNullException.ThrowIfNull(input);
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -948,14 +1029,39 @@ public sealed class AuthAppService
             throw new InvalidOperationException("刷新令牌参数不完整。");
         }
 
-        var identity = _authTokenIssueService.ResolveTokenIdentity(input.AccessToken);
+        var identity = _authTokenIssueService.ResolveTokenIdentity(input.AccessToken)
+            ?? throw new InvalidOperationException("访问令牌无效，请重新登录。");
+
+        // 模仿令牌不参与刷新链：刷新原样复制 claims 且零 DB 访问，允许刷新等于模仿关系永不复审、可无限续期。
+        // 模仿会话到期即结束，管理员需重新发起。
+        if (identity.ImpersonatorUserId is > 0)
+        {
+            await PublishSecurityAuditAsync(
+                identity.TenantId,
+                identity.UserId,
+                identity.UserName,
+                LoginResult.Failed,
+                "模仿会话不支持刷新令牌");
+            throw new InvalidOperationException("模仿会话不支持刷新令牌，请结束模仿后重试。");
+        }
 
         // 会话闸门：被踢下线/登出/过期的会话，不得再靠刷新令牌续命。
         // 这个端点是 [AllowAnonymous]，走不到 XiHanSessionStateMiddleware，必须在此自行把关——
         // 否则刷新链会成为吊销的绕过口（刷新原样复制 claims、零 DB 访问，等于永久有效）。
-        if (!string.IsNullOrWhiteSpace(identity?.SessionId))
+        // 不带会话标识的令牌一律拒刷：放过它等于给闸门留一条“旧令牌”绕行道
+        if (string.IsNullOrWhiteSpace(identity.SessionId))
         {
-            using var refreshTenantScope = _currentTenant.Change(identity.TenantId, identity.TenantId?.ToString());
+            await PublishSecurityAuditAsync(
+                identity.TenantId,
+                identity.UserId,
+                identity.UserName,
+                LoginResult.Failed,
+                "访问令牌缺少会话标识，拒绝刷新令牌");
+            throw new InvalidOperationException("会话已失效，请重新登录。");
+        }
+
+        using (_currentTenant.Change(identity.TenantId, identity.TenantId?.ToString()))
+        {
             var session = await _userSessionRepository.GetByUserSessionIdAsync(identity.SessionId, cancellationToken);
             if (session is null || session.Status != SessionStatus.Active ||
                 (session.ExpirationTime.HasValue && session.ExpirationTime.Value <= DateTimeOffset.UtcNow))
@@ -974,9 +1080,9 @@ public sealed class AuthAppService
 
         // 认证审计：令牌刷新落登录日志（身份从旧令牌解析，仅用于审计归属）
         await PublishSecurityAuditAsync(
-            identity?.TenantId,
-            identity?.UserId,
-            identity?.UserName,
+            identity.TenantId,
+            identity.UserId,
+            identity.UserName,
             LoginResult.TokenRefreshed,
             "访问令牌刷新");
 
@@ -1175,6 +1281,45 @@ public sealed class AuthAppService
     /// <summary>
     /// 邮箱+IP 频率限制：同一邮箱+IP 在窗口期（60s）内只允许一次，防刷验证码/重置链接。超限抛友好异常。
     /// </summary>
+    /// <summary>
+    /// 判定本次登录是否需要初始锁定（默认密码登录 → 强制改密锁）
+    /// </summary>
+    private string? ResolveInitialLockReason(string password)
+    {
+        return DefaultPasswordPolicy.IsDefaultPassword(password, _configuration[DefaultPasswordPolicy.SeedPasswordConfigKey])
+            ? SessionLockReasons.PasswordChangeRequired
+            : null;
+    }
+
+    /// <summary>
+    /// 默认密码登录时发送安全告警（尽力而为：通知失败不阻断登录主流程，会话锁才是硬约束）
+    /// </summary>
+    private async Task NotifyDefaultPasswordLoginIfNeededAsync(SysUser user, string? initialLockReason, CancellationToken cancellationToken)
+    {
+        if (initialLockReason != SessionLockReasons.PasswordChangeRequired)
+        {
+            return;
+        }
+
+        try
+        {
+            await _userNotificationDispatchService.DispatchToUserAsync(
+                user.BasicId,
+                "检测到默认密码登录",
+                "您的账号正在使用系统默认密码，会话已被限制。请立即前往「个人中心 - 账号安全」修改密码，修改后即可正常使用。",
+                NotificationType.Security,
+                businessType: "auth.default-password",
+                businessId: user.BasicId,
+                link: "/workbench/profile",
+                icon: "lucide:shield-alert",
+                cancellationToken: cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "默认密码登录告警通知发送失败 UserId={UserId}", user.BasicId);
+        }
+    }
+
     private async Task EnsureNotRateLimitedAsync(string scope, string email, CancellationToken cancellationToken)
     {
         var ip = _httpContextAccessor.HttpContext?.Connection.RemoteIpAddress?.ToString() ?? "unknown";
@@ -1232,7 +1377,7 @@ public sealed class AuthAppService
 
         // 平台态签发，落点（控制中心 / 唯一租户）由统一逻辑决定，与密码登录一致
         using var platformScope = _currentTenant.Change(null);
-        var token = await IssueLoginTokenWithLandingAsync(user, security: null, user.UserName, deviceId: null, now, cancellationToken);
+        var token = await IssueLoginTokenWithLandingAsync(user, security: null, user.UserName, deviceId: null, now, initialLockReason: null, cancellationToken);
         _logger.LogInformation("第三方登录成功 provider={Provider} userId={UserId} 新用户={IsNewUser}", info.Provider, user.BasicId, isNewUser);
         return ExternalLoginResultDto.LoginSuccess(token);
     }
@@ -1475,11 +1620,12 @@ public sealed class AuthAppService
         string loginName,
         string? deviceId,
         DateTimeOffset now,
-        CancellationToken cancellationToken)
+        string? initialLockReason = null,
+        CancellationToken cancellationToken = default)
     {
         var landing = await ResolveLoginLandingAsync(user, now, cancellationToken);
         using var landingScope = _currentTenant.Change(landing?.TenantId, landing?.TenantName);
-        return await IssueLoginTokenAsync(user, security, landing?.TenantId, loginName, deviceId, now, cancellationToken);
+        return await IssueLoginTokenAsync(user, security, landing?.TenantId, loginName, deviceId, now, initialLockReason, cancellationToken);
     }
 
     /// <summary>
@@ -1561,7 +1707,8 @@ public sealed class AuthAppService
         string userName,
         string? deviceId,
         DateTimeOffset now,
-        CancellationToken cancellationToken)
+        string? initialLockReason = null,
+        CancellationToken cancellationToken = default)
     {
         // 构建授权快照（角色 + 权限）
         var authSnapshot = await _authorizationSnapshotQueryService.BuildAsync(user.BasicId, now, cancellationToken);
@@ -1591,6 +1738,7 @@ public sealed class AuthAppService
             deviceId,
             client,
             now,
+            initialLockReason,
             cancellationToken);
 
         // 同设备重新登录被顶下线的旧会话：闸门缓存立即失效，旧令牌马上被拒（不清则最多再活 60s）

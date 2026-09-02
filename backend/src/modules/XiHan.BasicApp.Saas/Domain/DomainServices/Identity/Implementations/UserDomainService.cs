@@ -1,6 +1,7 @@
 // Copyright (c) 2021-Present XiHanFun and contributors.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
+using Microsoft.Extensions.Logging;
 using XiHan.BasicApp.Saas.Domain.Entities;
 using XiHan.BasicApp.Saas.Domain.Enums;
 using XiHan.BasicApp.Saas.Domain.Events;
@@ -93,6 +94,15 @@ public sealed class UserDomainService
     /// </summary>
     private readonly IPasswordHistoryDomainService _passwordHistoryDomainService;
 
+    private readonly IConstraintRuleEnforcementDomainService _constraintRuleEnforcementDomainService;
+
+    /// <summary>
+    /// 租户配额领域服务
+    /// </summary>
+    private readonly ITenantQuotaDomainService _tenantQuotaDomainService;
+
+    private readonly ILogger<UserDomainService> _logger;
+
     /// <summary>
     /// 构造函数
     /// </summary>
@@ -111,7 +121,10 @@ public sealed class UserDomainService
         IUserDepartmentRepository userDepartmentRepository,
         IUserSessionRepository userSessionRepository,
         ICurrentTenant currentTenant,
-        IPasswordHistoryDomainService passwordHistoryDomainService)
+        IPasswordHistoryDomainService passwordHistoryDomainService,
+        IConstraintRuleEnforcementDomainService constraintRuleEnforcementDomainService,
+        ITenantQuotaDomainService tenantQuotaDomainService,
+        ILogger<UserDomainService> logger)
     {
         _userRepository = userRepository;
         _userSecurityRepository = userSecurityRepository;
@@ -128,6 +141,9 @@ public sealed class UserDomainService
         _userSessionRepository = userSessionRepository;
         _currentTenant = currentTenant;
         _passwordHistoryDomainService = passwordHistoryDomainService;
+        _constraintRuleEnforcementDomainService = constraintRuleEnforcementDomainService;
+        _tenantQuotaDomainService = tenantQuotaDomainService;
+        _logger = logger;
     }
 
     #region 用户核心
@@ -153,6 +169,12 @@ public sealed class UserDomainService
 
         await EnsureEmailUniqueAsync(NormalizeNullable(command.Email), excludeUserId: null, cancellationToken);
         await EnsurePasswordMeetsPolicyAsync(command, cancellationToken);
+
+        // 席位配额放在轻量校验之后：用户名/邮箱冲突这类错误先短路，避免无谓的用量统计查询。
+        // 此处不必排除 PlatformAdmin —— 本流程只能创建普通成员，Owner 与 PlatformAdmin
+        // 在上面的 ValidateCreateCommand → EnsureMemberTypeCanBeCreated 已被拒；
+        // 「平台管理员不占席位」由统计侧的 CountActiveMembersByTenantIdsAsync 保证。
+        await _tenantQuotaDomainService.EnsureSeatQuotaAsync(1, cancellationToken);
 
         var now = DateTimeOffset.UtcNow;
         var user = new SysUser
@@ -441,6 +463,9 @@ public sealed class UserDomainService
         {
             throw new InvalidOperationException("用户角色已绑定。");
         }
+
+        // SSD 执法：以「现有有效角色 + 拟授予角色」为输入评估静态职责分离约束（含继承链展开）。
+        await EnsureNoSoDConflictAsync(command.UserId, command.RoleId, cancellationToken);
 
         var userRole = new SysUserRole
         {
@@ -1125,8 +1150,10 @@ public sealed class UserDomainService
 
         var user = await _userRepository.GetByIdAsync(command.UserId, cancellationToken)
             ?? throw new InvalidOperationException("用户不存在。");
+        // 既取该用户自己的会话，也取由他发起的模仿会话（后者的 UserId 是被模仿者）
         var sessions = await _userSessionRepository.GetListAsync(
-            session => session.UserId == user.BasicId && session.Status != SessionStatus.Revoked,
+            session => (session.UserId == user.BasicId || session.ImpersonatorUserId == user.BasicId)
+                && session.Status != SessionStatus.Revoked,
             cancellationToken);
 
         if (sessions.Count == 0)
@@ -1818,6 +1845,38 @@ public sealed class UserDomainService
     }
 
     // ---- 用户角色辅助 ----
+
+    /// <summary>
+    /// 静态职责分离（SSD）执法：评估「现有有效角色 + 拟授予角色」的约束违规。
+    /// 拒绝/需审批类违规直接阻断授予；警告/记录日志类违规放行并留痕。
+    /// </summary>
+    private async Task EnsureNoSoDConflictAsync(long userId, long roleId, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var existingRoleIds = (await _userRoleRepository.GetValidByUserIdAsync(userId, now, cancellationToken))
+            .Select(userRole => userRole.RoleId);
+
+        var result = await _constraintRuleEnforcementDomainService.EvaluateRoleAssignmentsAsync(
+            existingRoleIds.Append(roleId),
+            ConstraintType.SSD,
+            cancellationToken);
+
+        var blocking = result.FirstBlockingViolation;
+        if (blocking is not null)
+        {
+            throw new InvalidOperationException(
+                $"角色授权违反职责分离约束规则[{blocking.RuleCode}]《{blocking.RuleName}》（冲突角色主键：{string.Join(",", blocking.MatchedTargetIds)}）。");
+        }
+
+        foreach (var violation in result.Violations)
+        {
+            _logger.LogWarning(
+                "角色授权命中职责分离约束规则[{RuleCode}]《{RuleName}》，按 {ViolationAction} 处理放行。",
+                violation.RuleCode,
+                violation.RuleName,
+                violation.ViolationAction);
+        }
+    }
 
     /// <summary>
     /// 获取用户角色绑定，不存在时抛出异常

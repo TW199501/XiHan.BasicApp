@@ -45,6 +45,16 @@ export const chatApi = {
   removeMember(conversationId: string, userId: string) {
     return chatCommandApi.delete<void>('Member', { conversationId, userId })
   },
+  /**
+   * LeaveConversationAsync：Leave 不是会被剥离的前缀 → POST /Chat/LeaveConversation
+   *
+   * 与 removeMember 打的是不同端点：后者挂 chat:manage（移除他人），普通成员在权限过滤器阶段
+   * 就被 403，走不到领域层那条「操作人 == 被移出人」的自助分支。本端点只需 chat:read，
+   * 且刻意不接受 userId —— 退出对象由服务端从登录态解析，杜绝改包退别人的群。
+   */
+  leaveConversation(conversationId: string) {
+    return chatCommandApi.post<void>('LeaveConversation', { conversationId })
+  },
   /** SendMessageAsync → POST /Chat/SendMessage */
   sendMessage(input: ChatMessageSendInput) {
     return chatCommandApi.post<ChatMessageItem, ChatMessageSendInput>('SendMessage', input)
@@ -113,11 +123,11 @@ export const chatApi = {
   members(conversationId: string) {
     return chatQueryApi.get<ChatMemberItem[]>('Members', { conversationId })
   },
-  /** GetUserOptionsAsync：Get 前缀剥离 → GET /ChatQuery/UserOptions；仅需 chat:read 的轻量选人（启用用户+超管隐藏） */
   /** 当前作用域内可参与聊天的部门树（聊天严格租户隔离，不复用读共享的通用部门树） */
   departmentTree() {
     return chatQueryApi.get<DepartmentTreeNodeDto[]>('DepartmentTree')
   },
+  /** GetUserOptionsAsync：Get 前缀剥离 → GET /ChatQuery/UserOptions；仅需 chat:read 的轻量选人（启用用户+超管隐藏） */
   userOptions(keyword: string, limit = 20) {
     const params: DynamicApiParams = { Limit: limit }
     appendDynamicApiParam(params, 'Keyword', keyword)

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { Tone } from '@xihan-ui/kernel'
 import type {
   WorkflowInstanceDetailDto,
   WorkflowInstanceListItemDto,
@@ -8,29 +9,15 @@ import type {
 } from '@/api'
 import type { ListFieldSchema, PageSchema, SchemaActionPayload } from '~/components'
 import type { DiagramNodeStatus } from '~/diagram'
-import {
-  NButton,
-  NDescriptions,
-  NDescriptionsItem,
-  NDivider,
-  NDrawer,
-  NDrawerContent,
-  NForm,
-  NFormItem,
-  NInput,
-  NModal,
-  NSpace,
-  NTable,
-  NTag,
-  useMessage,
-} from 'naive-ui'
-import { computed, h, ref } from 'vue'
+import { XhDescriptionsItem, XhDescriptionsLabel, XhDescriptionsRoot, XhDescriptionsValue, XhDrawerCloseTrigger, XhDrawerContent, XhDrawerRoot, XhDrawerTitle, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFlex, XhFormFieldGroup, XhFormRoot, XhSeparator, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
+import { computed, h, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   createPageRequest,
   querySortsFromSchema,
 } from '@/api'
-import { SchemaPage } from '~/components'
+import { SchemaPage, XEditModal, XInput, XJsonBlock } from '~/components'
+import { toast } from '~/composables'
 import { formatDate } from '~/utils'
 import {
   workflowDefinitionApi,
@@ -42,10 +29,7 @@ import WorkflowGraphView from '../definition/designer/WorkflowGraphView.vue'
 
 defineOptions({ name: 'WorkflowInstancePage' })
 
-type TagType = 'default' | 'error' | 'info' | 'success' | 'warning'
-
 const { t } = useI18n()
-const message = useMessage()
 
 const schemaPageRef = ref<{ reload: () => Promise<void> } | null>(null)
 function reload() {
@@ -61,18 +45,18 @@ const statusOptions = computed(() => [
   { label: t('workflow.instance.status_terminated'), value: WorkflowInstanceStatus.Terminated },
 ])
 
-function statusTag(status: WorkflowInstanceStatus): TagType {
+function statusTag(status: WorkflowInstanceStatus): Tone {
   switch (status) {
     case WorkflowInstanceStatus.Completed:
       return 'success'
     case WorkflowInstanceStatus.Faulted:
-      return 'error'
+      return 'danger'
     case WorkflowInstanceStatus.Running:
       return 'info'
     case WorkflowInstanceStatus.Suspended:
       return 'warning'
     default:
-      return 'default'
+      return 'neutral'
   }
 }
 
@@ -80,18 +64,18 @@ function statusLabel(status: WorkflowInstanceStatus) {
   return statusOptions.value.find(option => option.value === status)?.label ?? status
 }
 
-function nodeStatusTag(status: WorkflowNodeInstanceStatus): TagType {
+function nodeStatusTag(status: WorkflowNodeInstanceStatus): Tone {
   switch (status) {
     case WorkflowNodeInstanceStatus.Completed:
       return 'success'
     case WorkflowNodeInstanceStatus.Faulted:
-      return 'error'
+      return 'danger'
     case WorkflowNodeInstanceStatus.Suspended:
       return 'warning'
     case WorkflowNodeInstanceStatus.Running:
       return 'info'
     default:
-      return 'default'
+      return 'neutral'
   }
 }
 
@@ -118,14 +102,14 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 1,
     render: (row) => {
       const r = row as unknown as WorkflowInstanceListItemDto
-      return h(NTag, { size: 'small', round: true, bordered: false, type: statusTag(r.status) }, () => statusLabel(r.status))
+      return h(XhTagRoot, { variant: 'outline', tone: statusTag(r.status) }, () => h(XhTagLabel, () => statusLabel(r.status)))
     },
   },
   { key: 'definitionCode', title: t('workflow.instance.definition_code'), dataType: 'string', searchable: true, sortable: true, minWidth: 150, order: 2 },
   { key: 'name', title: t('workflow.instance.name'), dataType: 'string', sortable: true, minWidth: 180, order: 10 },
   { key: 'definitionVersion', title: t('workflow.instance.version'), dataType: 'number', width: 80, order: 11, render: (row) => {
     const r = row as unknown as WorkflowInstanceListItemDto
-    return h(NTag, { size: 'small', bordered: false }, () => `v${r.definitionVersion}`)
+    return h(XhTagRoot, { variant: 'outline', tone: 'neutral' }, () => h(XhTagLabel, () => `v${r.definitionVersion}`))
   } },
   { key: 'correlationId', title: t('workflow.instance.correlation_id'), dataType: 'string', searchable: true, minWidth: 140, order: 12 },
   { key: 'starterId', title: t('workflow.instance.starter'), dataType: 'string', minWidth: 110, order: 13 },
@@ -141,7 +125,6 @@ const schema = computed<PageSchema>(() => ({
   pageCode: 'workflow.instance',
   pageName: t('workflow.instance.page_name'),
   rowKey: 'basicId',
-  scrollX: 1700,
   fields: fields.value,
   resource: {
     page: (params) => {
@@ -159,13 +142,13 @@ const schema = computed<PageSchema>(() => ({
     },
   },
   actions: [
-    { key: 'signal', title: t('workflow.instance.action_signal'), scope: 'page', icon: 'lucide:radio', permission: 'workflow:execute' },
+    { key: 'signal', title: t('workflow.instance.action_signal'), scope: 'page', icon: 'lucide:radio', permission: 'workflow_instance.execute' },
     { key: 'view', title: t('workflow.instance.action_view'), scope: 'row', icon: 'lucide:eye' },
-    { key: 'suspend', title: t('workflow.instance.action_suspend'), scope: 'row', type: 'warning', permission: 'workflow:update', visible: row => isRunning(row as unknown as WorkflowInstanceListItemDto) },
-    { key: 'resume', title: t('workflow.instance.action_resume'), scope: 'row', type: 'success', permission: 'workflow:update', visible: row => (row as unknown as WorkflowInstanceListItemDto).status === WorkflowInstanceStatus.Suspended },
-    { key: 'retry', title: t('workflow.instance.action_retry'), scope: 'row', type: 'primary', permission: 'workflow:execute', visible: row => (row as unknown as WorkflowInstanceListItemDto).status === WorkflowInstanceStatus.Faulted },
-    { key: 'cancel', title: t('workflow.instance.action_cancel'), scope: 'row', type: 'warning', permission: 'workflow:execute', visible: row => isRunning(row as unknown as WorkflowInstanceListItemDto) || (row as unknown as WorkflowInstanceListItemDto).status === WorkflowInstanceStatus.Suspended },
-    { key: 'terminate', title: t('workflow.instance.action_terminate'), scope: 'row', type: 'error', permission: 'workflow:execute', visible: row => !['Completed', 'Canceled', 'Faulted', 'Terminated'].includes((row as unknown as WorkflowInstanceListItemDto).status) },
+    { key: 'suspend', title: t('workflow.instance.action_suspend'), scope: 'row', type: 'warning', permission: 'workflow_instance.update', visible: row => isRunning(row as unknown as WorkflowInstanceListItemDto) },
+    { key: 'resume', title: t('workflow.instance.action_resume'), scope: 'row', type: 'success', permission: 'workflow_instance.update', visible: row => (row as unknown as WorkflowInstanceListItemDto).status === WorkflowInstanceStatus.Suspended },
+    { key: 'retry', title: t('workflow.instance.action_retry'), scope: 'row', type: 'primary', permission: 'workflow_instance.execute', visible: row => (row as unknown as WorkflowInstanceListItemDto).status === WorkflowInstanceStatus.Faulted },
+    { key: 'cancel', title: t('workflow.instance.action_cancel'), scope: 'row', type: 'warning', permission: 'workflow_instance.execute', visible: row => isRunning(row as unknown as WorkflowInstanceListItemDto) || (row as unknown as WorkflowInstanceListItemDto).status === WorkflowInstanceStatus.Suspended },
+    { key: 'terminate', title: t('workflow.instance.action_terminate'), scope: 'row', type: 'error', permission: 'workflow_instance.execute', visible: row => !['Completed', 'Canceled', 'Faulted', 'Terminated'].includes((row as unknown as WorkflowInstanceListItemDto).status) },
   ],
 }))
 
@@ -231,7 +214,7 @@ async function handleDetail(row: WorkflowInstanceListItemDto) {
     }
   }
   catch (error) {
-    message.error((error as Error)?.message || t('workflow.instance.err_load_detail'))
+    toast.error((error as Error)?.message || t('workflow.instance.err_load_detail'))
   }
   finally {
     detailLoading.value = false
@@ -239,6 +222,8 @@ async function handleDetail(row: WorkflowInstanceListItemDto) {
 }
 
 // ── 带原因的操作（取消/终止/挂起） ──────────────────────────────
+/** 弹窗底部的确认钮靠这个 id 关联到表单，点它走表单提交 */
+const reasonFormId = useId()
 const reasonVisible = ref(false)
 const reasonLoading = ref(false)
 const reasonAction = ref<'cancel' | 'terminate' | 'suspend'>('cancel')
@@ -275,12 +260,12 @@ async function handleReasonConfirm() {
       await workflowInstanceApi.terminate(input)
     else
       await workflowInstanceApi.suspend(input)
-    message.success(t('workflow.instance.msg_operated'))
+    toast.success(t('workflow.instance.msg_operated'))
     reasonVisible.value = false
     reload()
   }
   catch (error) {
-    message.error((error as Error)?.message || t('workflow.instance.err_operation'))
+    toast.error((error as Error)?.message || t('workflow.instance.err_operation'))
   }
   finally {
     reasonLoading.value = false
@@ -293,22 +278,24 @@ async function handleSimple(action: 'retry' | 'resume', row: WorkflowInstanceLis
       await workflowInstanceApi.retry({ basicId: row.basicId })
     else
       await workflowInstanceApi.resume({ basicId: row.basicId })
-    message.success(t('workflow.instance.msg_operated'))
+    toast.success(t('workflow.instance.msg_operated'))
     reload()
   }
   catch (error) {
-    message.error((error as Error)?.message || t('workflow.instance.err_operation'))
+    toast.error((error as Error)?.message || t('workflow.instance.err_operation'))
   }
 }
 
 // ── 发布信号 ───────────────────────────────────────────────────
+/** 弹窗底部的发布钮靠这个 id 关联到表单，点它走表单提交 */
+const signalFormId = useId()
 const signalVisible = ref(false)
 const signalLoading = ref(false)
 const signalForm = ref({ signalName: '', correlationId: '', payloadJson: '{}' })
 
 async function handleSignal() {
   if (!signalForm.value.signalName.trim()) {
-    message.warning(t('workflow.instance.signal_name_required'))
+    toast.warning(t('workflow.instance.signal_name_required'))
     return
   }
   signalLoading.value = true
@@ -318,12 +305,12 @@ async function handleSignal() {
       correlationId: signalForm.value.correlationId.trim() || undefined,
       payloadJson: signalForm.value.payloadJson.trim() || undefined,
     })
-    message.success(t('workflow.instance.msg_signal', { count: result.resumedCount }))
+    toast.success(t('workflow.instance.msg_signal', { count: result.resumedCount }))
     signalVisible.value = false
     reload()
   }
   catch (error) {
-    message.error((error as Error)?.message || t('workflow.instance.err_operation'))
+    toast.error((error as Error)?.message || t('workflow.instance.err_operation'))
   }
   finally {
     signalLoading.value = false
@@ -359,44 +346,82 @@ function onAction(payload: SchemaActionPayload) {
 <template>
   <SchemaPage ref="schemaPageRef" :schema="schema" @action="onAction">
     <!-- 详情抽屉：实例信息 + 变量 + 执行历史 + 等待点 -->
-    <NDrawer v-model:show="detailVisible" :width="820">
-      <NDrawerContent closable :title="t('workflow.instance.detail_title')">
+    <XhDrawerRoot v-model:open="detailVisible" side="right">
+      <XhDrawerContent style="--xh-drawer-size: 820px">
+        <XhDrawerTitle>{{ t('workflow.instance.detail_title') }}</XhDrawerTitle>
+        <XhDrawerCloseTrigger />
         <div v-if="detailLoading" class="py-8 text-center text-gray-400">
           {{ t('workflow.instance.loading') }}
         </div>
         <template v-else-if="detailData">
-          <NDescriptions :column="2" bordered label-placement="left" size="small">
-            <NDescriptionsItem :label="t('workflow.instance.name')">
-              {{ detailData.name }}
-            </NDescriptionsItem>
-            <NDescriptionsItem :label="t('workflow.instance.status')">
-              <NTag :type="statusTag(detailData.status)" round size="small">
-                {{ statusLabel(detailData.status) }}
-              </NTag>
-            </NDescriptionsItem>
-            <NDescriptionsItem :label="t('workflow.instance.definition_code')">
-              {{ detailData.definitionCode }} (v{{ detailData.definitionVersion }})
-            </NDescriptionsItem>
-            <NDescriptionsItem :label="t('workflow.instance.correlation_id')">
-              {{ detailData.correlationId || '-' }}
-            </NDescriptionsItem>
-            <NDescriptionsItem :label="t('workflow.instance.starter')">
-              {{ detailData.starterId || '-' }}
-            </NDescriptionsItem>
-            <NDescriptionsItem :label="t('workflow.instance.creation_time')">
-              {{ formatDate(detailData.creationTime) }}
-            </NDescriptionsItem>
-            <NDescriptionsItem v-if="detailData.faultMessage" :label="t('workflow.instance.fault_message')" :span="2">
-              <span class="text-red-500">{{ detailData.faultMessage }}</span>
-            </NDescriptionsItem>
-            <NDescriptionsItem v-if="detailData.cancellationReason" :label="t('workflow.instance.cancellation_reason')" :span="2">
-              {{ detailData.cancellationReason }}
-            </NDescriptionsItem>
-          </NDescriptions>
+          <XhDescriptionsRoot :columns="2" bordered placement="left" size="sm">
+            <XhDescriptionsItem>
+              <XhDescriptionsLabel>{{ t('workflow.instance.name') }}</XhDescriptionsLabel>
+              <XhDescriptionsValue>
+                {{ detailData.name }}
+              </XhDescriptionsValue>
+            </XhDescriptionsItem>
+            <XhDescriptionsItem>
+              <XhDescriptionsLabel>{{ t('workflow.instance.status') }}</XhDescriptionsLabel>
+              <XhDescriptionsValue>
+                <XhTagRoot variant="subtle" :tone="statusTag(detailData.status)" size="sm">
+                  <XhTagLabel>
+                    {{ statusLabel(detailData.status) }}
+                  </XhTagLabel>
+                </XhTagRoot>
+              </XhDescriptionsValue>
+            </XhDescriptionsItem>
+            <XhDescriptionsItem>
+              <XhDescriptionsLabel>{{ t('workflow.instance.definition_code') }}</XhDescriptionsLabel>
+              <XhDescriptionsValue>
+                {{ detailData.definitionCode }} (v{{ detailData.definitionVersion }})
+              </XhDescriptionsValue>
+            </XhDescriptionsItem>
+            <XhDescriptionsItem>
+              <XhDescriptionsLabel>{{ t('workflow.instance.correlation_id') }}</XhDescriptionsLabel>
+              <XhDescriptionsValue>
+                {{ detailData.correlationId || '-' }}
+              </XhDescriptionsValue>
+            </XhDescriptionsItem>
+            <XhDescriptionsItem>
+              <XhDescriptionsLabel>{{ t('workflow.instance.starter') }}</XhDescriptionsLabel>
+              <XhDescriptionsValue>
+                {{ detailData.starterId || '-' }}
+              </XhDescriptionsValue>
+            </XhDescriptionsItem>
+            <XhDescriptionsItem>
+              <XhDescriptionsLabel>{{ t('workflow.instance.creation_time') }}</XhDescriptionsLabel>
+              <XhDescriptionsValue>
+                {{ formatDate(detailData.creationTime) }}
+              </XhDescriptionsValue>
+            </XhDescriptionsItem>
+          </XhDescriptionsRoot>
+          <XhDescriptionsRoot
+            v-if="detailData.faultMessage || detailData.cancellationReason"
+            :columns="1"
+            bordered
+            placement="left"
+            size="sm"
+          >
+            <XhDescriptionsItem v-if="detailData.faultMessage">
+              <XhDescriptionsLabel>{{ t('workflow.instance.fault_message') }}</XhDescriptionsLabel>
+              <XhDescriptionsValue>
+                <span class="text-red-500">{{ detailData.faultMessage }}</span>
+              </XhDescriptionsValue>
+            </XhDescriptionsItem>
+            <XhDescriptionsItem v-if="detailData.cancellationReason">
+              <XhDescriptionsLabel>{{ t('workflow.instance.cancellation_reason') }}</XhDescriptionsLabel>
+              <XhDescriptionsValue>
+                {{ detailData.cancellationReason }}
+              </XhDescriptionsValue>
+            </XhDescriptionsItem>
+          </XhDescriptionsRoot>
 
           <!-- 运行轨迹（只读图 + 节点状态着色） -->
           <template v-if="detailDefinitionJson">
-            <NDivider>{{ t('workflow.instance.graph_label') }}</NDivider>
+            <div class="flex items-center gap-3 my-3">
+              <XhSeparator class="flex-1" /><span class="text-xs text-[hsl(var(--muted-foreground))]">{{ t('workflow.instance.graph_label') }}</span><XhSeparator class="flex-1" />
+            </div>
             <div class="h-[380px] overflow-hidden rounded border border-gray-200 dark:border-gray-700">
               <WorkflowGraphView :definition-json="detailDefinitionJson" :statuses="nodeStatuses" />
             </div>
@@ -408,11 +433,15 @@ function onAction(payload: SchemaActionPayload) {
             </div>
           </template>
 
-          <NDivider>{{ t('workflow.instance.variables_label') }}</NDivider>
-          <pre class="m-0 max-h-48 overflow-auto whitespace-pre-wrap break-all rounded bg-gray-50 p-3 text-xs dark:bg-gray-800">{{ detailData.variablesJson }}</pre>
+          <div class="flex items-center gap-3 my-3">
+            <XhSeparator class="flex-1" /><span class="text-xs text-[hsl(var(--muted-foreground))]">{{ t('workflow.instance.variables_label') }}</span><XhSeparator class="flex-1" />
+          </div>
+          <XJsonBlock :raw="detailData.variablesJson" :default-expanded-depth="2" max-height="12rem" />
 
-          <NDivider>{{ t('workflow.instance.history_label') }}</NDivider>
-          <NTable size="small" :bordered="false" :single-line="false">
+          <div class="flex items-center gap-3 my-3">
+            <XhSeparator class="flex-1" /><span class="text-xs text-[hsl(var(--muted-foreground))]">{{ t('workflow.instance.history_label') }}</span><XhSeparator class="flex-1" />
+          </div>
+          <table class="xh-plain-table">
             <thead>
               <tr>
                 <th>{{ t('workflow.instance.node') }}</th>
@@ -428,24 +457,30 @@ function onAction(payload: SchemaActionPayload) {
                 <td>{{ node.name }} ({{ node.nodeId }})</td>
                 <td>{{ node.activityType }}</td>
                 <td>
-                  <NTag :type="nodeStatusTag(node.status)" round size="small">
-                    {{ node.status }}
-                  </NTag>
+                  <XhTagRoot variant="subtle" :tone="nodeStatusTag(node.status)" size="sm">
+                    <XhTagLabel>
+                      {{ node.status }}
+                    </XhTagLabel>
+                  </XhTagRoot>
                 </td>
                 <td>{{ node.tryCount }}</td>
                 <td>{{ formatDate(node.startTime) }}</td>
                 <td>{{ node.endTime ? formatDate(node.endTime) : '-' }}</td>
               </tr>
             </tbody>
-          </NTable>
+          </table>
 
           <template v-if="detailData.pendingBookmarks.length > 0">
-            <NDivider>{{ t('workflow.instance.bookmarks_label') }}</NDivider>
-            <NSpace vertical :size="4">
+            <div class="flex items-center gap-3 my-3">
+              <XhSeparator class="flex-1" /><span class="text-xs text-[hsl(var(--muted-foreground))]">{{ t('workflow.instance.bookmarks_label') }}</span><XhSeparator class="flex-1" />
+            </div>
+            <XhFlex direction="column" gap="xs">
               <div v-for="bookmark in detailData.pendingBookmarks" :key="bookmark.id" class="text-xs text-gray-500">
-                <NTag size="small" bordered>
-                  {{ bookmark.kind }}
-                </NTag>
+                <XhTagRoot variant="subtle" size="sm">
+                  <XhTagLabel>
+                    {{ bookmark.kind }}
+                  </XhTagLabel>
+                </XhTagRoot>
                 {{ t('workflow.instance.bookmark_node') }}: {{ bookmark.nodeId }}
                 <template v-if="bookmark.key">
                   / {{ t('workflow.instance.bookmark_key') }}: {{ bookmark.key }}
@@ -454,43 +489,87 @@ function onAction(payload: SchemaActionPayload) {
                   / {{ t('workflow.instance.bookmark_due') }}: {{ formatDate(bookmark.dueTime) }}
                 </template>
               </div>
-            </NSpace>
+            </XhFlex>
           </template>
         </template>
-      </NDrawerContent>
-    </NDrawer>
+      </XhDrawerContent>
+    </XhDrawerRoot>
 
     <!-- 带原因操作 -->
-    <NModal v-model:show="reasonVisible" preset="card" :title="reasonTitle" style="width: 480px">
-      <NSpace vertical>
-        <NInput
-          v-model:value="reasonText"
-          type="textarea"
-          :autosize="{ minRows: 2, maxRows: 5 }"
-          :placeholder="t('workflow.instance.reason_placeholder')"
-        />
-        <NButton block :type="reasonAction === 'terminate' ? 'error' : 'warning'" :loading="reasonLoading" @click="handleReasonConfirm">
-          {{ t('workflow.instance.btn_confirm') }}
-        </NButton>
-      </NSpace>
-    </NModal>
+    <XEditModal
+      v-model:show="reasonVisible"
+      :title="reasonTitle"
+      :width="480"
+      :loading="reasonLoading"
+      :save-text="t('workflow.instance.btn_confirm')"
+      :save-tone="reasonAction === 'terminate' ? 'danger' : 'warning'"
+      :form-id="reasonFormId"
+    >
+      <!-- 必填由提交处理器判定；这里不配 rules，错误文本槽位留着备用 -->
+      <XhFormRoot
+        :id="reasonFormId"
+        class="xh-edit-form-grid"
+        @submit="handleReasonConfirm"
+      >
+        <XhFormFieldGroup value="reason" class="xh-span-2">
+          <XhFieldRoot>
+            <XhFieldLabel>{{ t('workflow.instance.reason') }}</XhFieldLabel>
+            <XhFieldControl>
+              <XInput
+                v-model:value="reasonText"
+                type="textarea"
+                :autosize="{ minRows: 2, maxRows: 5 }"
+                :placeholder="t('workflow.instance.reason_placeholder')"
+              />
+            </XhFieldControl>
+            <XhFieldErrorText />
+          </XhFieldRoot>
+        </XhFormFieldGroup>
+      </XhFormRoot>
+    </XEditModal>
 
     <!-- 发布信号 -->
-    <NModal v-model:show="signalVisible" preset="card" :title="t('workflow.instance.signal_title')" style="width: 520px">
-      <NForm label-placement="left" :label-width="100">
-        <NFormItem :label="t('workflow.instance.signal_name')">
-          <NInput v-model:value="signalForm.signalName" :placeholder="t('workflow.instance.signal_name_placeholder')" />
-        </NFormItem>
-        <NFormItem :label="t('workflow.instance.correlation_id')">
-          <NInput v-model:value="signalForm.correlationId" :placeholder="t('workflow.instance.signal_correlation_placeholder')" />
-        </NFormItem>
-        <NFormItem :label="t('workflow.instance.signal_payload')">
-          <NInput v-model:value="signalForm.payloadJson" type="textarea" :autosize="{ minRows: 3, maxRows: 8 }" class="font-mono" />
-        </NFormItem>
-      </NForm>
-      <NButton block type="primary" :loading="signalLoading" @click="handleSignal">
-        {{ t('workflow.instance.btn_signal') }}
-      </NButton>
-    </NModal>
+    <XEditModal
+      v-model:show="signalVisible"
+      :title="t('workflow.instance.signal_title')"
+      :loading="signalLoading"
+      :save-text="t('workflow.instance.btn_signal')"
+      :form-id="signalFormId"
+    >
+      <!-- 必填由提交处理器判定；这里不配 rules，错误文本槽位留着备用 -->
+      <XhFormRoot
+        :id="signalFormId"
+        class="xh-edit-form-grid"
+        @submit="handleSignal"
+      >
+        <XhFormFieldGroup value="signalName">
+          <XhFieldRoot>
+            <XhFieldLabel>{{ t('workflow.instance.signal_name') }}</XhFieldLabel>
+            <XhFieldControl>
+              <XInput v-model:value="signalForm.signalName" :placeholder="t('workflow.instance.signal_name_placeholder')" />
+            </XhFieldControl>
+            <XhFieldErrorText />
+          </XhFieldRoot>
+        </XhFormFieldGroup>
+        <XhFormFieldGroup value="correlationId">
+          <XhFieldRoot>
+            <XhFieldLabel>{{ t('workflow.instance.correlation_id') }}</XhFieldLabel>
+            <XhFieldControl>
+              <XInput v-model:value="signalForm.correlationId" :placeholder="t('workflow.instance.signal_correlation_placeholder')" />
+            </XhFieldControl>
+            <XhFieldErrorText />
+          </XhFieldRoot>
+        </XhFormFieldGroup>
+        <XhFormFieldGroup value="payloadJson" class="xh-span-2">
+          <XhFieldRoot>
+            <XhFieldLabel>{{ t('workflow.instance.signal_payload') }}</XhFieldLabel>
+            <XhFieldControl>
+              <XInput v-model:value="signalForm.payloadJson" type="textarea" :autosize="{ minRows: 3, maxRows: 8 }" class="font-mono" />
+            </XhFieldControl>
+            <XhFieldErrorText />
+          </XhFieldRoot>
+        </XhFormFieldGroup>
+      </XhFormRoot>
+    </XEditModal>
   </SchemaPage>
 </template>

@@ -1,26 +1,28 @@
 import type {
   EmailLoginParams,
+  ImpersonationCandidate,
   LoginParams,
   LoginResponse,
   LoginToken,
   OAuthProviderItem,
   PermissionInfo,
   PhoneLoginParams,
+  StartImpersonationParams,
   UserInfo,
 } from '~/types'
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { clearLockState } from '~/composables/session-lock'
+import { clearLockState, isLockedState } from '~/composables/session-lock'
 import { islandStart } from '~/composables/useDynamicIsland'
 import { destroyAllSignalRConnections } from '~/composables/useSignalR'
-import { HOME_PATH, LOGIN_PATH } from '~/constants'
+import { HOME_PATH, LOGIN_PATH, TABS_LIST_KEY } from '~/constants'
 import { i18n } from '~/locales'
 import { mapMenuToRoutes } from '~/router/dynamic'
 import { collectRouteNames, CORE_ROUTE_NAMES } from '~/router/routes/core'
 import { useAccessStore } from './access'
 import { useAppStore } from './app'
 import { useAppContext } from './app-context'
-import { hydratePreferencesFromBackend, resetPreferenceBackendSync } from './helpers'
+import { hydratePreferencesFromBackend, markPreferenceIdentitySwitched, resetPreferenceBackendSync } from './helpers'
 import { useTabbarStore } from './tabbar'
 import { useUserStore } from './user'
 
@@ -31,6 +33,7 @@ export const useAuthStore = defineStore('auth', () => {
   const tabbarStore = useTabbarStore()
 
   const loginLoading = ref(false)
+  const impersonationLoading = ref(false)
 
   async function afterLogin(result: LoginToken, redirect?: string) {
     const loginTask = islandStart('auth:login', i18n.global.t('island.auth.logging_in'))
@@ -49,6 +52,15 @@ export const useAuthStore = defineStore('auth', () => {
       ])
     }
     catch (error) {
+      // 会话被服务端锁定（默认密码登录 → 强制改密）：登录本身已成功、令牌有效。
+      // 不能清令牌跳登录页——锁定遮罩（LockScreen 强制改密模式）要接管 UI；
+      // 用户信息/权限接口解锁前都会被 423，直接进入应用壳层，解锁后守卫会重新拉取。
+      if (isLockedState()) {
+        await router.replace(accessStore.homePath || HOME_PATH)
+        loginTask.success(i18n.global.t('island.auth.login_success'))
+        return
+      }
+
       accessStore.$reset()
       userStore.$reset()
       loginTask.error(i18n.global.t('island.auth.login_failed'))
@@ -65,6 +77,7 @@ export const useAuthStore = defineStore('auth', () => {
       logo: userInfo.appLogo,
     })
     accessStore.setAccessCodes(permissionInfo.permissions)
+    accessStore.setAccessButtons(permissionInfo.buttons ?? [])
     accessStore.setAccessRoutes(permissionInfo.menus)
 
     for (const route of mapMenuToRoutes(permissionInfo.menus)) {
@@ -165,6 +178,62 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  /**
+   * 身份切换后重建整个应用壳层：换令牌 → 清掉上一身份留在本地的标签页/偏好回写通道 → 整页重载。
+   * 走整页重载而不是热切换，是因为路由表、权限码、菜单、SignalR 连接全都绑在旧身份上。
+   */
+  function applySwitchedIdentity(token: LoginToken) {
+    accessStore.setAccessToken(token.accessToken)
+    accessStore.setRefreshToken(token.refreshToken)
+    userStore.$reset()
+    tabbarStore.closeAll()
+    sessionStorage.removeItem(TABS_LIST_KEY)
+    localStorage.removeItem(TABS_LIST_KEY)
+    resetPreferenceBackendSync()
+    // 新身份的偏好由后端水合，本地这份属于上一身份：标记后让水合阶段不拿它当种子回写进新账号
+    markPreferenceIdentitySwitched()
+    clearLockState()
+    void destroyAllSignalRConnections()
+    window.location.href = import.meta.env.VITE_ROUTER_HISTORY === 'history' ? '/' : './'
+  }
+
+  /** 可模仿的候选用户 */
+  function impersonationCandidates(keyword?: string): Promise<ImpersonationCandidate[]> {
+    return useAppContext().apis.impersonationApi.candidates(keyword)
+  }
+
+  /** 发起模仿登录：以目标用户身份重建会话 */
+  async function startImpersonation(input: StartImpersonationParams) {
+    if (impersonationLoading.value) {
+      return
+    }
+    impersonationLoading.value = true
+    try {
+      const token = await useAppContext().apis.impersonationApi.start(input)
+      applySwitchedIdentity(token)
+    }
+    catch (error) {
+      impersonationLoading.value = false
+      throw error
+    }
+  }
+
+  /** 结束模仿登录：回到发起人身份 */
+  async function stopImpersonation() {
+    if (impersonationLoading.value) {
+      return
+    }
+    impersonationLoading.value = true
+    try {
+      const token = await useAppContext().apis.impersonationApi.stop()
+      applySwitchedIdentity(token)
+    }
+    catch (error) {
+      impersonationLoading.value = false
+      throw error
+    }
+  }
+
   async function logout() {
     const ctx = useAppContext()
     const router = await ctx.getRouter()
@@ -237,6 +306,10 @@ export const useAuthStore = defineStore('auth', () => {
 
   return {
     loginLoading,
+    impersonationLoading,
+    impersonationCandidates,
+    startImpersonation,
+    stopImpersonation,
     login,
     loginByPhoneCode,
     loginByEmailCode,

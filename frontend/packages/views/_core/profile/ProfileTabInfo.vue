@@ -1,22 +1,14 @@
 <script lang="ts" setup>
 import type { UserProfile } from '~/types'
-import {
-  NButton,
-  NCard,
-  NIcon,
-  NInput,
-  NSelect,
-  NSpace,
-  NTag,
-  useDialog,
-  useMessage,
-} from 'naive-ui'
-import { computed, h, ref, watch } from 'vue'
+import { XhButton, XhCardBody, XhCardHeader, XhCardRoot, XhCardTitle, XhFlex, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { XUserAvatar } from '~/components'
+import { XDatePicker, XInput, XSelect, XUserAvatar } from '~/components'
+import { dialog, prompt, toast } from '~/composables'
 import { islandStart } from '~/composables/useDynamicIsland'
 import { Icon } from '~/iconify'
 import { useAppContext, useUserStore } from '~/stores'
+import CodeCountdown from '../shared/CodeCountdown.vue'
 
 const props = defineProps<{ profile: UserProfile | null }>()
 const emit = defineEmits<{ saved: [] }>()
@@ -24,14 +16,10 @@ const emit = defineEmits<{ saved: [] }>()
 const { t } = useI18n()
 const userStore = useUserStore()
 const { apis } = useAppContext()
-const message = useMessage()
-const dialog = useDialog()
 
 // ==================== 用户名修改 ====================
 
 const usernameChangeLoading = ref(false)
-const newUserNameInput = ref('')
-const newUserNamePassword = ref('')
 
 const usernameHint = computed(() => {
   if (!props.profile)
@@ -48,51 +36,42 @@ const usernameHint = computed(() => {
 })
 
 function handleChangeUserName() {
-  newUserNameInput.value = props.profile?.userName ?? ''
-  newUserNamePassword.value = ''
-  dialog.create({
+  // 弹窗里问两个值：新用户名与当前密码。校验不过返回 false，弹窗留在原地让用户改
+  void prompt({
     title: t('component.profile.info.change_username_title'),
-    content: () => h('div', { style: 'display:flex;flex-direction:column;gap:12px' }, [
-      h('p', { style: 'margin:0;color:var(--text-secondary);font-size:13px' }, t('component.profile.info.change_username_hint')),
-      h(NInput, {
-        'value': newUserNameInput.value,
-        'placeholder': t('component.profile.info.new_username_placeholder'),
-        'onUpdate:value': (v: string) => {
-          newUserNameInput.value = v
-        },
-      }),
-      h(NInput, {
-        'type': 'password',
-        'value': newUserNamePassword.value,
-        'placeholder': t('component.profile.info.current_password_placeholder'),
-        'showPasswordOn': 'click',
-        'onUpdate:value': (v: string) => {
-          newUserNamePassword.value = v
-        },
-      }),
-    ]),
-    positiveText: t('component.profile.info.confirm_change'),
-    negativeText: t('common.actions.cancel'),
-    onPositiveClick: async () => {
-      if (!newUserNameInput.value.trim()) {
-        message.warning(t('component.profile.info.msg_username_required'))
+    description: t('component.profile.info.change_username_hint'),
+    okText: t('component.profile.info.confirm_change'),
+    cancelText: t('common.actions.cancel'),
+    fields: [
+      {
+        key: 'userName',
+        value: props.profile?.userName ?? '',
+        placeholder: t('component.profile.info.new_username_placeholder'),
+      },
+      {
+        key: 'password',
+        type: 'password',
+        placeholder: t('component.profile.info.current_password_placeholder'),
+      },
+    ],
+    onOk: async (values) => {
+      const userName = values.userName?.trim() ?? ''
+      if (!userName) {
+        toast.warning(t('component.profile.info.msg_username_required'))
         return false
       }
-      if (!newUserNamePassword.value) {
-        message.warning(t('component.profile.info.msg_password_required'))
+      if (!values.password) {
+        toast.warning(t('component.profile.info.msg_password_required'))
         return false
       }
       usernameChangeLoading.value = true
       try {
-        await apis.changeUserNameApi({
-          userName: newUserNameInput.value.trim(),
-          password: newUserNamePassword.value,
-        })
-        message.success(t('component.profile.info.msg_username_updated'))
+        await apis.changeUserNameApi({ userName, password: values.password })
+        toast.success(t('component.profile.info.msg_username_updated'))
         emit('saved')
       }
       catch (e: unknown) {
-        message.error((e as Error)?.message || t('component.profile.info.err_username_update_failed'))
+        toast.error((e as Error)?.message || t('component.profile.info.err_username_update_failed'))
         return false
       }
       finally {
@@ -164,11 +143,11 @@ async function handleAvatarChange(event: Event) {
     return
   }
   if (!AVATAR_ACCEPT.includes(file.type)) {
-    message.warning(t('component.profile.info.warn_avatar_format'))
+    toast.warning(t('component.profile.info.warn_avatar_format'))
     return
   }
   if (file.size > AVATAR_MAX_SIZE) {
-    message.warning(t('component.profile.info.warn_avatar_size', { size: AVATAR_MAX_SIZE / 1024 / 1024 }))
+    toast.warning(t('component.profile.info.warn_avatar_size', { size: AVATAR_MAX_SIZE / 1024 / 1024 }))
     return
   }
   avatarUploading.value = true
@@ -190,22 +169,24 @@ async function handleAvatarChange(event: Event) {
 
 function handleAvatarRemove() {
   if (!currentAvatar.value) {
-    message.warning(t('component.profile.info.warn_no_avatar_to_remove'))
+    toast.warning(t('component.profile.info.warn_no_avatar_to_remove'))
     return
   }
-  dialog.warning({
+  void dialog.confirm({
+    badge: 'warning',
+    tone: 'danger',
     title: t('component.profile.info.remove_avatar_title'),
     content: t('component.profile.info.remove_avatar_content'),
-    positiveText: t('component.profile.info.confirm_remove'),
-    negativeText: t('common.actions.cancel'),
-    onPositiveClick: async () => {
+    okText: t('component.profile.info.confirm_remove'),
+    cancelText: t('common.actions.cancel'),
+    onOk: async () => {
       avatarRemoving.value = true
       try {
         await persistAvatar('')
-        message.success(t('component.profile.info.msg_avatar_removed'))
+        toast.success(t('component.profile.info.msg_avatar_removed'))
       }
       catch (e: unknown) {
-        message.error((e as Error)?.message || t('component.profile.info.err_avatar_remove_failed'))
+        toast.error((e as Error)?.message || t('component.profile.info.err_avatar_remove_failed'))
         return false
       }
       finally {
@@ -238,7 +219,7 @@ async function saveProfile() {
       ...profileForm.value,
       birthday: profileForm.value.birthday ? new Date(profileForm.value.birthday).toISOString() : undefined,
     })
-    message.success(t('component.profile.info.msg_profile_updated'))
+    toast.success(t('component.profile.info.msg_profile_updated'))
     if (userStore.userInfo) {
       userStore.setUserInfo({
         ...userStore.userInfo,
@@ -248,7 +229,7 @@ async function saveProfile() {
     emit('saved')
   }
   catch (e: unknown) {
-    message.error((e as Error)?.message || t('component.profile.info.err_profile_save_failed'))
+    toast.error((e as Error)?.message || t('component.profile.info.err_profile_save_failed'))
   }
   finally {
     profileSaving.value = false
@@ -263,8 +244,8 @@ type ContactTarget = 'email' | 'phone'
 const verifyLoading = ref(false)
 const verifyTarget = ref<ContactTarget | null>(null)
 const verifyCode = ref('')
-const verifyCountdown = ref(0)
-let verifyTimer: ReturnType<typeof setInterval> | null = null
+/** 重发倒计时这一轮的时长，大于 0 即正在倒计时 */
+const verifyResendSeconds = ref(0)
 
 // 换绑新地址
 const changeTarget = ref<ContactTarget | null>(null)
@@ -273,24 +254,8 @@ const changePassword = ref('')
 const changeLoading = ref(false)
 const changeCodeSent = ref(false)
 const changeCode = ref('')
-const changeCountdown = ref(0)
-let changeTimer: ReturnType<typeof setInterval> | null = null
-
-function startTimer(
-  countdownRef: { value: number },
-  timerSetter: (t: ReturnType<typeof setInterval> | null) => void,
-  seconds: number,
-) {
-  countdownRef.value = seconds
-  const t = setInterval(() => {
-    countdownRef.value--
-    if (countdownRef.value <= 0) {
-      clearInterval(t)
-      timerSetter(null)
-    }
-  }, 1000)
-  timerSetter(t)
-}
+/** 重发倒计时这一轮的时长，大于 0 即正在倒计时 */
+const changeResendSeconds = ref(0)
 
 // ==================== 验证当前邮箱/手机 ====================
 
@@ -300,17 +265,16 @@ async function sendVerifyCode(type: ContactTarget) {
     const res = type === 'email'
       ? await apis.sendEmailVerifyCodeApi()
       : await apis.sendPhoneVerifyCodeApi()
-    message.success(type === 'email' ? t('component.profile.info.msg_code_sent_email') : t('component.profile.info.msg_code_sent_phone'))
+    toast.success(type === 'email' ? t('component.profile.info.msg_code_sent_email') : t('component.profile.info.msg_code_sent_phone'))
     verifyTarget.value = type
     verifyCode.value = ''
-    startTimer(
-      verifyCountdown,
-      t => (verifyTimer = t),
-      Math.min(res.expiresInSeconds, 60),
-    )
+    // 先归零再赋值：这个入口在计时期间仍可点，值不变的话倒计时不会重新起跑
+    verifyResendSeconds.value = 0
+    await nextTick()
+    verifyResendSeconds.value = Math.min(res.expiresInSeconds, 60)
   }
   catch (e: unknown) {
-    message.error((e as Error)?.message || t('component.profile.info.err_code_send_failed'))
+    toast.error((e as Error)?.message || t('component.profile.info.err_code_send_failed'))
   }
   finally {
     verifyLoading.value = false
@@ -319,7 +283,7 @@ async function sendVerifyCode(type: ContactTarget) {
 
 async function confirmVerify() {
   if (verifyCode.value.length < 6) {
-    message.warning(t('component.profile.info.warn_code_incomplete'))
+    toast.warning(t('component.profile.info.warn_code_incomplete'))
     return
   }
   verifyLoading.value = true
@@ -328,12 +292,12 @@ async function confirmVerify() {
       await apis.verifyEmailApi(verifyCode.value)
     else
       await apis.verifyPhoneApi(verifyCode.value)
-    message.success(t('component.profile.info.msg_verify_success'))
+    toast.success(t('component.profile.info.msg_verify_success'))
     cancelVerify()
     emit('saved')
   }
   catch (e: unknown) {
-    message.error((e as Error)?.message || t('component.profile.info.err_verify_failed'))
+    toast.error((e as Error)?.message || t('component.profile.info.err_verify_failed'))
   }
   finally {
     verifyLoading.value = false
@@ -343,11 +307,7 @@ async function confirmVerify() {
 function cancelVerify() {
   verifyTarget.value = null
   verifyCode.value = ''
-  verifyCountdown.value = 0
-  if (verifyTimer) {
-    clearInterval(verifyTimer)
-    verifyTimer = null
-  }
+  verifyResendSeconds.value = 0
 }
 
 // ==================== 换绑邮箱/手机 ====================
@@ -358,20 +318,16 @@ function openChangeDialog(type: ContactTarget) {
   changePassword.value = ''
   changeCodeSent.value = false
   changeCode.value = ''
-  changeCountdown.value = 0
-  if (changeTimer) {
-    clearInterval(changeTimer)
-    changeTimer = null
-  }
+  changeResendSeconds.value = 0
 }
 
 async function sendChangeCode() {
   if (!changeNewValue.value.trim()) {
-    message.warning(changeTarget.value === 'email' ? t('component.profile.info.warn_new_email_required') : t('component.profile.info.warn_new_phone_required'))
+    toast.warning(changeTarget.value === 'email' ? t('component.profile.info.warn_new_email_required') : t('component.profile.info.warn_new_phone_required'))
     return
   }
   if (!changePassword.value) {
-    message.warning(t('component.profile.info.warn_password_required'))
+    toast.warning(t('component.profile.info.warn_password_required'))
     return
   }
   changeLoading.value = true
@@ -385,17 +341,13 @@ async function sendChangeCode() {
           newPhone: changeNewValue.value.trim(),
           password: changePassword.value,
         })
-    message.success(t('component.profile.info.msg_code_sent'))
+    toast.success(t('component.profile.info.msg_code_sent'))
     changeCodeSent.value = true
     changeCode.value = ''
-    startTimer(
-      changeCountdown,
-      t => (changeTimer = t),
-      Math.min(res.expiresInSeconds, 60),
-    )
+    changeResendSeconds.value = Math.min(res.expiresInSeconds, 60)
   }
   catch (e: unknown) {
-    message.error((e as Error)?.message || t('component.profile.info.err_code_send_failed'))
+    toast.error((e as Error)?.message || t('component.profile.info.err_code_send_failed'))
   }
   finally {
     changeLoading.value = false
@@ -404,7 +356,7 @@ async function sendChangeCode() {
 
 async function confirmChange() {
   if (changeCode.value.length < 6) {
-    message.warning(t('component.profile.info.warn_code_incomplete'))
+    toast.warning(t('component.profile.info.warn_code_incomplete'))
     return
   }
   changeLoading.value = true
@@ -413,12 +365,12 @@ async function confirmChange() {
       await apis.confirmChangeEmailApi(changeCode.value)
     else
       await apis.confirmChangePhoneApi(changeCode.value)
-    message.success(changeTarget.value === 'email' ? t('component.profile.info.msg_email_updated') : t('component.profile.info.msg_phone_updated'))
+    toast.success(changeTarget.value === 'email' ? t('component.profile.info.msg_email_updated') : t('component.profile.info.msg_phone_updated'))
     cancelChange()
     emit('saved')
   }
   catch (e: unknown) {
-    message.error((e as Error)?.message || t('component.profile.info.err_operation_failed'))
+    toast.error((e as Error)?.message || t('component.profile.info.err_operation_failed'))
   }
   finally {
     changeLoading.value = false
@@ -431,11 +383,7 @@ function cancelChange() {
   changePassword.value = ''
   changeCodeSent.value = false
   changeCode.value = ''
-  changeCountdown.value = 0
-  if (changeTimer) {
-    clearInterval(changeTimer)
-    changeTimer = null
-  }
+  changeResendSeconds.value = 0
 }
 </script>
 
@@ -479,23 +427,21 @@ function cancelChange() {
             @change="handleAvatarChange"
           >
           <div class="pf-setting-row__control">
-            <NButton
-              size="small"
-              type="primary"
+            <XhButton
+              tone="brand"
               :loading="avatarUploading"
               @click="triggerAvatarUpload"
             >
               {{ t('component.profile.info.btn_upload') }}
-            </NButton>
-            <NButton
-              size="small"
-              quaternary
+            </XhButton>
+            <XhButton
+              variant="ghost"
               :loading="avatarRemoving"
               :disabled="!currentAvatar"
               @click="handleAvatarRemove"
             >
               {{ t('component.profile.info.btn_remove') }}
-            </NButton>
+            </XhButton>
           </div>
         </div>
 
@@ -511,28 +457,31 @@ function cancelChange() {
                 <div class="pf-setting-row__main">
                   <div class="pf-setting-row__label">
                     {{ t('component.profile.info.field_username') }}
-                    <NTag v-if="profile?.isSystemAccount" type="info" size="tiny" :bordered="false">
-                      {{ t('component.profile.info.tag_system_account') }}
-                    </NTag>
-                    <NTag v-else-if="!profile?.canChangeUserName && usernameHint" type="warning" size="tiny" :bordered="false">
-                      {{ usernameHint }}
-                    </NTag>
+                    <XhTagRoot v-if="profile?.isSystemAccount" variant="subtle" tone="info" size="sm">
+                      <XhTagLabel>
+                        {{ t('component.profile.info.tag_system_account') }}
+                      </XhTagLabel>
+                    </XhTagRoot>
+                    <XhTagRoot v-else-if="!profile?.canChangeUserName && usernameHint" variant="subtle" tone="warning" size="sm">
+                      <XhTagLabel>
+                        {{ usernameHint }}
+                      </XhTagLabel>
+                    </XhTagRoot>
                   </div>
                   <div class="pf-setting-row__desc">
                     @{{ profile?.userName || '---' }}
                   </div>
                 </div>
                 <div class="pf-setting-row__control">
-                  <NButton
+                  <XhButton
                     v-if="profile?.canChangeUserName"
-                    size="small"
-                    ghost
-                    type="primary"
+                    variant="outline"
+                    tone="brand"
                     :loading="usernameChangeLoading"
                     @click="handleChangeUserName"
                   >
                     {{ t('component.profile.info.btn_modify') }}
-                  </NButton>
+                  </XhButton>
                 </div>
               </div>
 
@@ -547,7 +496,7 @@ function cancelChange() {
                   </div>
                 </div>
                 <div class="pf-setting-row__control">
-                  <NInput v-model:value="profileForm.nickName" :placeholder="t('component.profile.info.nickname_placeholder')" class="pf-field" />
+                  <XInput v-model:value="profileForm.nickName" :placeholder="t('component.profile.info.nickname_placeholder')" class="pf-field" />
                 </div>
               </div>
             </div>
@@ -563,42 +512,48 @@ function cancelChange() {
                 <div class="pf-setting-row__main">
                   <div class="pf-setting-row__label">
                     {{ t('component.profile.info.field_email') }}
-                    <NTag v-if="profile?.emailVerified" type="success" size="tiny" :bordered="false">
-                      {{ t('component.profile.info.tag_verified') }}
-                    </NTag>
-                    <NTag v-else-if="profile?.email" type="warning" size="tiny" :bordered="false">
-                      {{ t('component.profile.info.tag_unverified') }}
-                    </NTag>
+                    <XhTagRoot v-if="profile?.emailVerified" variant="subtle" tone="success" size="sm">
+                      <XhTagLabel>
+                        {{ t('component.profile.info.tag_verified') }}
+                      </XhTagLabel>
+                    </XhTagRoot>
+                    <XhTagRoot v-else-if="profile?.email" variant="subtle" tone="warning" size="sm">
+                      <XhTagLabel>
+                        {{ t('component.profile.info.tag_unverified') }}
+                      </XhTagLabel>
+                    </XhTagRoot>
                   </div>
                   <div class="pf-setting-row__desc">
                     {{ profile?.email || t('component.profile.info.value_not_set') }}
                   </div>
                 </div>
                 <div class="pf-setting-row__control">
-                  <NButton size="small" ghost type="primary" @click="openChangeDialog('email')">
+                  <XhButton size="sm" ghost tone="brand" @click="openChangeDialog('email')">
                     {{ profile?.email ? t('component.profile.info.btn_modify') : t('component.profile.info.btn_bind') }}
-                  </NButton>
-                  <NButton
+                  </XhButton>
+                  <XhButton
                     v-if="profile?.email && !profile?.emailVerified"
-                    size="small"
-                    quaternary
+                    variant="ghost"
                     :loading="verifyLoading && verifyTarget === 'email'"
                     @click="sendVerifyCode('email')"
                   >
                     {{ t('component.profile.info.btn_verify') }}
-                  </NButton>
+                  </XhButton>
                 </div>
                 <div v-if="verifyTarget === 'email'" class="pf-inline-form">
-                  <NInput v-model:value="verifyCode" :placeholder="t('component.profile.info.verify_code_placeholder')" :maxlength="6" class="pf-field" />
-                  <NButton type="primary" :loading="verifyLoading" :disabled="verifyCode.length < 6" @click="confirmVerify">
+                  <XInput v-model:value="verifyCode" :placeholder="t('component.profile.info.verify_code_placeholder')" :max-length="6" class="pf-field" />
+                  <XhButton tone="brand" :loading="verifyLoading" :disabled="verifyCode.length < 6" @click="confirmVerify">
                     {{ t('common.actions.confirm') }}
-                  </NButton>
-                  <NButton :disabled="verifyCountdown > 0" quaternary @click="sendVerifyCode('email')">
-                    {{ verifyCountdown > 0 ? `${verifyCountdown}s` : t('common.actions.resend') }}
-                  </NButton>
-                  <NButton quaternary @click="cancelVerify">
+                  </XhButton>
+                  <XhButton :disabled="verifyResendSeconds > 0" quaternary @click="sendVerifyCode('email')">
+                    <CodeCountdown v-if="verifyResendSeconds > 0" :seconds="verifyResendSeconds" @finish="verifyResendSeconds = 0" />
+                    <template v-else>
+                      {{ t('common.actions.resend') }}
+                    </template>
+                  </XhButton>
+                  <XhButton variant="ghost" @click="cancelVerify">
                     {{ t('common.actions.cancel') }}
-                  </NButton>
+                  </XhButton>
                 </div>
               </div>
 
@@ -607,42 +562,48 @@ function cancelChange() {
                 <div class="pf-setting-row__main">
                   <div class="pf-setting-row__label">
                     {{ t('component.profile.info.field_phone') }}
-                    <NTag v-if="profile?.phoneVerified" type="success" size="tiny" :bordered="false">
-                      {{ t('component.profile.info.tag_verified') }}
-                    </NTag>
-                    <NTag v-else-if="profile?.phone" type="warning" size="tiny" :bordered="false">
-                      {{ t('component.profile.info.tag_unverified') }}
-                    </NTag>
+                    <XhTagRoot v-if="profile?.phoneVerified" variant="subtle" tone="success" size="sm">
+                      <XhTagLabel>
+                        {{ t('component.profile.info.tag_verified') }}
+                      </XhTagLabel>
+                    </XhTagRoot>
+                    <XhTagRoot v-else-if="profile?.phone" variant="subtle" tone="warning" size="sm">
+                      <XhTagLabel>
+                        {{ t('component.profile.info.tag_unverified') }}
+                      </XhTagLabel>
+                    </XhTagRoot>
                   </div>
                   <div class="pf-setting-row__desc">
                     {{ profile?.phone || t('component.profile.info.value_not_set') }}
                   </div>
                 </div>
                 <div class="pf-setting-row__control">
-                  <NButton size="small" ghost type="primary" @click="openChangeDialog('phone')">
+                  <XhButton size="sm" ghost tone="brand" @click="openChangeDialog('phone')">
                     {{ profile?.phone ? t('component.profile.info.btn_modify') : t('component.profile.info.btn_bind') }}
-                  </NButton>
-                  <NButton
+                  </XhButton>
+                  <XhButton
                     v-if="profile?.phone && !profile?.phoneVerified"
-                    size="small"
-                    quaternary
+                    variant="ghost"
                     :loading="verifyLoading && verifyTarget === 'phone'"
                     @click="sendVerifyCode('phone')"
                   >
                     {{ t('component.profile.info.btn_verify') }}
-                  </NButton>
+                  </XhButton>
                 </div>
                 <div v-if="verifyTarget === 'phone'" class="pf-inline-form">
-                  <NInput v-model:value="verifyCode" :placeholder="t('component.profile.info.verify_code_placeholder')" :maxlength="6" class="pf-field" />
-                  <NButton type="primary" :loading="verifyLoading" :disabled="verifyCode.length < 6" @click="confirmVerify">
+                  <XInput v-model:value="verifyCode" :placeholder="t('component.profile.info.verify_code_placeholder')" :max-length="6" class="pf-field" />
+                  <XhButton tone="brand" :loading="verifyLoading" :disabled="verifyCode.length < 6" @click="confirmVerify">
                     {{ t('common.actions.confirm') }}
-                  </NButton>
-                  <NButton :disabled="verifyCountdown > 0" quaternary @click="sendVerifyCode('phone')">
-                    {{ verifyCountdown > 0 ? `${verifyCountdown}s` : t('common.actions.resend') }}
-                  </NButton>
-                  <NButton quaternary @click="cancelVerify">
+                  </XhButton>
+                  <XhButton :disabled="verifyResendSeconds > 0" quaternary @click="sendVerifyCode('phone')">
+                    <CodeCountdown v-if="verifyResendSeconds > 0" :seconds="verifyResendSeconds" @finish="verifyResendSeconds = 0" />
+                    <template v-else>
+                      {{ t('common.actions.resend') }}
+                    </template>
+                  </XhButton>
+                  <XhButton variant="ghost" @click="cancelVerify">
                     {{ t('common.actions.cancel') }}
-                  </NButton>
+                  </XhButton>
                 </div>
               </div>
             </div>
@@ -665,11 +626,11 @@ function cancelChange() {
         <div class="pf-field-grid">
           <div class="pf-field-card">
             <span class="pf-field-card__label">{{ t('component.profile.info.field_real_name') }}</span>
-            <NInput v-model:value="profileForm.realName" :placeholder="t('component.profile.info.real_name_placeholder')" :maxlength="50" />
+            <XInput v-model:value="profileForm.realName" :placeholder="t('component.profile.info.real_name_placeholder')" :max-length="50" />
           </div>
           <div class="pf-field-card">
             <span class="pf-field-card__label">{{ t('component.profile.info.field_birthday') }}</span>
-            <NDatePicker
+            <XDatePicker
               v-model:value="profileForm.birthday"
               type="date"
               :placeholder="t('component.profile.info.birthday_placeholder')"
@@ -680,86 +641,93 @@ function cancelChange() {
           </div>
           <div class="pf-field-card">
             <span class="pf-field-card__label">{{ t('component.profile.info.field_gender') }}</span>
-            <NSelect v-model:value="profileForm.gender" :options="genderOptions" />
+            <XSelect v-model:value="profileForm.gender" :options="genderOptions" />
           </div>
           <div class="pf-field-card">
             <span class="pf-field-card__label">{{ t('component.profile.info.field_country') }}</span>
-            <NInput v-model:value="profileForm.country" :placeholder="t('component.profile.info.country_placeholder')" />
+            <XInput v-model:value="profileForm.country" :placeholder="t('component.profile.info.country_placeholder')" />
           </div>
           <div class="pf-field-card pf-field-card--block">
             <span class="pf-field-card__label">{{ t('component.profile.info.field_bio') }}</span>
-            <NInput
+            <XInput
               v-model:value="profileForm.remark"
               type="textarea"
               :placeholder="t('component.profile.info.bio_placeholder')"
               :autosize="{ minRows: 3, maxRows: 6 }"
-              :maxlength="200"
+              :max-length="200"
               show-count
             />
           </div>
         </div>
       </div>
       <div class="pf-section__actions">
-        <NButton @click="syncProfileForm">
+        <XhButton @click="syncProfileForm">
           {{ t('common.actions.cancel') }}
-        </NButton>
-        <NButton type="primary" :loading="profileSaving" @click="saveProfile">
-          <template #icon>
-            <NIcon>
-              <Icon icon="lucide:save" />
-            </NIcon>
-          </template>
+        </XhButton>
+        <XhButton tone="brand" :loading="profileSaving" @click="saveProfile">
+          <span><Icon icon="lucide:save" /></span>
           {{ t('component.profile.info.btn_save_changes') }}
-        </NButton>
+        </XhButton>
       </div>
     </section>
 
     <!-- 换绑对话框（邮箱/手机共用） -->
     <Teleport to="body">
       <div v-if="changeTarget" class="pf-change-overlay" @click.self="cancelChange">
-        <NCard
-          class="pf-change-dialog"
-          :title="changeTarget === 'email' ? t('component.profile.info.change_email_title') : t('component.profile.info.change_phone_title')"
-          size="small"
-          closable
-          @close="cancelChange"
-        >
-          <div class="pf-change-body">
-            <template v-if="!changeCodeSent">
-              <NInput
-                v-model:value="changeNewValue"
-                :placeholder="changeTarget === 'email' ? t('component.profile.info.new_email_placeholder') : t('component.profile.info.new_phone_placeholder')"
-              />
-              <NInput
-                v-model:value="changePassword"
-                type="password"
-                :placeholder="t('component.profile.info.current_password_placeholder')"
-                show-password-on="click"
-              />
-              <NButton type="primary" block :loading="changeLoading" @click="sendChangeCode">
-                {{ t('component.profile.info.send_code') }}
-              </NButton>
-            </template>
-            <template v-else>
-              <p class="pf-change-hint">
-                {{ t('component.profile.info.code_sent_to') }} <strong>{{ changeNewValue }}</strong>
-              </p>
-              <NInput
-                v-model:value="changeCode"
-                :placeholder="t('component.profile.info.verify_code_placeholder')"
-                :maxlength="6"
-              />
-              <NSpace :size="8">
-                <NButton type="primary" :loading="changeLoading" :disabled="changeCode.length < 6" @click="confirmChange">
-                  {{ t('common.actions.confirm') }}
-                </NButton>
-                <NButton :disabled="changeCountdown > 0" quaternary @click="sendChangeCode">
-                  {{ changeCountdown > 0 ? t('component.profile.info.resend_after', { seconds: changeCountdown }) : t('component.profile.info.resend_now') }}
-                </NButton>
-              </NSpace>
-            </template>
-          </div>
-        </NCard>
+        <XhCardRoot class="pf-change-dialog" variant="elevated">
+          <XhCardHeader class="pf-change-dialog__head">
+            <XhCardTitle>{{ changeTarget === 'email' ? t('component.profile.info.change_email_title') : t('component.profile.info.change_phone_title') }}</XhCardTitle>
+            <button type="button" class="pf-change-dialog__close" :aria-label="t('common.actions.close')" @click="cancelChange">
+              <Icon icon="lucide:x" width="16" height="16" />
+            </button>
+          </XhCardHeader>
+          <XhCardBody>
+            <div class="pf-change-body">
+              <template v-if="!changeCodeSent">
+                <XInput
+                  v-model:value="changeNewValue"
+                  :placeholder="changeTarget === 'email' ? t('component.profile.info.new_email_placeholder') : t('component.profile.info.new_phone_placeholder')"
+                />
+                <XInput
+                  v-model:value="changePassword"
+                  type="password"
+                  :placeholder="t('component.profile.info.current_password_placeholder')"
+                />
+                <XhButton variant="solid" tone="brand" full-width :loading="changeLoading" @click="sendChangeCode">
+                  {{ t('component.profile.info.send_code') }}
+                </XhButton>
+              </template>
+              <template v-else>
+                <p class="pf-change-hint">
+                  {{ t('component.profile.info.code_sent_to') }} <strong>{{ changeNewValue }}</strong>
+                </p>
+                <XInput
+                  v-model:value="changeCode"
+                  :placeholder="t('component.profile.info.verify_code_placeholder')"
+                  :max-length="6"
+                />
+                <XhFlex gap="sm">
+                  <XhButton tone="brand" :loading="changeLoading" :disabled="changeCode.length < 6" @click="confirmChange">
+                    {{ t('common.actions.confirm') }}
+                  </XhButton>
+                  <XhButton :disabled="changeResendSeconds > 0" quaternary @click="sendChangeCode">
+                    <CodeCountdown
+                      v-if="changeResendSeconds > 0"
+                      v-slot="{ seconds }"
+                      :seconds="changeResendSeconds"
+                      @finish="changeResendSeconds = 0"
+                    >
+                      {{ t('component.profile.info.resend_after', { seconds }) }}
+                    </CodeCountdown>
+                    <template v-else>
+                      {{ t('component.profile.info.resend_now') }}
+                    </template>
+                  </XhButton>
+                </XhFlex>
+              </template>
+            </div>
+          </XhCardBody>
+        </XhCardRoot>
       </div>
     </Teleport>
   </div>
@@ -768,6 +736,25 @@ function cancelChange() {
 <style src="./profile-shared.css" />
 
 <style scoped>
+/* 换绑对话框的标题行：标题左、关闭钮右 */
+.pf-change-dialog__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pf-change-dialog__close {
+  border: 0;
+  background: transparent;
+  color: var(--xh-fg-muted);
+  cursor: pointer;
+}
+
+.pf-change-dialog__close:hover {
+  color: var(--xh-fg-default);
+}
+
 .pf-avatar-section {
   display: flex;
   align-items: center;

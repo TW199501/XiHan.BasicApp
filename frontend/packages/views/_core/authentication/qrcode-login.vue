@@ -1,5 +1,4 @@
 <script lang="ts" setup>
-import { NIcon } from 'naive-ui'
 import { onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useTheme } from '~/hooks'
@@ -79,9 +78,6 @@ watch(isDark, () => {
 <template>
   <div class="py-1">
     <div class="mb-8">
-      <h1 class="text-[32px] font-semibold leading-tight sm:text-[36px]">
-        {{ t('page.auth.qrcode_login') }}
-      </h1>
       <p
         class="mt-3 text-[15px] leading-7"
         :class="isDark ? 'text-gray-300' : 'text-[hsl(var(--muted-foreground))]'"
@@ -101,9 +97,7 @@ watch(isDark, () => {
             class="flex justify-center items-center w-12 h-12 rounded-xl"
             :class="isDark ? 'bg-[#0b1220]' : 'bg-white'"
           >
-            <NIcon :size="24" :class="isDark ? 'text-white' : 'text-[hsl(var(--primary))]'">
-              <Icon icon="lucide:scan" />
-            </NIcon>
+            <span :class="isDark ? 'text-white' : 'text-[hsl(var(--primary))]'" style="display: inline-flex; font-size: 24px"><Icon icon="lucide:scan" /></span>
           </div>
         </div>
       </div>

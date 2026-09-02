@@ -19,6 +19,33 @@ export interface UserInfo {
   canAccessPlatform?: boolean
   roles: string[]
   permissions: string[]
+  /** 是否可发起模仿登录（服务端按实时权限判定后下发） */
+  canImpersonate?: boolean
+  /** 是否处于模仿态（当前身份由他人以模仿方式登录得到） */
+  isImpersonating?: boolean
+  /** 模仿者用户主键 */
+  impersonatorUserId?: null | string
+  /** 模仿者用户名 */
+  impersonatorUserName?: null | string
+}
+
+/** 发起模仿登录参数 */
+export interface StartImpersonationParams {
+  /** 目标用户主键 */
+  targetUserId: string
+  /** 目标租户主键；为空时沿用发起人当前上下文 */
+  tenantId?: null | string
+  /** 模仿事由（落审计） */
+  reason?: null | string
+}
+
+/** 模仿登录的候选目标 */
+export interface ImpersonationCandidate {
+  basicId: string
+  userName: string
+  nickName?: null | string
+  realName?: null | string
+  avatar?: null | string
 }
 
 /** 切换租户 / 进入平台运维态参数（切换复用当前登录会话，无需设备标识） */
@@ -36,6 +63,8 @@ export interface LoginConfig {
   loginMethods: string[]
   // 与后端序列化键一致：OAuthProviders 经 camelCase 策略输出为 oAuthProviders
   oAuthProviders: OAuthProviderItem[]
+  /** 密码登录是否要求图形验证码 */
+  captchaEnabled: boolean
 }
 
 /** 登录参数（先登录后选租户：登录不携带租户，落点由后端按成员关系决定） */
@@ -43,6 +72,10 @@ export interface LoginParams {
   /** 登录账号（邮箱，全平台唯一；平台账号也可用用户名） */
   username: string
   password: string
+  /** 图形验证码标识（后端要求验证码时必填） */
+  captchaId?: string
+  /** 图形验证码（后端要求验证码时必填） */
+  captchaCode?: string
   /** 双因素验证码（开启 2FA 时必填） */
   twoFactorCode?: string
   /** 用户选择的双因素方式（totp/email/phone） */
@@ -74,6 +107,14 @@ export interface EmailLoginParams {
 export interface VerificationCodeResult {
   expiresInSeconds: number
   debugCode?: string
+}
+
+/** 登录图形验证码挑战 */
+export interface CaptchaChallenge {
+  captchaId: string
+  /** SVG Data URL，直接作为 img src */
+  image: string
+  expiresInSeconds: number
 }
 
 export interface PasswordResetResult {
@@ -109,6 +150,8 @@ export interface LoginToken {
 }
 
 export interface PermissionInfo {
+  /** 可用按钮码：页面按钮是否可见由服务端判定后下发，前端不持有权限码。缺省视为一个都没有（fail-closed） */
+  buttons?: string[]
   roles: string[]
   permissions: string[]
   menus: MenuRoute[]

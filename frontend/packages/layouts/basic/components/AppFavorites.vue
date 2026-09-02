@@ -1,12 +1,8 @@
 <script setup lang="ts">
-import type { DragEndEvent } from '@dnd-kit/vue'
-import { DragDropProvider } from '@dnd-kit/vue'
-import { NDivider, NEmpty, NNumberAnimation, NPopover } from 'naive-ui'
+import { XhEmptyStateDescription, XhEmptyStateIcon, XhEmptyStateRoot, XhEmptyStateTitle, XhPopoverContent, XhPopoverPositioner, XhPopoverRoot, XhPopoverTrigger, XhSeparator, XhSortableItem, XhSortableLiveRegion, XhSortableRoot } from '@xihan-ui/vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { resolveSortMove } from '~/components/common/sortable'
-import SortableItem from '~/components/common/SortableItem.vue'
 import SyncStatusBadge from '~/components/common/SyncStatusBadge.vue'
 import { Icon } from '~/iconify'
 import { useAppStore, useFavoritesStore } from '~/stores'
@@ -50,11 +46,8 @@ function handleRemove(path: string, e: MouseEvent): void {
   favoritesStore.remove(path)
 }
 
-function onDragEnd(event: DragEndEvent): void {
-  const move = resolveSortMove(event, items.value.map(item => item.path))
-  if (move) {
-    favoritesStore.move(move.from, move.to)
-  }
+function onSort(details: { from: number, to: number }): void {
+  favoritesStore.move(details.from, details.to)
 }
 
 // ── 按钮脉冲（飞入命中时抖动一下） ──────────────────────────────
@@ -89,139 +82,100 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <NPopover
-    v-model:show="showPanel"
-    trigger="click"
-    placement="bottom-start"
-    :width="340"
-    display-directive="show"
-    :show-arrow="false"
-  >
-    <template #trigger>
-      <span ref="anchorRef" class="mr-1 inline-flex">
-        <button
-          type="button"
-          class="fav-btn"
-          :class="{ 'fav-btn--active': showPanel, 'fav-btn--pulse': pulsing }"
-          :title="t('header.favorites.title')"
-          :aria-label="t('header.favorites.title')"
+  <XhPopoverRoot v-model:open="showPanel" placement="bottom-start">
+    <!-- 浮层触发器渲染成 button，不能再往里套一颗；星标钮的样式直接落在它身上。
+         anchorRef 仍留在外层 span 上——它是灵动岛的落位参照，不能跟着浮层开合动 -->
+    <span ref="anchorRef" class="mr-1 inline-flex">
+      <XhPopoverTrigger
+        class="xihan-icon-btn fav-btn"
+        :class="{ 'xihan-icon-btn--active': showPanel, 'fav-btn--pulse': pulsing }"
+        :title="t('header.favorites.title')"
+        :aria-label="t('header.favorites.title')"
+      >
+        <!-- 数字、99+、「零则收起」与贴角定位都归组件库算 -->
+        <XhBadge
+          size="sm"
+          tone="brand"
+          :count="favoritesStore.count"
+          :label="t('header.favorites.count_label', { n: favoritesStore.count })"
         >
-          <Icon icon="lucide:star" width="18" height="18" />
-          <span v-if="favoritesStore.count > 0" class="fav-btn__badge">
-            <NNumberAnimation :to="Math.min(favoritesStore.count, 99)" :duration="500" :precision="0" />
-            <span v-if="favoritesStore.count > 99">+</span>
-          </span>
-        </button>
-      </span>
-    </template>
+          <Icon icon="lucide:star" width="16" height="16" />
+        </XhBadge>
+      </XhPopoverTrigger>
+    </span>
 
-    <div class="fav-panel flex flex-col gap-2">
-      <!-- 头部（与表格设置/搜索设置统一样式） -->
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <span class="text-base font-semibold text-foreground">{{ t('header.favorites.title') }}</span>
-          <SyncStatusBadge :synced="appStore.favoritesSyncEnabled" />
-        </div>
-      </div>
+    <XhPopoverPositioner>
+      <XhPopoverContent class="fav-popover">
+        <div class="fav-panel flex flex-col gap-2">
+          <!-- 头部（与表格设置/搜索设置统一样式） -->
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="text-base font-semibold text-foreground">{{ t('header.favorites.title') }}</span>
+              <SyncStatusBadge :synced="appStore.favoritesSyncEnabled" />
+            </div>
+          </div>
 
-      <NDivider class="!my-1" />
+          <XhSeparator class="my-1" />
 
-      <!-- 空态 -->
-      <NEmpty
-        v-if="items.length === 0"
-        size="small"
-        :description="t('header.favorites.empty')"
-        class="fav-empty"
-      />
+          <!-- 空态 -->
+          <XhEmptyStateRoot v-if="items.length === 0" class="fav-empty" size="sm">
+            <XhEmptyStateIcon>
+              <Icon icon="lucide:inbox" width="28" />
+            </XhEmptyStateIcon>
+            <XhEmptyStateTitle>{{ t('common.no_data') }}</XhEmptyStateTitle>
+            <XhEmptyStateDescription>{{ t('header.favorites.empty') }}</XhEmptyStateDescription>
+          </XhEmptyStateRoot>
 
-      <!-- 收藏药丸（可拖拽排序，点击导航，× 移除） -->
-      <DragDropProvider v-else @drag-end="onDragEnd">
-        <div class="fav-list flex flex-wrap gap-2">
-          <SortableItem
-            v-for="(item, index) in items"
-            :id="item.path"
-            :key="item.path"
-            :index="index"
-            class="fav-chip"
-            :class="{ 'fav-chip--current': route.fullPath === item.path }"
-            role="button"
-            tabindex="0"
-            :title="display(item.title)"
-            @click="handleNavigate(item.path)"
-            @keydown.enter.prevent="handleNavigate(item.path)"
+          <!-- 收藏药丸（可拖拽排序，点击导航，× 移除） -->
+          <XhSortableRoot
+            v-else
+            :ids="items.map(i => i.path)"
+            orientation="both"
+            class="fav-list flex flex-wrap gap-2"
+            style="--xh-sortable-gap: 0"
+            @sort="onSort"
           >
-            <Icon :icon="resolveIcon(item.icon)" width="14" height="14" class="shrink-0 opacity-70" />
-            <span class="fav-chip__label">{{ display(item.title) }}</span>
-            <button
-              type="button"
-              class="fav-chip__close"
-              :aria-label="t('header.favorites.remove')"
-              @click="(e) => handleRemove(item.path, e)"
-              @keydown.enter.stop
+            <XhSortableItem
+              v-for="item in items"
+              :key="item.path"
+              :item-id="item.path"
+              class="fav-chip"
+              :class="{ 'fav-chip--current': route.fullPath === item.path }"
+              role="button"
+              tabindex="0"
+              :title="display(item.title)"
+              @click="handleNavigate(item.path)"
+              @keydown.enter.prevent="handleNavigate(item.path)"
             >
-              <Icon icon="lucide:x" width="12" height="12" />
-            </button>
-          </SortableItem>
-        </div>
-      </DragDropProvider>
+              <Icon :icon="resolveIcon(item.icon)" width="14" height="14" class="shrink-0 opacity-70" />
+              <span class="fav-chip__label">{{ display(item.title) }}</span>
+              <button
+                type="button"
+                class="fav-chip__close"
+                :aria-label="t('header.favorites.remove')"
+                @click="(e) => handleRemove(item.path, e)"
+                @keydown.enter.stop
+              >
+                <Icon icon="lucide:x" width="12" height="12" />
+              </button>
+            </XhSortableItem>
+            <XhSortableLiveRegion />
+          </XhSortableRoot>
 
-      <div v-if="items.length > 0" class="fav-footer">
-        <NDivider class="!my-1" />
-        <span class="text-xs text-foreground/40">{{ t('header.favorites.hint') }}</span>
-      </div>
-    </div>
-  </NPopover>
+          <div v-if="items.length > 0" class="fav-footer">
+            <XhSeparator class="my-1" />
+            <span class="text-xs text-foreground/40">{{ t('header.favorites.hint') }}</span>
+          </div>
+        </div>
+      </XhPopoverContent>
+    </XhPopoverPositioner>
+  </XhPopoverRoot>
 </template>
 
 <style scoped>
-/* 收藏夹触发按钮（与 XihanIconButton 视觉一致） */
-.fav-btn {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: hsl(var(--foreground) / 65%);
-  cursor: pointer;
-  outline: none;
-  flex-shrink: 0;
-  transition:
-    background 0.15s ease,
-    color 0.15s ease;
-}
-
-.fav-btn:hover {
-  background: hsl(var(--accent));
-  color: hsl(var(--foreground));
-}
-
-.fav-btn--active {
-  background: hsl(var(--accent));
-  color: hsl(var(--primary));
-}
-
-.fav-btn__badge {
-  position: absolute;
-  top: -1px;
-  right: -1px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 14px;
-  height: 14px;
-  padding: 0 3px;
-  border-radius: 9999px;
-  background: hsl(var(--primary));
-  color: hsl(var(--primary-foreground));
-  font-size: 9px;
-  font-weight: 600;
-  line-height: 14px;
-  text-align: center;
+/* 收藏面板定宽，与表格设置/搜索设置浮层一致 */
+.fav-popover {
+  inline-size: 340px;
 }
 
 /* 飞入命中脉冲 */
@@ -333,7 +287,7 @@ onBeforeUnmount(() => {
   background: hsl(var(--primary) / 20%);
 }
 
-/* 拖拽中的药丸（dnd-kit 在 SortableItem 根节点写入 data-dragging） */
+/* 拖拽中的药丸（sortable 在被拖那一项上写 data-dragging） */
 .fav-chip[data-dragging] {
   opacity: 0.5;
   box-shadow: inset 0 0 0 1px hsl(var(--primary) / 40%);

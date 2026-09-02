@@ -3,7 +3,7 @@ import type { LoginFormAlign } from './LoginToolbar.vue'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
-import { CODE_LOGIN_PATH, EMAIL_LOGIN_PATH, LOGIN_PATH, QRCODE_LOGIN_PATH } from '~/constants'
+import { CODE_LOGIN_PATH, EMAIL_LOGIN_PATH, FOUNDATION_PROJECTS, LOGIN_PATH, QRCODE_LOGIN_PATH } from '~/constants'
 import { useAppStore } from '~/stores'
 import AuthEntrySwitcher from './AuthEntrySwitcher.vue'
 import LoginToolbar from './LoginToolbar.vue'
@@ -16,7 +16,7 @@ const route = useRoute()
 const appStore = useAppStore()
 
 const appTitle = computed(
-  () => appStore.brandTitle || import.meta.env.VITE_APP_TITLE || 'XiHan Admin',
+  () => appStore.brandTitle || import.meta.env.VITE_APP_TITLE || 'XiHan BasicApp',
 )
 const appLogo = computed(
   () => appStore.brandLogo || import.meta.env.VITE_APP_LOGO || '/favicon.png',
@@ -35,8 +35,6 @@ const appVersion = __APP_VERSION__
 const appBuildTime = __APP_BUILD_TIME__
 const appHomepage = __APP_HOMEPAGE__
 const appName = __APP_NAME__
-const appAuthorName = __APP_AUTHOR_NAME__
-const appAuthorUrl = __APP_AUTHOR_URL__
 </script>
 
 <template>
@@ -121,7 +119,8 @@ const appAuthorUrl = __APP_AUTHOR_URL__
               :class="formAlign === 'center' ? 'max-w-[560px]' : 'max-w-[460px]'"
             >
               <AuthEntrySwitcher v-if="showEntryTabs" class="mb-7" />
-              <div class="overflow-hidden" :class="showEntryTabs ? 'min-h-[520px]' : ''">
+              <!-- 这层裁掉切换过渡的 ±24px 平移；4px 内衬同时给控件聚焦环（外扩 ring-offset 2px + ring-width 2px）留出显示空间 -->
+              <div class="overflow-hidden p-1" :class="showEntryTabs ? 'min-h-[520px]' : ''">
                 <router-view v-slot="{ Component }">
                   <transition name="auth-slide" mode="out-in">
                     <component :is="Component" />
@@ -141,8 +140,11 @@ const appAuthorUrl = __APP_AUTHOR_URL__
     >
       <div v-if="appStore.footerShowDevInfo" class="leading-tight">
         <a :href="appHomepage" target="_blank" class="hover:underline">{{ appName }}</a>
-        v{{ appVersion }}({{ appBuildTime }}) · by
-        <a :href="appAuthorUrl" target="_blank" class="hover:underline">{{ appAuthorName }}</a>
+        v{{ appVersion }}({{ appBuildTime }}) · Powered by
+        <template v-for="(item, i) in FOUNDATION_PROJECTS" :key="item.name">
+          <span v-if="i > 0"> &amp; </span>
+          <a :href="item.url" target="_blank" class="hover:underline">{{ item.name }}</a>
+        </template>
       </div>
       <div
         v-if="appStore.copyrightEnable"

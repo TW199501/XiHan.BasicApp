@@ -4,6 +4,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using XiHan.BasicApp.Saas.Application.Caching;
 using XiHan.BasicApp.Saas.Application.Contracts;
 using XiHan.BasicApp.Saas.Application.Dtos;
 using XiHan.BasicApp.Saas.Application.Mappers;
@@ -53,6 +54,10 @@ public sealed partial class ProfileAppService
 
     private readonly IHttpContextAccessor _httpContextAccessor;
 
+    private readonly IUserSessionRepository _userSessionRepository;
+
+    private readonly ISaasCacheInvalidator _cacheInvalidator;
+
     /// <summary>
     /// 构造函数
     /// </summary>
@@ -67,7 +72,9 @@ public sealed partial class ProfileAppService
         IUserApiCredentialSecretProtector apiCredentialSecretProtector,
         ICurrentUser currentUser,
         IClientInfoProvider clientInfoProvider,
-        IHttpContextAccessor httpContextAccessor)
+        IHttpContextAccessor httpContextAccessor,
+        IUserSessionRepository userSessionRepository,
+        ISaasCacheInvalidator cacheInvalidator)
     {
         _profileDomainService = profileDomainService;
         _profileQueryService = profileQueryService;
@@ -80,6 +87,8 @@ public sealed partial class ProfileAppService
         _currentUser = currentUser;
         _clientInfoProvider = clientInfoProvider;
         _httpContextAccessor = httpContextAccessor;
+        _userSessionRepository = userSessionRepository;
+        _cacheInvalidator = cacheInvalidator;
     }
 
     /// <summary>
@@ -123,6 +132,7 @@ public sealed partial class ProfileAppService
     [UnitOfWork(true)]
     public async Task ChangeUserNameAsync(ProfileChangeUserNameDto input, CancellationToken cancellationToken = default)
     {
+        _currentUser.EnsureNotImpersonating("修改用户名");
         ArgumentNullException.ThrowIfNull(input);
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -147,6 +157,7 @@ public sealed partial class ProfileAppService
     [UnitOfWork(true)]
     public async Task DeactivateAccountAsync(ProfilePasswordConfirmDto input, CancellationToken cancellationToken = default)
     {
+        _currentUser.EnsureNotImpersonating("停用账号");
         ArgumentNullException.ThrowIfNull(input);
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -169,6 +180,7 @@ public sealed partial class ProfileAppService
     [UnitOfWork(true)]
     public async Task DeleteAccountAsync(ProfilePasswordConfirmDto input, CancellationToken cancellationToken = default)
     {
+        _currentUser.EnsureNotImpersonating("注销账号");
         ArgumentNullException.ThrowIfNull(input);
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -209,6 +221,7 @@ public sealed partial class ProfileAppService
     [UnitOfWork(true)]
     public async Task UnlinkAccountAsync(ProfileUnlinkAccountDto input, CancellationToken cancellationToken = default)
     {
+        _currentUser.EnsureNotImpersonating("解绑第三方账号");
         ArgumentNullException.ThrowIfNull(input);
         cancellationToken.ThrowIfCancellationRequested();
 

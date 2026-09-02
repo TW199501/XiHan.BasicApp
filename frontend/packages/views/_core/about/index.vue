@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { NCard, NTag, NText } from 'naive-ui'
+import { XhCardBody, XhCardHeader, XhCardRoot, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Icon } from '~/iconify'
@@ -10,8 +10,9 @@ defineOptions({ name: 'AboutPage' })
 
 const { t } = useI18n()
 
-const dependencies = PackageJson.dependencies ?? {}
-const devDependencies = PackageJson.devDependencies ?? {}
+// package.json 里的依赖值是 pnpm 的 catalog:/link: 协议串，真实版本由构建期解析后注入
+const dependencies = __APP_DEPENDENCIES__
+const devDependencies = __APP_DEV_DEPENDENCIES__
 const keywords = Array.isArray(PackageJson.keyword) ? PackageJson.keyword : []
 
 const appName = PackageJson.name ?? 'XiHan.BasicApp'
@@ -136,15 +137,21 @@ onMounted(() => {
             <span class="ab-hero-desc">{{ description }}</span>
           </div>
           <div class="ab-hero-line2">
-            <NTag size="small" :bordered="false" type="primary">
-              {{ t('component.about.tag_enterprise_ready') }}
-            </NTag>
-            <NTag size="small" :bordered="false" type="success">
-              {{ t('component.about.tag_composable') }}
-            </NTag>
-            <NTag size="small" :bordered="false" type="info">
-              {{ t('component.about.tag_modern_stack') }}
-            </NTag>
+            <XhTagRoot variant="subtle" size="sm" tone="brand">
+              <XhTagLabel>
+                {{ t('component.about.tag_enterprise_ready') }}
+              </XhTagLabel>
+            </XhTagRoot>
+            <XhTagRoot variant="subtle" size="sm" tone="success">
+              <XhTagLabel>
+                {{ t('component.about.tag_composable') }}
+              </XhTagLabel>
+            </XhTagRoot>
+            <XhTagRoot variant="subtle" size="sm" tone="info">
+              <XhTagLabel>
+                {{ t('component.about.tag_modern_stack') }}
+              </XhTagLabel>
+            </XhTagRoot>
           </div>
         </div>
       </div>
@@ -180,155 +187,186 @@ onMounted(() => {
     </div>
 
     <div class="ab-section-grid">
-      <NCard :bordered="false" size="small" class="ab-card">
-        <template #header>
+      <XhCardRoot variant="ghost" class="ab-card">
+        <XhCardHeader>
           <div class="ab-card-header">
             <Icon icon="lucide:sparkles" width="16" />
             <span>{{ t('component.about.core_capabilities') }}</span>
           </div>
-        </template>
-        <div class="ab-cap-grid">
-          <div v-for="item in coreCapabilities" :key="item.title" class="ab-cap-item">
-            <div class="ab-cap-icon">
-              <Icon :icon="item.icon" width="16" />
-            </div>
-            <div class="ab-cap-content">
-              <div class="ab-cap-title">
-                {{ item.title }}
+        </XhCardHeader>
+        <XhCardBody>
+          <div class="ab-cap-grid">
+            <div v-for="item in coreCapabilities" :key="item.title" class="ab-cap-item">
+              <div class="ab-cap-icon">
+                <Icon :icon="item.icon" width="16" />
               </div>
-              <div class="ab-cap-desc">
-                {{ item.desc }}
+              <div class="ab-cap-content">
+                <div class="ab-cap-title">
+                  {{ item.title }}
+                </div>
+                <div class="ab-cap-desc">
+                  {{ item.desc }}
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </NCard>
+        </XhCardBody>
+      </XhCardRoot>
 
-      <NCard :bordered="false" size="small" class="ab-card">
-        <template #header>
+      <XhCardRoot variant="ghost" class="ab-card">
+        <XhCardHeader>
           <div class="ab-card-header">
             <Icon icon="lucide:gem" width="16" />
             <span>{{ t('component.about.platform_features') }}</span>
           </div>
-        </template>
-        <div class="ab-governance">
-          <div v-for="item in governanceItems" :key="item.label" class="ab-gov-item">
-            <div class="ab-gov-left">
-              <div class="ab-gov-icon">
-                <Icon :icon="item.icon" width="14" />
+        </XhCardHeader>
+        <XhCardBody>
+          <div class="ab-governance">
+            <div v-for="item in governanceItems" :key="item.label" class="ab-gov-item">
+              <div class="ab-gov-left">
+                <div class="ab-gov-icon">
+                  <Icon :icon="item.icon" width="14" />
+                </div>
+                <span class="ab-gov-label">{{ item.label }}</span>
               </div>
-              <span class="ab-gov-label">{{ item.label }}</span>
+              <span class="ab-gov-value">{{ item.value }}</span>
             </div>
-            <span class="ab-gov-value">{{ item.value }}</span>
           </div>
-        </div>
-      </NCard>
+        </XhCardBody>
+      </XhCardRoot>
     </div>
 
-    <NCard :bordered="false" size="small" class="ab-card">
-      <template #header>
+    <XhCardRoot variant="ghost" class="ab-card">
+      <XhCardHeader>
         <div class="ab-card-header">
           <Icon icon="lucide:box" width="16" />
           <span>{{ t('component.about.backend_dependencies') }}</span>
-          <NTag size="small" :bordered="false" type="info" class="ab-pkg-count">
-            {{ backendDependencies.length }}
-          </NTag>
+          <XhTagRoot variant="subtle" size="sm" tone="info" class="ab-pkg-count">
+            <XhTagLabel>
+              {{ backendDependencies.length }}
+            </XhTagLabel>
+          </XhTagRoot>
         </div>
-      </template>
-      <div v-if="!backendDependencies.length" class="ab-empty">
-        {{ t('common.no_data') }}
-      </div>
-      <div v-else class="ab-pkg-grid">
-        <div v-for="pkg in backendDependencies" :key="pkg.packageName" class="ab-pkg-item">
-          <Icon icon="lucide:package" width="14" class="ab-pkg-icon" />
-          <span class="ab-pkg-name" :title="pkg.packageName">
-            {{ pkg.packageName }}
-          </span>
-          <NTag type="success" size="tiny" :bordered="false" class="ab-pkg-ver">
-            {{ pkg.packageVersion }}
-          </NTag>
+      </XhCardHeader>
+      <XhCardBody>
+        <div v-if="!backendDependencies.length" class="ab-empty">
+          {{ t('common.no_data') }}
         </div>
-      </div>
-    </NCard>
+        <div v-else class="ab-pkg-grid">
+          <div v-for="pkg in backendDependencies" :key="pkg.packageName" class="ab-pkg-item">
+            <Icon icon="lucide:package" width="14" class="ab-pkg-icon" />
+            <span class="ab-pkg-name" :title="pkg.packageName">
+              {{ pkg.packageName }}
+            </span>
+            <XhTagRoot variant="subtle" tone="success" size="sm" class="ab-pkg-ver">
+              <XhTagLabel>
+                {{ pkg.packageVersion }}
+              </XhTagLabel>
+            </XhTagRoot>
+          </div>
+        </div>
+      </XhCardBody>
+    </XhCardRoot>
 
-    <NCard :bordered="false" size="small" class="ab-card">
-      <template #header>
+    <XhCardRoot variant="ghost" class="ab-card">
+      <XhCardHeader>
         <div class="ab-card-header">
           <Icon icon="lucide:box" width="16" />
           <span>{{ t('component.about.frontend_dependencies') }}</span>
-          <NTag size="small" :bordered="false" type="info" class="ab-pkg-count">
-            {{ dependencyCount }}
-          </NTag>
+          <XhTagRoot variant="subtle" size="sm" tone="info" class="ab-pkg-count">
+            <XhTagLabel>
+              {{ dependencyCount }}
+            </XhTagLabel>
+          </XhTagRoot>
         </div>
-      </template>
-      <div v-if="!dependencyCount" class="ab-empty">
-        {{ t('common.no_data') }}
-      </div>
-      <div v-else class="ab-pkg-grid">
-        <div v-for="(value, key) in dependencies" :key="String(key)" class="ab-pkg-item">
-          <Icon icon="lucide:package" width="14" class="ab-pkg-icon" />
-          <span class="ab-pkg-name" :title="String(key)">
-            {{ key }}
-          </span>
-          <NTag type="success" size="tiny" :bordered="false" class="ab-pkg-ver">
-            {{ value }}
-          </NTag>
+      </XhCardHeader>
+      <XhCardBody>
+        <div v-if="!dependencyCount" class="ab-empty">
+          {{ t('common.no_data') }}
         </div>
-      </div>
-    </NCard>
+        <div v-else class="ab-pkg-grid">
+          <div v-for="(value, key) in dependencies" :key="String(key)" class="ab-pkg-item">
+            <Icon icon="lucide:package" width="14" class="ab-pkg-icon" />
+            <span class="ab-pkg-name" :title="String(key)">
+              {{ key }}
+            </span>
+            <XhTagRoot variant="subtle" tone="success" size="sm" class="ab-pkg-ver">
+              <XhTagLabel>
+                {{ value }}
+              </XhTagLabel>
+            </XhTagRoot>
+          </div>
+        </div>
+      </XhCardBody>
+    </XhCardRoot>
 
-    <NCard :bordered="false" size="small" class="ab-card">
-      <template #header>
+    <XhCardRoot variant="ghost" class="ab-card">
+      <XhCardHeader>
         <div class="ab-card-header">
           <Icon icon="lucide:wrench" width="16" />
           <span>{{ t('component.about.frontend_dev_dependencies') }}</span>
-          <NTag size="small" :bordered="false" type="info" class="ab-pkg-count">
-            {{ devDependencyCount }}
-          </NTag>
+          <XhTagRoot variant="subtle" size="sm" tone="info" class="ab-pkg-count">
+            <XhTagLabel>
+              {{ devDependencyCount }}
+            </XhTagLabel>
+          </XhTagRoot>
         </div>
-      </template>
-      <div v-if="!devDependencyCount" class="ab-empty">
-        {{ t('common.no_data') }}
-      </div>
-      <div v-else class="ab-pkg-grid">
-        <div v-for="(value, key) in devDependencies" :key="String(key)" class="ab-pkg-item">
-          <Icon icon="lucide:package" width="14" class="ab-pkg-icon" />
-          <span class="ab-pkg-name" :title="String(key)">
-            {{ key }}
-          </span>
-          <NTag type="error" size="tiny" :bordered="false" class="ab-pkg-ver">
-            {{ value }}
-          </NTag>
+      </XhCardHeader>
+      <XhCardBody>
+        <div v-if="!devDependencyCount" class="ab-empty">
+          {{ t('common.no_data') }}
         </div>
-      </div>
-    </NCard>
+        <div v-else class="ab-pkg-grid">
+          <div v-for="(value, key) in devDependencies" :key="String(key)" class="ab-pkg-item">
+            <Icon icon="lucide:package" width="14" class="ab-pkg-icon" />
+            <span class="ab-pkg-name" :title="String(key)">
+              {{ key }}
+            </span>
+            <XhTagRoot variant="subtle" tone="danger" size="sm" class="ab-pkg-ver">
+              <XhTagLabel>
+                {{ value }}
+              </XhTagLabel>
+            </XhTagRoot>
+          </div>
+        </div>
+      </XhCardBody>
+    </XhCardRoot>
 
-    <NCard :bordered="false" size="small" class="ab-card">
-      <template #header>
+    <XhCardRoot variant="ghost" class="ab-card">
+      <XhCardHeader>
         <div class="ab-card-header">
           <Icon icon="lucide:tag" width="16" />
           <span>{{ t('page.about.keywords') }}</span>
         </div>
-      </template>
-      <div class="ab-keywords">
-        <NTag
-          v-for="(value, index) in keywords"
-          :key="String(value)"
-          size="small"
-          :bordered="false"
-          type="primary"
-        >
-          #{{ index + 1 }} {{ value }}
-        </NTag>
-        <NText v-if="keywords.length === 0" depth="3">
-          {{ t('page.about.empty_keywords') }}
-        </NText>
-      </div>
-    </NCard>
+      </XhCardHeader>
+      <XhCardBody>
+        <div class="ab-keywords">
+          <XhTagRoot
+            v-for="(value, index) in keywords"
+            :key="String(value)"
+            variant="subtle"
+            size="sm"
+            tone="brand"
+          >
+            <XhTagLabel>
+              #{{ index + 1 }} {{ value }}
+            </XhTagLabel>
+          </XhTagRoot>
+          <span v-if="keywords.length === 0" class="about-empty-hint">
+            {{ t('page.about.empty_keywords') }}
+          </span>
+        </div>
+      </XhCardBody>
+    </XhCardRoot>
   </div>
 </template>
 
 <style scoped>
+.about-empty-hint {
+  color: var(--xh-fg-muted);
+  font-size: 13px;
+}
+
 .ab-page {
   display: flex;
   flex-direction: column;

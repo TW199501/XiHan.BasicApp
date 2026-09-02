@@ -1,6 +1,7 @@
 // Copyright (c) 2021-Present XiHanFun and contributors.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
+using XiHan.BasicApp.Saas.Application.Services;
 using Microsoft.AspNetCore.Authorization;
 using System.Security.Cryptography;
 using XiHan.BasicApp.Saas.Application.Contracts;
@@ -76,6 +77,7 @@ public sealed class MyOAuthAppAppService
     [UnitOfWork(true)]
     public async Task<MyOAuthAppSecretDto> CreateMyOAuthAppAsync(MyOAuthAppCreateDto input, CancellationToken cancellationToken = default)
     {
+        _currentUser.EnsureNotImpersonating("创建 OAuth 应用");
         ArgumentNullException.ThrowIfNull(input);
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -135,6 +137,7 @@ public sealed class MyOAuthAppAppService
     [UnitOfWork(true)]
     public async Task<MyOAuthAppItemDto> UpdateMyOAuthAppAsync(MyOAuthAppUpdateDto input, CancellationToken cancellationToken = default)
     {
+        _currentUser.EnsureNotImpersonating("更新 OAuth 应用");
         ArgumentNullException.ThrowIfNull(input);
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -184,6 +187,7 @@ public sealed class MyOAuthAppAppService
     [UnitOfWork(true)]
     public async Task<MyOAuthAppSecretDto> RegenerateMyOAuthAppSecretAsync(long id, CancellationToken cancellationToken = default)
     {
+        _currentUser.EnsureNotImpersonating("重置 OAuth 应用密钥");
         cancellationToken.ThrowIfCancellationRequested();
         var app = await GetOwnedOrThrowAsync(id, cancellationToken);
         if (IsPublicApp(app))
@@ -207,6 +211,7 @@ public sealed class MyOAuthAppAppService
     [UnitOfWork(true)]
     public async Task<MyOAuthAppItemDto> UpdateMyOAuthAppStatusAsync(MyOAuthAppStatusDto input, CancellationToken cancellationToken = default)
     {
+        _currentUser.EnsureNotImpersonating("启停 OAuth 应用");
         ArgumentNullException.ThrowIfNull(input);
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -223,6 +228,7 @@ public sealed class MyOAuthAppAppService
     [UnitOfWork(true)]
     public async Task DeleteMyOAuthAppAsync(long id, CancellationToken cancellationToken = default)
     {
+        _currentUser.EnsureNotImpersonating("删除 OAuth 应用");
         cancellationToken.ThrowIfCancellationRequested();
         _ = await GetOwnedOrThrowAsync(id, cancellationToken);
         try

@@ -23,6 +23,10 @@ export interface TenantListItemDto extends BasicDto {
   databaseType?: TenantDatabaseType | null
   domain?: string | null
   editionId?: ApiId | null
+  /** 生效存储上限(MB)：租户未设值时回落到所属版本套餐，null 表示不限 */
+  effectiveStorageLimit?: number | null
+  /** 生效用户数上限：租户未设值时回落到所属版本套餐，null 表示不限 */
+  effectiveUserLimit?: number | null
   expirationTime?: DateTimeString | null
   isExpired: boolean
   isolationMode: TenantIsolationMode
@@ -34,6 +38,10 @@ export interface TenantListItemDto extends BasicDto {
   tenantName: string
   tenantShortName?: string | null
   tenantStatus: TenantStatus
+  /** 已占用存储空间(字节) */
+  usedStorageBytes: number
+  /** 已占用席位数（不含平台管理员成员） */
+  usedUserCount: number
   userLimit?: number | null
 }
 
@@ -43,6 +51,25 @@ export interface TenantDetailDto extends TenantListItemDto {
   modifiedBy?: string | null
   modifiedId?: ApiId | null
   remark?: string | null
+}
+
+/** 已超出配额的租户（存量核对用；上限为空即不限的租户不会出现在结果里） */
+export interface TenantOverQuotaDto {
+  /** 席位是否已超出上限 */
+  seatExceeded: boolean
+  /** 生效存储上限(MB) */
+  storageLimit?: number | null
+  /** 存储是否已超出上限 */
+  storageExceeded: boolean
+  tenantCode: string
+  tenantId: ApiId
+  tenantName: string
+  /** 已占用存储空间(字节) */
+  usedStorageBytes: number
+  /** 已占用席位数 */
+  usedUserCount: number
+  /** 生效席位上限 */
+  userLimit?: number | null
 }
 
 export interface TenantCreateDto extends BasicCreateDto {

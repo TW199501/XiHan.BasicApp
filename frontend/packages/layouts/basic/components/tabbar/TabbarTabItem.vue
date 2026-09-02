@@ -1,8 +1,7 @@
 <script lang="ts" setup>
 import type { TabItem } from '~/types'
-import { useSortable } from '@dnd-kit/vue/sortable'
-import { NIcon } from 'naive-ui'
-import { computed, ref } from 'vue'
+import { XhSortableItem } from '@xihan-ui/vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { HOME_PATH } from '~/constants'
 import { Icon } from '~/iconify'
@@ -35,14 +34,6 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
-// ── 拖拽排序（@dnd-kit/vue）：固定标签 / 关闭拖拽时禁用 ──────────────
-const rootRef = ref<HTMLElement | null>(null)
-const { isDragging } = useSortable({
-  id: () => props.item.path,
-  index: () => props.index,
-  element: rootRef,
-  disabled: () => !props.draggable,
-})
 
 function resolveIcon(icon: string) {
   if (!icon) {
@@ -81,6 +72,23 @@ function onAuxClick(event: MouseEvent) {
     emit('middleClose', props.item.path)
   }
 }
+
+/**
+ * 悬停提示：首行是标签名（标题会被 120px 截断，悬停第一眼要看得到全名），
+ * 次行逐条列出这枚标签当前真正可用的鼠标手势。
+ */
+const tabHint = computed(() => {
+  const parts: string[] = []
+  if (props.draggable) {
+    parts.push(t('tabbar.tab_hint_drag'))
+  }
+  if (props.item.closable && props.middleCloseEnabled !== false) {
+    parts.push(t('tabbar.tab_hint_middle'))
+  }
+  parts.push(t('tabbar.tab_hint_context'))
+  return `${props.item.displayTitle}
+${parts.join(t('tabbar.tab_hint_sep'))}`
+})
 </script>
 
 <template>
@@ -89,13 +97,14 @@ function onAuxClick(event: MouseEvent) {
     TransitionGroup 始终看到同一 DOM 节点类型，切换风格时只做原地 patch，
     不触发 leave/enter 动画，彻底消除切换闪烁。
   -->
-  <div
-    ref="rootRef"
+  <XhSortableItem
+    :item-id="item.path"
+    :disabled="!draggable"
     class="tab-item group relative flex shrink-0 select-none"
     :class="tabClass"
-    :data-dragging="isDragging || undefined"
     role="button"
     tabindex="0"
+    :title="tabHint"
     @click="emit('jump', item.path)"
     @mousedown.middle.prevent
     @auxclick.prevent="onAuxClick"
@@ -129,15 +138,15 @@ function onAuxClick(event: MouseEvent) {
         <div
           class="chrome-tab__main relative z-[2] mx-[12px] flex h-full min-w-[60px] items-center gap-1 pr-1"
         >
-          <NIcon v-if="showIcon && item.meta?.icon" size="13" class="flex-shrink-0 opacity-70">
+          <span v-if="showIcon && item.meta?.icon" class="flex-shrink-0 opacity-70" style="display: inline-flex; font-size: 13px">
             <Icon :icon="resolveIcon(item.meta.icon as string)" />
-          </NIcon>
+          </span>
           <span class="chrome-tab__title">{{ item.displayTitle }}</span>
           <template v-if="item.splitRight">
             <span class="split-tab-sep">|</span>
-            <NIcon v-if="showIcon && item.splitRight.icon" size="13" class="flex-shrink-0 opacity-70">
+            <span v-if="showIcon && item.splitRight.icon" class="flex-shrink-0 opacity-70" style="display: inline-flex; font-size: 13px">
               <Icon :icon="resolveIcon(item.splitRight.icon)" />
-            </NIcon>
+            </span>
             <span class="chrome-tab__title">{{ item.splitRight.title }}</span>
           </template>
           <button
@@ -145,32 +154,29 @@ function onAuxClick(event: MouseEvent) {
             class="chrome-tab__close chrome-tab__action flex h-5 w-5 items-center justify-center rounded-full"
             type="button"
             :aria-label="t('tabbar.close_tab')"
+            :title="t('tabbar.close_tab')"
             @click.stop="emit('close', item.path, $event)"
           >
-            <NIcon size="12">
-              <Icon icon="lucide:x" />
-            </NIcon>
+            <Icon width="12" height="12" icon="lucide:x" />
           </button>
           <button
             v-else-if="item.pinned && item.path !== HOME_PATH"
             class="chrome-tab__pin chrome-tab__action flex h-5 w-5 items-center justify-center rounded-full"
             type="button"
             :aria-label="t('tabbar.unpin')"
+            :title="t('tabbar.unpin')"
             @click.stop="emit('togglePin', item.path)"
           >
-            <NIcon size="12">
-              <Icon icon="lucide:pin" />
-            </NIcon>
+            <Icon width="12" height="12" icon="lucide:pin" />
           </button>
           <!-- 首页固定标签：只读锁图标（强制固定、不可取消，纯展示不触发 togglePin） -->
           <span
             v-else-if="item.pinned && item.path === HOME_PATH"
             class="chrome-tab__lock chrome-tab__action flex h-5 w-5 items-center justify-center rounded-full"
             :aria-label="t('tabbar.pinned')"
+            :title="t('tabbar.pinned')"
           >
-            <NIcon size="12">
-              <Icon icon="lucide:lock" />
-            </NIcon>
+            <Icon width="12" height="12" icon="lucide:lock" />
           </span>
         </div>
       </div>
@@ -179,15 +185,15 @@ function onAuxClick(event: MouseEvent) {
     <!-- ======== Plain / Card / Brisk 风格内容 ======== -->
     <template v-else>
       <div class="flat-tab__inner relative flex h-full items-center gap-1 px-4">
-        <NIcon v-if="showIcon && item.meta?.icon" size="13" class="flex-shrink-0 opacity-70">
+        <span v-if="showIcon && item.meta?.icon" class="flex-shrink-0 opacity-70" style="display: inline-flex; font-size: 13px">
           <Icon :icon="resolveIcon(item.meta.icon as string)" />
-        </NIcon>
+        </span>
         <span class="flat-tab__title">{{ item.displayTitle }}</span>
         <template v-if="item.splitRight">
           <span class="split-tab-sep">|</span>
-          <NIcon v-if="showIcon && item.splitRight.icon" size="13" class="flex-shrink-0 opacity-70">
+          <span v-if="showIcon && item.splitRight.icon" class="flex-shrink-0 opacity-70" style="display: inline-flex; font-size: 13px">
             <Icon :icon="resolveIcon(item.splitRight.icon)" />
-          </NIcon>
+          </span>
           <span class="flat-tab__title">{{ item.splitRight.title }}</span>
         </template>
         <button
@@ -195,36 +201,33 @@ function onAuxClick(event: MouseEvent) {
           class="flat-tab__close flat-tab__action flex h-5 w-5 items-center justify-center rounded-full"
           type="button"
           :aria-label="t('tabbar.close_tab')"
+          :title="t('tabbar.close_tab')"
           @click.stop="emit('close', item.path, $event)"
         >
-          <NIcon size="12">
-            <Icon icon="lucide:x" />
-          </NIcon>
+          <Icon width="12" height="12" icon="lucide:x" />
         </button>
         <button
           v-else-if="item.pinned && item.path !== HOME_PATH"
           class="flat-tab__pin flat-tab__action flex h-5 w-5 items-center justify-center rounded-full"
           type="button"
           :aria-label="t('tabbar.unpin')"
+          :title="t('tabbar.unpin')"
           @click.stop="emit('togglePin', item.path)"
         >
-          <NIcon size="12">
-            <Icon icon="lucide:pin" />
-          </NIcon>
+          <Icon width="12" height="12" icon="lucide:pin" />
         </button>
         <!-- 首页固定标签：只读锁图标（强制固定、不可取消，纯展示不触发 togglePin） -->
         <span
           v-else-if="item.pinned && item.path === HOME_PATH"
           class="flat-tab__lock flat-tab__action flex h-5 w-5 items-center justify-center rounded-full"
           :aria-label="t('tabbar.pinned')"
+          :title="t('tabbar.pinned')"
         >
-          <NIcon size="12">
-            <Icon icon="lucide:lock" />
-          </NIcon>
+          <Icon width="12" height="12" icon="lucide:lock" />
         </span>
       </div>
     </template>
-  </div>
+  </XhSortableItem>
 </template>
 
 <style scoped>
@@ -516,7 +519,7 @@ function onAuxClick(event: MouseEvent) {
   color: var(--tab-active-color);
 }
 
-/* 拖拽中的标签（dnd-kit 通过 data-dragging 标记拖拽源） */
+/* 拖拽中的标签（sortable 在被拖那一项上写 data-dragging） */
 .tab-item[data-dragging] {
   z-index: 3;
   cursor: grabbing;

@@ -1,19 +1,82 @@
-import { readFileSync } from 'node:fs'
+import type { ComponentResolver } from 'unplugin-vue-components'
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath, URL } from 'node:url'
 
 import tailwindcss from '@tailwindcss/vite'
 import vue from '@vitejs/plugin-vue'
 import vueJsx from '@vitejs/plugin-vue-jsx'
+import { xihanUiBanner } from '@xihan-ui/kernel/vite'
 import AutoImport from 'unplugin-auto-import/vite'
-import { NaiveUiResolver } from 'unplugin-vue-components/resolvers'
 import Components from 'unplugin-vue-components/vite'
 import { defineConfig, loadEnv } from 'vite'
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf-8'))
 
+const rootDir = fileURLToPath(new URL('.', import.meta.url))
+
+/** pnpm 内部依赖协议前缀，这类声明不是版本号 */
+const PNPM_PROTOCOL_RE = /^(?:catalog|workspace|link|file|npm):/
+
+/**
+ * 解析单个依赖的真实版本：读 node_modules 里已安装那一份的 version。
+ * 安装态一次覆盖 catalog / workspace / link / overrides 四种协议，
+ * 而 pnpm-workspace.yaml 的 catalog 段只写范围符、且可能与实装漂移。
+ * 读不到时具体版本号原样保留，pnpm 协议串显示为 '-'。
+ */
+function resolveDependencyVersion(name: string, spec: string): string {
+  const file = join(rootDir, 'node_modules', name, 'package.json')
+  if (existsSync(file)) {
+    try {
+      const version = (JSON.parse(readFileSync(file, 'utf-8')) as { version?: string }).version
+      if (typeof version === 'string' && version)
+        return version
+    }
+    catch {
+      // 装坏的包按读不到处理
+    }
+  }
+  return PNPM_PROTOCOL_RE.test(spec) ? '-' : spec
+}
+
+/** 把一组依赖声明整体解析成 包名 → 真实版本 */
+function resolveDependencyVersions(declarations: Record<string, unknown>): Record<string, string> {
+  const result: Record<string, string> = {}
+  for (const [name, spec] of Object.entries(declarations))
+    result[name] = resolveDependencyVersion(name, typeof spec === 'string' ? spec : '')
+  return result
+}
+
+const appDependencies = resolveDependencyVersions(pkg.dependencies ?? {})
+const appDevDependencies = resolveDependencyVersions(pkg.devDependencies ?? {})
+
+/**
+ * XiHan.UI 是解剖式组件库：一个组件由 Root / Trigger / Content 等多个部件组成，
+ * 一个页面动辄要引十几个具名导出。此解析器把模板里的 `Xh*` 标签直接映射到 `@xihan-ui/vue`，
+ * 免去逐个手写 import；仍是具名导入，摇树不受影响。
+ */
+function XiHanUiResolver(): ComponentResolver {
+  return {
+    type: 'component',
+    resolve(name: string) {
+      if (name.startsWith('Xh'))
+        return { name, from: '@xihan-ui/vue' }
+      return undefined
+    },
+  }
+}
+
 function createManualChunks(id: string) {
   const normalizedId = id.replace(/\\/g, '/')
+
+  // 两种装法都要认：装 npm 正式版时路径是 /@xihan-ui/；临时用 overrides 链到同级
+  // XiHan.UI 源码调试时路径不含 /node_modules/，因此本判断必须排在下面的 node_modules 早退之前。
+  if (normalizedId.includes('/XiHan.UI/ui/packages/') || normalizedId.includes('/@xihan-ui/')) {
+    if (normalizedId.includes('/features/backgrounds/') || normalizedId.includes('/@xihan-ui/backgrounds/'))
+      return 'vendor-backgrounds'
+    return 'vendor-ui'
+  }
 
   if (!normalizedId.includes('/node_modules/')) {
     return undefined
@@ -41,17 +104,6 @@ function createManualChunks(id: string) {
     || normalizedId.includes('/@vue/')
     || normalizedId.includes('/vue-i18n/')
     || normalizedId.includes('/@intlify/')
-    || normalizedId.includes('/naive-ui/')
-    || normalizedId.includes('/@juggle/resize-observer/')
-    || normalizedId.includes('/async-validator/')
-    || normalizedId.includes('/css-render/')
-    || normalizedId.includes('/@css-render/')
-    || normalizedId.includes('/evtd/')
-    || normalizedId.includes('/seemly/')
-    || normalizedId.includes('/treemate/')
-    || normalizedId.includes('/vdirs/')
-    || normalizedId.includes('/vooks/')
-    || normalizedId.includes('/vueuc/')
   ) {
     return 'vendor-ui'
   }
@@ -171,8 +223,12 @@ export default defineConfig(({ mode }) => {
       __APP_NAME__: JSON.stringify(pkg.name),
       __APP_AUTHOR_NAME__: JSON.stringify(pkg.author?.name ?? ''),
       __APP_AUTHOR_URL__: JSON.stringify(pkg.author?.url ?? ''),
+      __APP_DEPENDENCIES__: JSON.stringify(appDependencies),
+      __APP_DEV_DEPENDENCIES__: JSON.stringify(appDevDependencies),
     },
     plugins: [
+      // XiHan.UI 的启动横幅打在这个终端里，不占浏览器控制台
+      xihanUiBanner(),
       tailwindcss(),
       vue(),
       vueJsx(),
@@ -181,7 +237,9 @@ export default defineConfig(({ mode }) => {
         dts: 'src/types/auto-imports.d.ts',
       }),
       Components({
-        resolvers: [NaiveUiResolver()],
+        resolvers: [XiHanUiResolver()],
+        // 只解析 XiHan.UI 的部件；应用自有组件一律显式 import，避免隐式全局注册
+        dirs: [],
         dts: 'src/types/components.d.ts',
       }),
     ],
@@ -190,6 +248,10 @@ export default defineConfig(({ mode }) => {
         '@': fileURLToPath(new URL('./src', import.meta.url)),
         '~': fileURLToPath(new URL('./packages', import.meta.url)),
       },
+      // @xihan-ui/* 的 peer 依赖可能解析到另一份 Vue：pnpm 的隔离 store 下如此，
+      // 临时链到同级 XiHan.UI 源码时更是如此。不去重就会出现两份 Vue 运行时，
+      // provide/inject 与响应式当场断掉。
+      dedupe: ['vue', 'vue-router', 'pinia', 'vue-i18n', '@vue/runtime-core'],
     },
     css: {
       preprocessorOptions: {},
@@ -199,6 +261,11 @@ export default defineConfig(({ mode }) => {
       port: Number(env.VITE_PORT) || 9000,
       warmup: {
         clientFiles: ['./src/main.ts', './src/App.vue', './packages/layouts/basic/index.vue'],
+      },
+      // 留着 ../../XiHan.UI：临时用 overrides 链到同级源码调试时，仓外路径不在
+      // Vite 默认允许的文件系统范围内。装正式版时这一条不起作用，也没有副作用。
+      fs: {
+        allow: ['..', '../../XiHan.UI'],
       },
       proxy: {
         [apiPrefix]: {

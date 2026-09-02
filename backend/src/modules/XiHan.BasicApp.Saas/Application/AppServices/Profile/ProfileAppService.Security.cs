@@ -5,6 +5,7 @@ using XiHan.BasicApp.Saas.Application.Dtos;
 using XiHan.BasicApp.Saas.Application.Mappers;
 using XiHan.BasicApp.Saas.Application.Services;
 using XiHan.BasicApp.Saas.Domain.Entities;
+using XiHan.Framework.Security.Claims;
 using XiHan.Framework.Uow.Attributes;
 
 namespace XiHan.BasicApp.Saas.Application.AppServices;
@@ -20,6 +21,7 @@ public sealed partial class ProfileAppService
     [UnitOfWork(true)]
     public async Task ChangePasswordAsync(ProfileChangePasswordDto input, CancellationToken cancellationToken = default)
     {
+        _currentUser.EnsureNotImpersonating("修改密码");
         ArgumentNullException.ThrowIfNull(input);
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -27,6 +29,13 @@ public sealed partial class ProfileAppService
         var result = await _profileDomainService.ChangePasswordAsync(
             ProfileApplicationMapper.ToChangePasswordCommand(input, currentUserId),
             cancellationToken);
+
+        // 改密后踢掉其它设备：当前会话保留（否则改完密码自己先掉线），
+        // 其余会话与由本人发起的模仿会话一并吊销，旧令牌不再可用
+        var revoked = await _profileDomainService.RevokeOtherSessionsAsync(
+            ProfileApplicationMapper.ToOtherSessionsRevokeCommand(currentUserId, GetCurrentSessionId(), currentUserId),
+            cancellationToken);
+        await PublishSessionRevokedEventsAsync(revoked.DomainEvents, cancellationToken);
 
         // 认证审计：密码修改落登录日志
         await PublishSecurityAuditAsync(LoginResult.PasswordChanged, "用户修改密码");
@@ -39,6 +48,34 @@ public sealed partial class ProfileAppService
             "profile.password.changed",
             result.User.BasicId,
             cancellationToken: cancellationToken);
+
+        // 强制改密锁的解锁方式就是改密：改密成功即解除会话锁定，前端随后收起强制改密引导
+        await ReleasePasswordChangeLockIfNeededAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// 当前会话若处于强制改密锁定（默认密码登录），修改密码成功后解除锁定并立即失效会话状态缓存。
+    /// 其它原因的锁定（锁屏等）不受影响。
+    /// </summary>
+    private async Task ReleasePasswordChangeLockIfNeededAsync(CancellationToken cancellationToken)
+    {
+        var sessionBusinessId = _currentUser.FindClaim(XiHanClaimTypes.SessionId)?.Value;
+        if (string.IsNullOrWhiteSpace(sessionBusinessId))
+        {
+            return;
+        }
+
+        var session = await _userSessionRepository.GetByUserSessionIdAsync(sessionBusinessId, cancellationToken);
+        if (session is null || !session.IsLocked || session.LockReason != SessionLockReasons.PasswordChangeRequired)
+        {
+            return;
+        }
+
+        session.IsLocked = false;
+        session.LockReason = null;
+        session.LockPasswordHash = null;
+        _ = await _userSessionRepository.UpdateAsync(session, cancellationToken);
+        await _cacheInvalidator.InvalidateSessionStateAsync(session.UserSessionId, cancellationToken);
     }
 
     /// <summary>
@@ -47,6 +84,7 @@ public sealed partial class ProfileAppService
     [UnitOfWork(true)]
     public async Task Disable2FAAsync(ProfileTwoFactorVerifyDto input, CancellationToken cancellationToken = default)
     {
+        _currentUser.EnsureNotImpersonating("关闭两步验证");
         ArgumentNullException.ThrowIfNull(input);
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -71,6 +109,7 @@ public sealed partial class ProfileAppService
     [UnitOfWork(true)]
     public async Task Enable2FAAsync(ProfileTwoFactorVerifyDto input, CancellationToken cancellationToken = default)
     {
+        _currentUser.EnsureNotImpersonating("开启两步验证");
         ArgumentNullException.ThrowIfNull(input);
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -89,6 +128,7 @@ public sealed partial class ProfileAppService
     /// </summary>
     public async Task<ProfileVerificationCodeResultDto> Send2FASetupCodeAsync(ProfileTwoFactorMethodDto input, CancellationToken cancellationToken = default)
     {
+        _currentUser.EnsureNotImpersonating("发送两步验证设置验证码");
         ArgumentNullException.ThrowIfNull(input);
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -108,6 +148,7 @@ public sealed partial class ProfileAppService
     [UnitOfWork(true)]
     public async Task<ProfileTwoFactorSetupDto> Setup2FAAsync(CancellationToken cancellationToken = default)
     {
+        _currentUser.EnsureNotImpersonating("设置两步验证");
         cancellationToken.ThrowIfCancellationRequested();
 
         var currentUserId = GetCurrentUserIdOrThrow();

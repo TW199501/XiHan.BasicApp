@@ -3,7 +3,6 @@
 
 using XiHan.BasicApp.Core.Dtos;
 using XiHan.BasicApp.Chat.Domain.Entities;
-using XiHan.BasicApp.Saas.Domain.Entities;
 
 namespace XiHan.BasicApp.Chat.Application.Dtos;
 
@@ -75,6 +74,20 @@ public sealed class ChatMemberRemoveDto
     /// 被移出用户ID（等于当前用户即主动退群）
     /// </summary>
     public long UserId { get; set; }
+}
+
+/// <summary>
+/// 主动退群 DTO
+/// </summary>
+/// <remarks>
+/// 退出对象恒为当前登录用户，不接受用户ID 入参：移出他人是管理动作，走 RemoveMemberAsync。
+/// </remarks>
+public sealed class ChatConversationLeaveDto
+{
+    /// <summary>
+    /// 会话ID
+    /// </summary>
+    public long ConversationId { get; set; }
 }
 
 /// <summary>

@@ -1,7 +1,6 @@
 // Copyright (c) 2021-Present XiHanFun and contributors.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
-using SqlSugar;
 using XiHan.BasicApp.Saas.Domain.Entities;
 using XiHan.BasicApp.Saas.Domain.Repositories;
 using XiHan.Framework.Data.SqlSugar.Clients;
@@ -14,21 +13,6 @@ namespace XiHan.BasicApp.Saas.Infrastructure.Repositories;
 public sealed class ExportTaskRepository(ISqlSugarClientResolver clientResolver)
     : SaasRepository<SysExportTask>(clientResolver), IExportTaskRepository
 {
-    /// <summary>
-    /// 获取当前用户的导出任务分页（按创建时间倒序）
-    /// </summary>
-    public async Task<(List<SysExportTask> Items, int Total)> GetMineAsync(long userId, int pageIndex, int pageSize, CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        RefAsync<int> total = 0;
-        var items = await CreateQueryable()
-            .Where(task => task.CreatedId == userId)
-            .OrderByDescending(task => task.CreatedTime)
-            .ToPageListAsync(pageIndex, pageSize, total, cancellationToken);
-        return (items, total);
-    }
-
     /// <summary>
     /// 按主键获取当前用户的导出任务（自鉴权：仅返回本人创建的）
     /// </summary>

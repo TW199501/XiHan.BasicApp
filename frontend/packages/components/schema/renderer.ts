@@ -1,10 +1,10 @@
 import type { VNodeChild } from 'vue'
 import type { ListFieldSchema } from './types'
-import { NTag } from 'naive-ui'
+import { XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
 import { h } from 'vue'
 import { i18n } from '~/locales'
 import { formatDate, getOptionLabel } from '~/utils'
-import { resolveStatusTagType } from './status-tag'
+import { resolveStatusTagTone } from './status-tag'
 
 /** 安全读取行字段值（兼容具名 DTO 接口，无索引签名） */
 function readField(row: object, key: string): unknown {
@@ -87,25 +87,23 @@ export function renderFieldCell<TRow extends object>(
 
   const raw = readField(row, field.key)
 
-  // 标签型：用字典 options 映射 label，并以 NTag 着色
+  // 标签型：用字典 options 映射 label，并按语气着色
   if ((field.dataType === 'tag' || field.dataType === 'enum') && field.options) {
     if (raw == null) {
       return '-'
     }
     const label = getOptionLabel(toMutableOptions(field.options), raw as string | number)
-    const type = resolveStatusTagType(field.dictionaryCode, raw)
-    return h(NTag, { bordered: false, round: true, size: 'small', type }, () => label)
+    // 登记过语气的状态字典按语气着色，其余枚举走中性
+    const tone = resolveStatusTagTone(field.dictionaryCode, raw) ?? 'neutral'
+    return h(XhTagRoot, { variant: 'outline', tone }, () => h(XhTagLabel, () => label))
   }
 
   if (field.dataType === 'boolean') {
     if (raw == null) {
       return '-'
     }
-    return h(
-      NTag,
-      { bordered: false, round: true, size: 'small', type: raw ? 'success' : 'default' },
-      () => (raw ? i18n.global.t('common.statuses.yes') : i18n.global.t('common.statuses.no')),
-    )
+    // 是 / 否是状态，不是身份
+    return h(XhTagRoot, { variant: 'outline', tone: raw ? 'success' : 'neutral' }, () => h(XhTagLabel, () => (raw ? i18n.global.t('common.statuses.yes') : i18n.global.t('common.statuses.no'))))
   }
 
   return formatFieldText(field, row)

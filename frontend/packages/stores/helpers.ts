@@ -17,6 +17,8 @@ const registry = new Map<string, { value: unknown }>()
 const defaults = new Map<string, unknown>()
 /** 后端回写开关：仅登录并完成水合后开启，避免登录页 / 离线时产生无谓的失败请求 */
 let backendSyncEnabled = false
+/** 本次会话由身份切换而来（切租户 / 模仿登录），水合时不拿本地偏好播种 */
+let identitySwitched = false
 /** 一次会话仅水合一次（登录或刷新后），退出登录时重置 */
 let hydrated = false
 let syncTimer: ReturnType<typeof setTimeout> | null = null
@@ -189,8 +191,11 @@ function scheduleBackendSync() {
     clearTimeout(syncTimer)
   }
   syncTimer = setTimeout(() => {
-    // 防抖期间可能被关闭，触发时再确认
-    if (!isPreferenceSyncEnabled())
+    syncTimer = null
+    // 防抖期间三道门都可能关闭，触发时必须与入口同样复查：
+    // 只查同步开关会让「排队后才进入草稿」的场景把草稿预览值随整份快照上行并推给其它设备。
+    // 此处丢弃这一次上行是安全的：快照是全量的，保存草稿 / 下一次任意偏好变更都会把最新值补上。
+    if (persistSuspended || !backendSyncEnabled || !isPreferenceSyncEnabled())
       return
     pushPreferencesToBackend()
   }, 800)
@@ -282,6 +287,9 @@ export function discardPreferenceDraft(): void {
   if (reverted) {
     void nextTick(() => {
       persistSuspended = false
+      // 还原本身也会经 bindPersist 的 watch 在暂停期把 dirty 顶回 true，
+      // 故在 watch flush 完成后再复位一次，避免「已取消却仍提示未保存」
+      preferenceDraftDirty.value = false
     })
   }
   else {
@@ -334,8 +342,9 @@ export async function hydratePreferencesFromBackend(options?: { showIsland?: boo
         }
       })
     }
-    else {
-      // 后端无偏好记录：登录后以本地当前偏好播种
+    else if (!identitySwitched) {
+      // 后端无偏好记录：登录后以本地当前偏好播种。
+      // 身份切换（切租户 / 模仿登录）而来的会话不播种：本地那份属于上一身份，播下去等于替新身份做主
       needSeed = true
     }
     task?.success()
@@ -412,6 +421,13 @@ export async function applyRemotePreferenceSnapshot(settingValue?: null | string
 }
 
 /** 退出登录：停止后端回写、清空待发请求，允许下次登录重新水合 */
+/**
+ * 标记本次会话由身份切换而来，随后的水合不再以本地偏好播种新身份的账号。
+ */
+export function markPreferenceIdentitySwitched(): void {
+  identitySwitched = true
+}
+
 export function resetPreferenceBackendSync(): void {
   backendSyncEnabled = false
   hydrated = false

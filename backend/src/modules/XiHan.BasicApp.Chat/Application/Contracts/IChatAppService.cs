@@ -2,7 +2,6 @@
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using XiHan.BasicApp.Chat.Application.Dtos;
-using XiHan.BasicApp.Saas.Application.Dtos;
 using XiHan.Framework.Application.Contracts.Services;
 
 namespace XiHan.BasicApp.Chat.Application.Contracts;
@@ -33,9 +32,14 @@ public interface IChatAppService : IApplicationService
     Task AddMembersAsync(ChatMemberAddDto input, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// 移除群成员/退群
+    /// 移除群成员（管理动作：把别人移出群，需群治理权限）
     /// </summary>
     Task RemoveMemberAsync(ChatMemberRemoveDto input, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 主动退群（任何群成员自助，无需群治理权限；群主须先移交群主）
+    /// </summary>
+    Task LeaveConversationAsync(ChatConversationLeaveDto input, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 发送消息（落库后向会话成员实时推送）

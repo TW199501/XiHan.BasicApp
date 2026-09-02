@@ -7,6 +7,7 @@ import type {
   AppEnumBatchQuery,
   AppEnumDefinition,
   AppEnumNameQuery,
+  CaptchaChallenge,
   ChangeEmailParams,
   ChangePasswordParams,
   ChangePhoneParams,
@@ -27,6 +28,7 @@ import type {
   PasswordResetResult,
   PermissionInfo,
   PhoneLoginParams,
+  StartImpersonationParams,
   SwitchTenantParams,
   TwoFactorSetupResult,
   UpdateProfileParams,
@@ -38,6 +40,7 @@ import type {
 } from '~/types'
 import { ResourceAccessLevel } from '@/api/modules/authorization'
 import { fileApi } from '@/api/modules/files'
+import { impersonationApi } from '@/api/modules/identity'
 import { enumMetadataApi } from '@/api/modules/metadata/enum-metadata'
 import { tenantApi } from '@/api/modules/tenant'
 import { workbenchApi } from '@/api/modules/workbench'
@@ -61,6 +64,7 @@ for (const [path, loader] of Object.entries(moduleViewModules)) {
 const defaultLoginConfig: LoginConfig = {
   loginMethods: ['password'],
   oAuthProviders: [],
+  captchaEnabled: false,
 }
 
 function emptyEnum(name: string): AppEnumDefinition {
@@ -133,6 +137,9 @@ function createAuthApis() {
     },
     loginApi(input: LoginParams) {
       return requestClient.post<LoginResponse>('/Auth/Login', input)
+    },
+    getCaptchaApi() {
+      return requestClient.get<CaptchaChallenge>('/Auth/Captcha')
     },
     logoutApi() {
       return postWithFallback('/Auth/Logout', undefined, undefined)
@@ -422,6 +429,16 @@ function createShellApis() {
   }
 }
 
+function createImpersonationApis() {
+  return {
+    impersonationApi: {
+      candidates: (keyword?: string) => impersonationApi.candidates(keyword),
+      start: (input: StartImpersonationParams) => impersonationApi.start(input),
+      stop: () => impersonationApi.stop(),
+    },
+  }
+}
+
 function createTenantApis() {
   return {
     tenantApi: {
@@ -435,6 +452,7 @@ export function createApplicationApis() {
   return {
     ...createAuthApis(),
     ...createProfileApis(),
+    ...createImpersonationApis(),
     ...createShellApis(),
     ...createTenantApis(),
   }

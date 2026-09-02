@@ -8,27 +8,16 @@ import type {
   SysNetworkInfo,
   SysRuntimeInfo,
 } from '@/api'
-import {
-  NButton,
-  NCard,
-  NCollapse,
-  NCollapseItem,
-  NGrid,
-  NGridItem,
-  NProgress,
-  NSkeleton,
-  NTag,
-  useMessage,
-} from 'naive-ui'
+import { XhButton, XhCardBody, XhCardHeader, XhCardRoot, XhGridItem, XhGridRoot, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { serverManagementApi } from '@/api'
+import { toast } from '~/composables'
 import { Icon } from '~/iconify'
 
 defineOptions({ name: 'PlatformServerPage' })
 
 const { t } = useI18n()
-const message = useMessage()
 const loading = ref(false)
 const initialized = ref(false)
 let timer: ReturnType<typeof setInterval> | null = null
@@ -192,7 +181,7 @@ async function fetchData() {
     gpuInfos.value = gpuRes ?? []
   }
   catch (error) {
-    message.error((error as Error)?.message || t('setting.server.fetch_failed'))
+    toast.error((error as Error)?.message || t('setting.server.fetch_failed'))
   }
   finally {
     loading.value = false
@@ -216,45 +205,102 @@ onUnmounted(() => {
 <template>
   <div class="sv-page">
     <template v-if="showSkeleton">
-      <NCard :bordered="false" size="small" class="sv-card">
-        <div class="space-y-3">
-          <NSkeleton text :repeat="1" style="width: 180px" />
-          <NGrid cols="1 s:2 l:5" responsive="screen" :x-gap="10" :y-gap="10">
-            <NGridItem v-for="i in 5" :key="`ov-${i}`">
-              <div class="sv-skeleton-panel">
-                <NSkeleton circle :width="36" :height="36" />
-                <div class="flex-1 space-y-2">
-                  <NSkeleton text style="width: 60%" />
-                  <NSkeleton text style="width: 85%" />
-                  <NSkeleton text style="width: 45%" />
+      <!-- 骨架直接复用真实内容的布局类，底色、列数与断点自然一致 -->
+      <div class="sv-banner">
+        <div class="sv-banner-head">
+          <span class="xh-skeleton-bone" style="inline-size: 96px; block-size: 15px" />
+          <span class="xh-skeleton-bone" style="inline-size: 108px; block-size: 24px" />
+        </div>
+        <div class="sv-overview-grid">
+          <div v-for="i in 5" :key="`sk-ov-${i}`" class="sv-overview-item">
+            <span class="xh-skeleton-bone xh-skeleton-bone--circle" style="inline-size: 36px; block-size: 36px" />
+            <div class="sv-overview-body space-y-1">
+              <span class="xh-skeleton-bone" style="inline-size: 48%; block-size: 12px" />
+              <span class="xh-skeleton-bone" style="inline-size: 86%; block-size: 13px" />
+              <span class="xh-skeleton-bone" style="inline-size: 62%; block-size: 11px" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CPU 5 行明细、内存 4 行 -->
+      <XhGridRoot :cols="{ base: 1, md: 2 }" gap="md">
+        <XhGridItem v-for="(rows, i) in [5, 4]" :key="`sk-perf-${i}`">
+          <XhCardRoot variant="ghost" class="sv-card">
+            <XhCardHeader>
+              <span class="xh-skeleton-bone" style="inline-size: 88px; block-size: 14px" />
+            </XhCardHeader>
+            <XhCardBody>
+              <div class="sv-perf">
+                <div class="sv-gauge">
+                  <span class="xh-skeleton-bone xh-skeleton-bone--circle" style="inline-size: 160px; block-size: 160px" />
+                </div>
+                <div class="sv-details">
+                  <div v-for="r in rows" :key="r" class="sv-detail-row">
+                    <span class="xh-skeleton-bone" style="inline-size: 56px; block-size: 13px" />
+                    <span class="xh-skeleton-bone" style="inline-size: 64px; block-size: 13px" />
+                  </div>
                 </div>
               </div>
-            </NGridItem>
-          </NGrid>
-        </div>
-      </NCard>
+            </XhCardBody>
+          </XhCardRoot>
+        </XhGridItem>
+      </XhGridRoot>
 
-      <NGrid cols="1 m:2" responsive="screen" :x-gap="12" :y-gap="12">
-        <NGridItem v-for="i in 2" :key="`perf-${i}`">
-          <NCard :bordered="false" size="small" class="sv-card">
-            <div class="sv-skeleton-panel-col">
-              <div class="sv-skeleton-circle">
-                <NSkeleton circle :width="160" :height="160" />
+      <!-- 磁盘：3 列，每格 标题行 + 进度条 + 统计行 -->
+      <XhCardRoot variant="ghost" class="sv-card">
+        <XhCardHeader>
+          <span class="xh-skeleton-bone" style="inline-size: 88px; block-size: 14px" />
+        </XhCardHeader>
+        <XhCardBody>
+          <XhGridRoot :cols="{ base: 1, sm: 2, lg: 3 }" gap="md">
+            <XhGridItem v-for="i in 3" :key="`sk-disk-${i}`">
+              <div class="sv-disk-item">
+                <div class="sv-disk-head">
+                  <span class="xh-skeleton-bone" style="inline-size: 72px; block-size: 14px" />
+                  <span class="xh-skeleton-bone" style="inline-size: 88px; block-size: 14px" />
+                </div>
+                <span class="xh-skeleton-bone" style="block-size: 6px" />
+                <div class="sv-disk-stats">
+                  <span v-for="n in 3" :key="n" class="xh-skeleton-bone" style="inline-size: 64px; block-size: 12px" />
+                </div>
               </div>
-              <div class="space-y-2 w-full">
-                <NSkeleton text :repeat="4" />
-              </div>
+            </XhGridItem>
+          </XhGridRoot>
+        </XhCardBody>
+      </XhCardRoot>
+
+      <!-- 显卡 2 行、网络 3 行：折叠列表画成等高的触发行 -->
+      <XhCardRoot v-for="(rows, i) in [2, 3]" :key="`sk-acc-${i}`" variant="ghost" class="sv-card">
+        <XhCardHeader>
+          <span class="xh-skeleton-bone" style="inline-size: 88px; block-size: 14px" />
+        </XhCardHeader>
+        <XhCardBody>
+          <div class="space-y-1">
+            <div v-for="r in rows" :key="r" class="sv-collapse-title" style="padding: 10px 0">
+              <span class="xh-skeleton-bone xh-skeleton-bone--circle" style="inline-size: 14px; block-size: 14px" />
+              <span class="xh-skeleton-bone" style="inline-size: 180px; block-size: 13px" />
+              <span class="xh-skeleton-bone" style="inline-size: 48px; block-size: 18px" />
             </div>
-          </NCard>
-        </NGridItem>
-      </NGrid>
+          </div>
+        </XhCardBody>
+      </XhCardRoot>
 
-      <NCard v-for="i in 4" :key="`card-${i}`" :bordered="false" size="small" class="sv-card">
-        <div class="space-y-3">
-          <NSkeleton text style="width: 140px" />
-          <NSkeleton text :repeat="3" />
-        </div>
-      </NCard>
+      <!-- 主板 4 项、系统信息 12 项：同一种格子，只是数量与网格类不同 -->
+      <XhCardRoot v-for="g in [{ cls: 'sv-board-grid', n: 4 }, { cls: 'sv-sys-grid', n: 12 }]" :key="g.cls" variant="ghost" class="sv-card">
+        <XhCardHeader>
+          <span class="xh-skeleton-bone" style="inline-size: 88px; block-size: 14px" />
+        </XhCardHeader>
+        <XhCardBody>
+          <div :class="g.cls">
+            <div v-for="i in g.n" :key="i" class="sv-sys-item">
+              <span class="xh-skeleton-bone" style="inline-size: 26px; block-size: 26px; border-radius: 6px" />
+              <span class="xh-skeleton-bone" style="inline-size: 56px; block-size: 12px" />
+              <span class="xh-skeleton-bone" style="inline-size: 96px; block-size: 13px; margin-left: auto" />
+            </div>
+          </div>
+        </XhCardBody>
+      </XhCardRoot>
     </template>
 
     <template v-else>
@@ -266,23 +312,19 @@ onUnmounted(() => {
             <span>{{ t('setting.server.system_overview') }}</span>
           </div>
           <div class="sv-banner-actions">
-            <NTag size="small" type="success" :bordered="false" round>
-              <template #icon>
-                <Icon icon="lucide:activity" width="12" />
-              </template>
-              {{ t('setting.server.running_normal') }}
-            </NTag>
-            <NButton
-              size="tiny"
-              quaternary
+            <XhTagRoot variant="subtle" size="sm" tone="success">
+              <Icon icon="lucide:activity" width="12" />
+              <XhTagLabel>{{ t('setting.server.running_normal') }}</XhTagLabel>
+            </XhTagRoot>
+            <XhButton
+              size="sm"
+              variant="ghost"
               :loading="loading"
               class="sv-refresh-btn"
               @click="fetchData"
             >
-              <template #icon>
-                <Icon icon="lucide:refresh-cw" width="14" />
-              </template>
-            </NButton>
+              <Icon icon="lucide:refresh-cw" width="14" />
+            </XhButton>
           </div>
         </div>
         <div class="sv-overview-grid">
@@ -306,336 +348,371 @@ onUnmounted(() => {
       </div>
 
       <!-- CPU & 内存 -->
-      <NGrid cols="1 m:2" responsive="screen" :x-gap="12" :y-gap="12">
-        <NGridItem>
-          <NCard :bordered="false" size="small" class="sv-card">
-            <template #header>
+      <XhGridRoot :cols="{ base: 1, md: 2 }" gap="md">
+        <XhGridItem>
+          <XhCardRoot variant="ghost" class="sv-card">
+            <XhCardHeader>
               <div class="sv-card-header">
                 <Icon icon="lucide:cpu" width="16" />
                 <span>{{ t('setting.server.cpu_info') }}</span>
               </div>
-            </template>
-            <div class="sv-perf">
-              <div class="sv-gauge">
-                <NProgress
-                  type="circle"
-                  :percentage="cpuPct"
-                  :color="usageColor(cpuPct)"
-                  rail-color="var(--border-color)"
-                  :stroke-width="8"
-                  :offset-degree="0"
-                >
-                  <div class="sv-gauge-inner">
-                    <div class="sv-gauge-pct" :style="{ color: usageColor(cpuPct) }">
-                      {{ cpuPct }}
-                      <small>%</small>
+            </XhCardHeader>
+            <XhCardBody>
+              <div class="sv-perf">
+                <div class="sv-gauge">
+                  <XhProgress
+                    variant="circle"
+                    :value="cpuPct"
+                    :stroke-width="8"
+                    :style="{
+                      '--xh-progress-range': usageColor(cpuPct),
+                      '--xh-progress-track': 'var(--border-color)',
+                    }"
+                  >
+                    <div class="sv-gauge-inner">
+                      <div class="sv-gauge-pct" :style="{ color: usageColor(cpuPct) }">
+                        {{ cpuPct }}
+                        <small>%</small>
+                      </div>
+                      <div class="sv-gauge-label">
+                        {{ t('setting.server.usage_rate') }}
+                      </div>
                     </div>
-                    <div class="sv-gauge-label">
-                      {{ t('setting.server.usage_rate') }}
-                    </div>
+                  </XhProgress>
+                </div>
+                <div class="sv-details">
+                  <div v-for="d in cpuDetails" :key="d.label" class="sv-detail-row">
+                    <span class="sv-detail-label">
+                      {{ d.label }}
+                    </span>
+                    <span class="sv-detail-value">
+                      {{ d.value }}
+                    </span>
                   </div>
-                </NProgress>
-              </div>
-              <div class="sv-details">
-                <div v-for="d in cpuDetails" :key="d.label" class="sv-detail-row">
-                  <span class="sv-detail-label">
-                    {{ d.label }}
-                  </span>
-                  <span class="sv-detail-value">
-                    {{ d.value }}
-                  </span>
                 </div>
               </div>
-            </div>
-          </NCard>
-        </NGridItem>
-        <NGridItem>
-          <NCard :bordered="false" size="small" class="sv-card">
-            <template #header>
+            </XhCardBody>
+          </XhCardRoot>
+        </XhGridItem>
+        <XhGridItem>
+          <XhCardRoot variant="ghost" class="sv-card">
+            <XhCardHeader>
               <div class="sv-card-header">
                 <Icon icon="lucide:memory-stick" width="16" />
                 <span>{{ t('setting.server.memory_info') }}</span>
               </div>
-            </template>
-            <div class="sv-perf">
-              <div class="sv-gauge">
-                <NProgress
-                  type="circle"
-                  :percentage="memPct"
-                  :color="usageColor(memPct)"
-                  rail-color="var(--border-color)"
-                  :stroke-width="8"
-                  :offset-degree="0"
-                >
-                  <div class="sv-gauge-inner">
-                    <div class="sv-gauge-pct" :style="{ color: usageColor(memPct) }">
-                      {{ memPct }}
-                      <small>%</small>
+            </XhCardHeader>
+            <XhCardBody>
+              <div class="sv-perf">
+                <div class="sv-gauge">
+                  <XhProgress
+                    variant="circle"
+                    :value="memPct"
+                    :stroke-width="8"
+                    :style="{
+                      '--xh-progress-range': usageColor(memPct),
+                      '--xh-progress-track': 'var(--border-color)',
+                    }"
+                  >
+                    <div class="sv-gauge-inner">
+                      <div class="sv-gauge-pct" :style="{ color: usageColor(memPct) }">
+                        {{ memPct }}
+                        <small>%</small>
+                      </div>
+                      <div class="sv-gauge-label">
+                        {{ t('setting.server.usage_rate') }}
+                      </div>
                     </div>
-                    <div class="sv-gauge-label">
-                      {{ t('setting.server.usage_rate') }}
-                    </div>
+                  </XhProgress>
+                </div>
+                <div class="sv-details">
+                  <div v-for="d in memDetails" :key="d.label" class="sv-detail-row">
+                    <span class="sv-detail-label">
+                      {{ d.label }}
+                    </span>
+                    <span class="sv-detail-value">
+                      {{ d.value }}
+                    </span>
                   </div>
-                </NProgress>
-              </div>
-              <div class="sv-details">
-                <div v-for="d in memDetails" :key="d.label" class="sv-detail-row">
-                  <span class="sv-detail-label">
-                    {{ d.label }}
-                  </span>
-                  <span class="sv-detail-value">
-                    {{ d.value }}
-                  </span>
                 </div>
               </div>
-            </div>
-          </NCard>
-        </NGridItem>
-      </NGrid>
+            </XhCardBody>
+          </XhCardRoot>
+        </XhGridItem>
+      </XhGridRoot>
 
       <!-- 磁盘 -->
-      <NCard :bordered="false" size="small" class="sv-card">
-        <template #header>
+      <XhCardRoot variant="ghost" class="sv-card">
+        <XhCardHeader>
           <div class="sv-card-header">
             <Icon icon="lucide:hard-drive" width="16" />
             <span>{{ t('setting.server.disk_info') }}</span>
           </div>
-        </template>
-        <div v-if="!diskInfos.length" class="sv-empty">
-          {{ t('setting.server.no_data') }}
-        </div>
-        <NGrid v-else cols="1 s:2 l:3" responsive="screen" :x-gap="10" :y-gap="10">
-          <NGridItem v-for="disk in diskInfos" :key="disk.diskName">
-            <div class="sv-disk-item">
-              <div class="sv-disk-head">
-                <span class="sv-disk-name">
-                  {{ disk.diskName }}
-                </span>
-                <div class="sv-disk-head-right">
-                  <NTag size="tiny" :bordered="false">
-                    {{ disk.typeName }}
-                  </NTag>
-                  <span
-                    class="sv-disk-pct"
-                    :style="{ color: usageColor(usagePct(disk.usedSpace, disk.totalSpace)) }"
-                  >
-                    {{ usagePct(disk.usedSpace, disk.totalSpace) }}%
+        </XhCardHeader>
+        <XhCardBody>
+          <div v-if="!diskInfos.length" class="sv-empty">
+            {{ t('setting.server.no_data') }}
+          </div>
+          <XhGridRoot v-else :cols="{ base: 1, sm: 2, lg: 3 }" gap="md">
+            <XhGridItem v-for="disk in diskInfos" :key="disk.diskName">
+              <div class="sv-disk-item">
+                <div class="sv-disk-head">
+                  <span class="sv-disk-name">
+                    {{ disk.diskName }}
                   </span>
+                  <div class="sv-disk-head-right">
+                    <XhTagRoot variant="subtle" size="sm">
+                      <XhTagLabel>
+                        {{ disk.typeName }}
+                      </XhTagLabel>
+                    </XhTagRoot>
+                    <span
+                      class="sv-disk-pct"
+                      :style="{ color: usageColor(usagePct(disk.usedSpace, disk.totalSpace)) }"
+                    >
+                      {{ usagePct(disk.usedSpace, disk.totalSpace) }}%
+                    </span>
+                  </div>
+                </div>
+                <XhProgress
+                  variant="line"
+                  :value="usagePct(disk.usedSpace, disk.totalSpace)"
+                  :stroke-width="6"
+                  :style="{
+                    '--xh-progress-range': usageColor(usagePct(disk.usedSpace, disk.totalSpace)),
+                    '--xh-progress-track': 'var(--border-color)',
+                  }"
+                />
+                <div class="sv-disk-stats">
+                  <span>{{ t('setting.server.used_space', { value: fmtBytes(disk.usedSpace) }) }}</span>
+                  <span>{{ t('setting.server.total_space', { value: fmtBytes(disk.totalSpace) }) }}</span>
+                  <span>{{ t('setting.server.free_space', { value: fmtBytes(disk.freeSpace) }) }}</span>
                 </div>
               </div>
-              <NProgress
-                type="line"
-                :percentage="usagePct(disk.usedSpace, disk.totalSpace)"
-                :color="usageColor(usagePct(disk.usedSpace, disk.totalSpace))"
-                rail-color="var(--border-color)"
-                :height="6"
-                :show-indicator="false"
-              />
-              <div class="sv-disk-stats">
-                <span>{{ t('setting.server.used_space', { value: fmtBytes(disk.usedSpace) }) }}</span>
-                <span>{{ t('setting.server.total_space', { value: fmtBytes(disk.totalSpace) }) }}</span>
-                <span>{{ t('setting.server.free_space', { value: fmtBytes(disk.freeSpace) }) }}</span>
-              </div>
-            </div>
-          </NGridItem>
-        </NGrid>
-      </NCard>
+            </XhGridItem>
+          </XhGridRoot>
+        </XhCardBody>
+      </XhCardRoot>
 
       <!-- 显卡 -->
-      <NCard :bordered="false" size="small" class="sv-card">
-        <template #header>
+      <XhCardRoot variant="ghost" class="sv-card">
+        <XhCardHeader>
           <div class="sv-card-header">
             <Icon icon="lucide:monitor" width="16" />
             <span>{{ t('setting.server.gpu_info') }}</span>
-            <NTag v-if="gpuInfos.length" size="small" :bordered="false" type="info" class="sv-pkg-count">
-              {{ t('setting.server.count_unit', { count: gpuInfos.length }) }}
-            </NTag>
+            <XhTagRoot v-if="gpuInfos.length" variant="subtle" size="sm" tone="info" class="sv-pkg-count">
+              <XhTagLabel>
+                {{ t('setting.server.count_unit', { count: gpuInfos.length }) }}
+              </XhTagLabel>
+            </XhTagRoot>
           </div>
-        </template>
-        <div v-if="!gpuInfos.length" class="sv-empty">
-          {{ t('setting.server.no_data') }}
-        </div>
-        <NCollapse v-else>
-          <NCollapseItem v-for="(gpu, idx) in gpuInfos" :key="idx" :name="idx">
-            <template #header>
-              <div class="sv-collapse-title">
-                <Icon icon="lucide:monitor" width="14" class="sv-collapse-title-icon" />
-                <span class="sv-collapse-title-text">
-                  {{ gpu.name || `GPU ${idx}` }}
-                </span>
-                <NTag
-                  v-if="gpu.status"
-                  size="tiny"
-                  :type="gpu.status === 'OK' ? 'success' : 'error'"
-                  :bordered="false"
-                  class="ml-2"
-                >
-                  {{ gpu.status }}
-                </NTag>
-              </div>
-            </template>
-            <div class="sv-collapse-body">
-              <div v-if="gpu.memoryBytes" class="sv-kv">
-                <span class="sv-kv-label">{{ t('setting.server.gpu_memory') }}</span>
-                <span class="sv-kv-value">{{ fmtBytes(gpu.memoryBytes) }}</span>
-              </div>
-              <div v-if="gpu.driverVersion" class="sv-kv">
-                <span class="sv-kv-label">{{ t('setting.server.driver_version') }}</span>
-                <span class="sv-kv-value">{{ gpu.driverVersion }}</span>
-              </div>
-              <div v-if="gpu.videoModeDescription" class="sv-kv">
-                <span class="sv-kv-label">{{ t('setting.server.resolution') }}</span>
-                <span class="sv-kv-value">{{ gpu.videoModeDescription }}</span>
-              </div>
-              <div v-if="gpu.vendor" class="sv-kv">
-                <span class="sv-kv-label">{{ t('setting.server.vendor') }}</span>
-                <span class="sv-kv-value">{{ gpu.vendor }}</span>
-              </div>
-              <div v-if="gpu.temperature != null" class="sv-kv">
-                <span class="sv-kv-label">{{ t('setting.server.temperature') }}</span>
-                <span class="sv-kv-value">{{ gpu.temperature }}°C</span>
-              </div>
-            </div>
-          </NCollapseItem>
-        </NCollapse>
-      </NCard>
+        </XhCardHeader>
+        <XhCardBody>
+          <div v-if="!gpuInfos.length" class="sv-empty">
+            {{ t('setting.server.no_data') }}
+          </div>
+          <XhAccordionRoot v-else collapsible>
+            <XhAccordionItem v-for="(gpu, idx) in gpuInfos" :key="idx" :value="String(idx)">
+              <XhAccordionHeader>
+                <XhAccordionTrigger>
+                  <div class="sv-collapse-title">
+                    <Icon icon="lucide:monitor" width="14" class="sv-collapse-title-icon" />
+                    <span class="sv-collapse-title-text">
+                      {{ gpu.name || `GPU ${idx}` }}
+                    </span>
+                    <XhTagRoot
+                      v-if="gpu.status"
+                      variant="subtle"
+                      size="sm"
+                      :tone="gpu.status === 'OK' ? 'success' : 'danger'"
+                      class="ml-2"
+                    >
+                      <XhTagLabel>
+                        {{ gpu.status }}
+                      </XhTagLabel>
+                    </XhTagRoot>
+                  </div>
+                </XhAccordionTrigger>
+              </XhAccordionHeader>
+              <XhAccordionContent>
+                <div class="sv-collapse-body">
+                  <div v-if="gpu.memoryBytes" class="sv-kv">
+                    <span class="sv-kv-label">{{ t('setting.server.gpu_memory') }}</span>
+                    <span class="sv-kv-value">{{ fmtBytes(gpu.memoryBytes) }}</span>
+                  </div>
+                  <div v-if="gpu.driverVersion" class="sv-kv">
+                    <span class="sv-kv-label">{{ t('setting.server.driver_version') }}</span>
+                    <span class="sv-kv-value">{{ gpu.driverVersion }}</span>
+                  </div>
+                  <div v-if="gpu.videoModeDescription" class="sv-kv">
+                    <span class="sv-kv-label">{{ t('setting.server.resolution') }}</span>
+                    <span class="sv-kv-value">{{ gpu.videoModeDescription }}</span>
+                  </div>
+                  <div v-if="gpu.vendor" class="sv-kv">
+                    <span class="sv-kv-label">{{ t('setting.server.vendor') }}</span>
+                    <span class="sv-kv-value">{{ gpu.vendor }}</span>
+                  </div>
+                  <div v-if="gpu.temperature != null" class="sv-kv">
+                    <span class="sv-kv-label">{{ t('setting.server.temperature') }}</span>
+                    <span class="sv-kv-value">{{ gpu.temperature }}°C</span>
+                  </div>
+                </div>
+              </XhAccordionContent>
+            </XhAccordionItem>
+          </XhAccordionRoot>
+        </XhCardBody>
+      </XhCardRoot>
 
       <!-- 网络信息 -->
-      <NCard :bordered="false" size="small" class="sv-card">
-        <template #header>
+      <XhCardRoot variant="ghost" class="sv-card">
+        <XhCardHeader>
           <div class="sv-card-header">
             <Icon icon="lucide:network" width="16" />
             <span>{{ t('setting.server.network_info') }}</span>
-            <NTag v-if="activeNetworks.length" size="small" :bordered="false" type="info" class="sv-pkg-count">
-              {{ t('setting.server.active_count', { count: activeNetworks.length }) }}
-            </NTag>
+            <XhTagRoot v-if="activeNetworks.length" variant="subtle" size="sm" tone="info" class="sv-pkg-count">
+              <XhTagLabel>
+                {{ t('setting.server.active_count', { count: activeNetworks.length }) }}
+              </XhTagLabel>
+            </XhTagRoot>
           </div>
-        </template>
-        <div v-if="!activeNetworks.length" class="sv-empty">
-          {{ t('setting.server.no_data') }}
-        </div>
-        <NCollapse v-else>
-          <NCollapseItem v-for="net in activeNetworks" :key="net.name" :name="net.name">
-            <template #header>
-              <div class="sv-collapse-title">
-                <Icon
-                  icon="lucide:wifi"
-                  width="14"
-                  class="sv-collapse-title-icon sv-collapse-title-icon--success"
-                />
-                <span class="sv-collapse-title-text">
-                  {{ net.name }}
-                </span>
-                <NTag size="tiny" :bordered="false" class="ml-2">
-                  {{ net.type }}
-                </NTag>
-              </div>
-            </template>
-            <NGrid cols="1 m:2" responsive="screen" :x-gap="10" :y-gap="8">
-              <NGridItem>
-                <div class="sv-collapse-body">
-                  <div class="sv-kv">
-                    <span class="sv-kv-label">{{ t('setting.server.description') }}</span>
-                    <span class="sv-kv-value">{{ net.description || '-' }}</span>
-                  </div>
-                  <div class="sv-kv">
-                    <span class="sv-kv-label">{{ t('setting.server.physical_address') }}</span>
-                    <span class="sv-kv-value">{{ net.physicalAddress || '-' }}</span>
-                  </div>
-                  <div class="sv-kv">
-                    <span class="sv-kv-label">{{ t('setting.server.speed') }}</span>
-                    <span class="sv-kv-value">{{ net.speed }}</span>
-                  </div>
-                  <div v-if="net.iPv4Addresses?.length" class="sv-kv">
-                    <span class="sv-kv-label">IPv4</span>
-                    <span class="sv-kv-value">
-                      <NTag
-                        v-for="ip in net.iPv4Addresses"
-                        :key="ip.address"
-                        size="tiny"
-                        :bordered="false"
-                        class="mr-1"
-                      >
-                        {{ ip.address }}
-                      </NTag>
+        </XhCardHeader>
+        <XhCardBody>
+          <div v-if="!activeNetworks.length" class="sv-empty">
+            {{ t('setting.server.no_data') }}
+          </div>
+          <XhAccordionRoot v-else collapsible>
+            <XhAccordionItem v-for="net in activeNetworks" :key="net.name" :value="String(net.name)">
+              <XhAccordionHeader>
+                <XhAccordionTrigger>
+                  <div class="sv-collapse-title">
+                    <Icon
+                      icon="lucide:wifi"
+                      width="14"
+                      class="sv-collapse-title-icon sv-collapse-title-icon--success"
+                    />
+                    <span class="sv-collapse-title-text">
+                      {{ net.name }}
                     </span>
+                    <XhTagRoot variant="subtle" size="sm" class="ml-2">
+                      <XhTagLabel>
+                        {{ net.type }}
+                      </XhTagLabel>
+                    </XhTagRoot>
                   </div>
-                </div>
-              </NGridItem>
-              <NGridItem v-if="net.statistics">
-                <div class="sv-collapse-body">
-                  <div class="sv-kv">
-                    <span class="sv-kv-label">{{ t('setting.server.received') }}</span>
-                    <span class="sv-kv-value">{{ fmtBytes(net.statistics.bytesReceived) }}</span>
-                  </div>
-                  <div class="sv-kv">
-                    <span class="sv-kv-label">{{ t('setting.server.sent') }}</span>
-                    <span class="sv-kv-value">{{ fmtBytes(net.statistics.bytesSent) }}</span>
-                  </div>
-                  <div class="sv-kv">
-                    <span class="sv-kv-label">{{ t('setting.server.received_packets') }}</span>
-                    <span class="sv-kv-value">
-                      {{ net.statistics.packetsReceived?.toLocaleString() }}
-                    </span>
-                  </div>
-                  <div class="sv-kv">
-                    <span class="sv-kv-label">{{ t('setting.server.sent_packets') }}</span>
-                    <span class="sv-kv-value">
-                      {{ net.statistics.packetsSent?.toLocaleString() }}
-                    </span>
-                  </div>
-                </div>
-              </NGridItem>
-            </NGrid>
-          </NCollapseItem>
-        </NCollapse>
-      </NCard>
+                </XhAccordionTrigger>
+              </XhAccordionHeader>
+              <XhAccordionContent>
+                <XhGridRoot :cols="{ base: 1, md: 2 }" gap="sm">
+                  <XhGridItem>
+                    <div class="sv-collapse-body">
+                      <div class="sv-kv">
+                        <span class="sv-kv-label">{{ t('setting.server.description') }}</span>
+                        <span class="sv-kv-value">{{ net.description || '-' }}</span>
+                      </div>
+                      <div class="sv-kv">
+                        <span class="sv-kv-label">{{ t('setting.server.physical_address') }}</span>
+                        <span class="sv-kv-value">{{ net.physicalAddress || '-' }}</span>
+                      </div>
+                      <div class="sv-kv">
+                        <span class="sv-kv-label">{{ t('setting.server.speed') }}</span>
+                        <span class="sv-kv-value">{{ net.speed }}</span>
+                      </div>
+                      <div v-if="net.iPv4Addresses?.length" class="sv-kv">
+                        <span class="sv-kv-label">IPv4</span>
+                        <span class="sv-kv-value">
+                          <XhTagRoot
+                            v-for="ip in net.iPv4Addresses"
+                            :key="ip.address"
+                            variant="subtle"
+                            size="sm"
+                            class="mr-1"
+                          ><XhTagLabel>
+                            {{ ip.address }}
+                          </XhTagLabel></XhTagRoot>
+                        </span>
+                      </div>
+                    </div>
+                  </XhGridItem>
+                  <XhGridItem v-if="net.statistics">
+                    <div class="sv-collapse-body">
+                      <div class="sv-kv">
+                        <span class="sv-kv-label">{{ t('setting.server.received') }}</span>
+                        <span class="sv-kv-value">{{ fmtBytes(net.statistics.bytesReceived) }}</span>
+                      </div>
+                      <div class="sv-kv">
+                        <span class="sv-kv-label">{{ t('setting.server.sent') }}</span>
+                        <span class="sv-kv-value">{{ fmtBytes(net.statistics.bytesSent) }}</span>
+                      </div>
+                      <div class="sv-kv">
+                        <span class="sv-kv-label">{{ t('setting.server.received_packets') }}</span>
+                        <span class="sv-kv-value">
+                          {{ net.statistics.packetsReceived?.toLocaleString() }}
+                        </span>
+                      </div>
+                      <div class="sv-kv">
+                        <span class="sv-kv-label">{{ t('setting.server.sent_packets') }}</span>
+                        <span class="sv-kv-value">
+                          {{ net.statistics.packetsSent?.toLocaleString() }}
+                        </span>
+                      </div>
+                    </div>
+                  </XhGridItem>
+                </XhGridRoot>
+              </XhAccordionContent>
+            </XhAccordionItem>
+          </XhAccordionRoot>
+        </XhCardBody>
+      </XhCardRoot>
 
       <!-- 主板信息 -->
-      <NCard :bordered="false" size="small" class="sv-card">
-        <template #header>
+      <XhCardRoot variant="ghost" class="sv-card">
+        <XhCardHeader>
           <div class="sv-card-header">
             <Icon icon="lucide:circuit-board" width="16" />
             <span>{{ t('setting.server.board_info') }}</span>
           </div>
-        </template>
-        <div class="sv-board-grid">
-          <div v-for="d in boardDetails" :key="d.label" class="sv-sys-item">
-            <div class="sv-sys-icon">
-              <Icon :icon="d.icon" width="14" />
+        </XhCardHeader>
+        <XhCardBody>
+          <div class="sv-board-grid">
+            <div v-for="d in boardDetails" :key="d.label" class="sv-sys-item">
+              <div class="sv-sys-icon">
+                <Icon :icon="d.icon" width="14" />
+              </div>
+              <span class="sv-sys-label">
+                {{ d.label }}
+              </span>
+              <span class="sv-sys-value" :title="String(d.value ?? '-')">
+                {{ d.value || '-' }}
+              </span>
             </div>
-            <span class="sv-sys-label">
-              {{ d.label }}
-            </span>
-            <span class="sv-sys-value" :title="String(d.value ?? '-')">
-              {{ d.value || '-' }}
-            </span>
           </div>
-        </div>
-      </NCard>
+        </XhCardBody>
+      </XhCardRoot>
 
       <!-- 系统信息 -->
-      <NCard :bordered="false" size="small" class="sv-card">
-        <template #header>
+      <XhCardRoot variant="ghost" class="sv-card">
+        <XhCardHeader>
           <div class="sv-card-header">
             <Icon icon="lucide:settings" width="16" />
             <span>{{ t('setting.server.system_info') }}</span>
           </div>
-        </template>
-        <div class="sv-sys-grid">
-          <div v-for="d in sysDetails" :key="d.label" class="sv-sys-item">
-            <div class="sv-sys-icon">
-              <Icon :icon="d.icon" width="14" />
+        </XhCardHeader>
+        <XhCardBody>
+          <div class="sv-sys-grid">
+            <div v-for="d in sysDetails" :key="d.label" class="sv-sys-item">
+              <div class="sv-sys-icon">
+                <Icon :icon="d.icon" width="14" />
+              </div>
+              <span class="sv-sys-label">
+                {{ d.label }}
+              </span>
+              <span class="sv-sys-value" :title="String(d.value ?? '-')">
+                {{ d.value ?? '-' }}
+              </span>
             </div>
-            <span class="sv-sys-label">
-              {{ d.label }}
-            </span>
-            <span class="sv-sys-value" :title="String(d.value ?? '-')">
-              {{ d.value ?? '-' }}
-            </span>
           </div>
-        </div>
-      </NCard>
+        </XhCardBody>
+      </XhCardRoot>
     </template>
   </div>
 </template>
@@ -645,38 +722,6 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
-}
-
-.sv-skeleton-panel {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px;
-  border-radius: var(--radius);
-  background: var(--bg-surface);
-  border: 1px solid var(--border-color);
-}
-
-.sv-skeleton-panel-col {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.sv-skeleton-circle {
-  flex-shrink: 0;
-  width: 160px;
-  height: 160px;
-  border-radius: 50%;
-  overflow: hidden;
-}
-
-.sv-skeleton-circle .n-skeleton {
-  width: 160px !important;
-  height: 160px !important;
-  min-width: 160px !important;
-  min-height: 160px !important;
-  border-radius: 50% !important;
 }
 
 /* ========== Banner ========== */

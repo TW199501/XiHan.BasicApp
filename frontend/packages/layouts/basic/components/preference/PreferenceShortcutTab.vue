@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import type { useAppStore } from '~/stores'
-import { NCard, NSwitch } from 'naive-ui'
+import { XhHotkeys, XhSwitch } from '@xihan-ui/vue'
 import { useI18n } from 'vue-i18n'
-import { usePlatform } from '~/composables/usePlatform'
+import { GLOBAL_HOTKEYS } from '~/composables/useGlobalShortcuts'
 import PrefTip from './PrefTip.vue'
 
 defineOptions({ name: 'PreferenceShortcutTab' })
@@ -10,12 +10,12 @@ const props = defineProps<{ appStore: ReturnType<typeof useAppStore> }>()
 const appStore = props.appStore
 const { t } = useI18n()
 
-// 快捷键标签按平台显示（Mac 用 ⌘/⌥/⇧ 符号），复用共享 composable
-const { formatShortcut: keys } = usePlatform()
+// 键帽与注册端读同一份键位声明；这里只显示，不接管按键
+const keys = GLOBAL_HOTKEYS
 </script>
 
 <template>
-  <NCard size="small" :bordered="false">
+  <section class="pref-card">
     <div class="section-title">
       {{ t('preference.shortcut.global') }}
     </div>
@@ -24,39 +24,39 @@ const { formatShortcut: keys } = usePlatform()
         <span>{{ t('preference.shortcut.enabled') }}</span>
         <PrefTip :content="t('preference.shortcut.enabled_tip')" />
       </div>
-      <NSwitch v-model:value="appStore.shortcutEnable" />
+      <XhSwitch v-model:checked="appStore.shortcutEnable" />
     </div>
     <div class="pref-row" :class="{ 'opacity-50': !appStore.shortcutEnable }">
       <div class="flex items-center gap-1.5">
         <span>{{ t('preference.shortcut.search') }}</span>
-        <kbd class="kbd">{{ keys('Ctrl+K') }}</kbd>
+        <XhHotkeys :keys="[...keys.search]" :enabled="appStore.shortcutEnable && appStore.shortcutSearch" :prevent-default="false" />
         <PrefTip :content="t('preference.shortcut.search_tip')" />
       </div>
-      <NSwitch v-model:value="appStore.shortcutSearch" :disabled="!appStore.shortcutEnable" />
+      <XhSwitch v-model:checked="appStore.shortcutSearch" :disabled="!appStore.shortcutEnable" />
     </div>
     <div class="pref-row" :class="{ 'opacity-50': !appStore.shortcutEnable }">
       <div class="flex items-center gap-1.5">
         <span>{{ t('preference.shortcut.tab_overview') }}</span>
-        <kbd class="kbd">{{ keys('Alt+B') }}</kbd>
+        <XhHotkeys :keys="[...keys.tabOverview]" :enabled="appStore.shortcutEnable && appStore.shortcutTabOverview" :prevent-default="false" />
         <PrefTip :content="t('preference.shortcut.tab_overview_tip')" />
       </div>
-      <NSwitch v-model:value="appStore.shortcutTabOverview" :disabled="!appStore.shortcutEnable" />
+      <XhSwitch v-model:checked="appStore.shortcutTabOverview" :disabled="!appStore.shortcutEnable" />
     </div>
     <div class="pref-row" :class="{ 'opacity-50': !appStore.shortcutEnable }">
       <div class="flex items-center gap-1.5">
         <span>{{ t('preference.shortcut.lock') }}</span>
-        <kbd class="kbd">{{ keys('Alt+L') }}</kbd>
+        <XhHotkeys :keys="[...keys.lock]" :enabled="appStore.shortcutEnable && appStore.shortcutLock" :prevent-default="false" />
         <PrefTip :content="t('preference.shortcut.lock_tip')" />
       </div>
-      <NSwitch v-model:value="appStore.shortcutLock" :disabled="!appStore.shortcutEnable" />
+      <XhSwitch v-model:checked="appStore.shortcutLock" :disabled="!appStore.shortcutEnable" />
     </div>
     <div class="pref-row" :class="{ 'opacity-50': !appStore.shortcutEnable }">
       <div class="flex items-center gap-1.5">
         <span>{{ t('preference.shortcut.logout') }}</span>
-        <kbd class="kbd">{{ keys('Alt+Q') }}</kbd>
+        <XhHotkeys :keys="[...keys.logout]" :enabled="appStore.shortcutEnable && appStore.shortcutLogout" :prevent-default="false" />
         <PrefTip :content="t('preference.shortcut.logout_tip')" />
       </div>
-      <NSwitch v-model:value="appStore.shortcutLogout" :disabled="!appStore.shortcutEnable" />
+      <XhSwitch v-model:checked="appStore.shortcutLogout" :disabled="!appStore.shortcutEnable" />
     </div>
-  </NCard>
+  </section>
 </template>

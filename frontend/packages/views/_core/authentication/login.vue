@@ -1,23 +1,17 @@
 <script lang="ts" setup>
-import type { FormInst, FormRules } from 'naive-ui'
-import type { LoginConfig, LoginResponse } from '~/types'
-import {
-  NButton,
-  NCheckbox,
-  NDivider,
-  NForm,
-  NFormItem,
-  NIcon,
-  NInput,
-  NInputOtp,
-  useMessage,
-} from 'naive-ui'
+import type { FormRules } from '@xihan-ui/headless'
+import type { CaptchaChallenge, LoginConfig, LoginResponse } from '~/types'
+
+import { XhButton, XhCheckbox, XhFieldControl, XhFieldRoot, XhFormFieldGroup, XhFormRoot, XhFormSubmitTrigger, XhPinInputInput, XhPinInputRoot, XhPopoverContent, XhPopoverPositioner, XhPopoverRoot, XhPopoverTrigger, XhSeparator } from '@xihan-ui/vue'
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
+import { XInput } from '~/components'
+import { toast } from '~/composables'
 import { useTheme } from '~/hooks'
 import { Icon } from '~/iconify'
 import { useAppContext, useAuthStore } from '~/stores'
+import { useAuthFormInvalid } from './use-auth-form-invalid'
 
 defineOptions({ name: 'LoginPage' })
 
@@ -27,14 +21,36 @@ const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const { apis } = useAppContext()
-const message = useMessage()
-const formRef = ref<FormInst | null>(null)
 const rememberMe = ref(true)
-const showPassword = ref(false)
 const loginConfig = ref<LoginConfig>({
   loginMethods: ['password'],
   oAuthProviders: [],
+  captchaEnabled: false,
 })
+
+// ==================== 图形验证码 ====================
+
+const captcha = ref<CaptchaChallenge | null>(null)
+const captchaCode = ref('')
+const captchaLoading = ref(false)
+
+/** 拉取新验证码（页面加载、点击图片、验证码错误提示后调用） */
+async function refreshCaptcha() {
+  if (!loginConfig.value.captchaEnabled) {
+    return
+  }
+  captchaLoading.value = true
+  try {
+    captcha.value = await apis.getCaptchaApi()
+    captchaCode.value = ''
+  }
+  catch (error) {
+    toast.error((error as Error)?.message || t('page.login.captcha_load_failed'))
+  }
+  finally {
+    captchaLoading.value = false
+  }
+}
 
 // ==================== 2FA 三阶段状态 ====================
 
@@ -63,53 +79,48 @@ const formData = ref({
   password: '',
 })
 
-const rules: FormRules = {
+const rules = computed<FormRules>(() => ({
   username: [
-    { required: true, message: () => t('page.login.username_placeholder'), trigger: 'blur' },
+    { required: true, message: t('page.login.username_placeholder') },
   ],
   password: [
-    { required: true, message: () => t('page.login.password_placeholder'), trigger: 'blur' },
+    { required: true, message: t('page.login.password_placeholder') },
   ],
-}
-
-// 快捷登录账号（种子数据内置；用于演示不同权限层级 / 便于测试站快速登录）
-// 登录标识：
-// - 普通租户用户在「先登录后选租户」模型下需以邮箱登录（含 @ → 邮箱全平台唯一定位）。
-// - 超级管理员是平台账号（TenantId=0），用用户名 superadmin 登录（不含 @ → 平台用户名分支）。
-// 注：超管默认密码为 SuperAdmin@123；若线上经环境变量 Saas__Seed__SuperAdminPassword 覆盖，请同步此处。
-const quickAccounts = [
-  { label: '超级管理员', login: 'superadmin', password: 'SuperAdmin@123' },
-  { label: '系统管理员', login: 'admin@xihan.fun', password: 'Admin@123' },
-  { label: '普通用户', login: 'user@xihan.fun', password: 'User@123' },
-  { label: '游客', login: 'guest@xihan.fun', password: 'Guest@123' },
-]
-
-/** 填入对应账号并直接登录 */
-function quickLogin(account: { login: string, password: string }) {
-  formData.value.username = account.login
-  formData.value.password = account.password
-  handleLogin()
-}
+}))
 
 const redirect = computed(() => {
   return (route.query.redirect as string) || undefined
 })
 
-// 品牌图标用离线已预加载的图标集（offline.ts 预加载 lucide/tabler/mdi/simple-icons）
+// 品牌图标用离线已预加载的图标集（offline.ts 预加载 lucide/tabler/mdi/simple-icons）。
+// 企业微信、飞书在这四个集里都没有品牌 logo，先用语义相近的通用图标占位以便彼此区分；
+// 要换成真 logo 需另行预载含该品牌的图标集，或把 SVG 注册成自定义图标集。
 const oauthProviderIcons: Record<string, string> = {
   github: 'mdi:github',
   gitee: 'simple-icons:gitee',
   google: 'mdi:google',
   qq: 'mdi:qqchat',
+  wechat: 'mdi:wechat',
+  dingtalk: 'tabler:brand-dingtalk',
+  wecom: 'mdi:briefcase-account',
+  feishu: 'lucide:send',
 }
 
 const oauthProviders = computed(() => loginConfig.value.oAuthProviders ?? [])
+
+/** 一行放得下的渠道数；多出来的收进「更多」浮层，免得换行把卡片撑高 */
+const OAUTH_INLINE_COUNT = 3
+
+const inlineOauthProviders = computed(() => oauthProviders.value.slice(0, OAUTH_INLINE_COUNT))
+const moreOauthProviders = computed(() => oauthProviders.value.slice(OAUTH_INLINE_COUNT))
+const showMoreOauth = ref(false)
 
 function getOauthProviderIcon(name: string) {
   return oauthProviderIcons[name.toLowerCase()] ?? 'lucide:link-2'
 }
 
 function handleOAuthLogin(provider: typeof oauthProviders.value[number]) {
+  showMoreOauth.value = false
   authStore.startOAuthLogin(provider)
 }
 
@@ -128,16 +139,22 @@ function buildLoginParams() {
   return {
     username: formData.value.username,
     password: formData.value.password,
+    captchaId: loginConfig.value.captchaEnabled ? captcha.value?.captchaId : undefined,
+    captchaCode: loginConfig.value.captchaEnabled ? captchaCode.value || undefined : undefined,
     twoFactorCode: tfStage.value === 'code-input' ? twoFactorCode.value.join('') : undefined,
     twoFactorMethod: selectedMethod.value || undefined,
     deviceId: cachedDeviceId.value || undefined,
   }
 }
 
-async function handleLogin() {
+async function onSubmit() {
   try {
     if (tfStage.value === 'credentials') {
-      await formRef.value?.validate()
+      // 图形验证码：提交前校验非空，避免白白消耗一次登录节流计数
+      if (loginConfig.value.captchaEnabled && (!captcha.value || !captchaCode.value.trim())) {
+        toast.warning(t('page.login.captcha_required'))
+        return
+      }
     }
 
     const result: LoginResponse | null = await authStore.login(buildLoginParams(), redirect.value)
@@ -174,7 +191,11 @@ async function handleLogin() {
     }
     const error = err as { message?: string }
     if (error?.message) {
-      message.error(error.message)
+      toast.error(error.message)
+    }
+    // 验证码一次性消费：无论对错都已销毁，提示后立即换新码，避免反复撞已销毁的码
+    if (error?.message && error.message.includes('验证码')) {
+      void refreshCaptcha()
     }
   }
 }
@@ -182,7 +203,7 @@ async function handleLogin() {
 /** 用户选好方式后，发起带 twoFactorMethod 的登录请求 */
 async function handleSelectMethod() {
   if (!selectedMethod.value) {
-    message.warning(t('page.auth.select_method_required'))
+    toast.warning(t('page.auth.select_method_required'))
     return
   }
 
@@ -205,7 +226,7 @@ async function handleSelectMethod() {
   catch (err: unknown) {
     const error = err as { message?: string }
     if (error?.message) {
-      message.error(error.message)
+      toast.error(error.message)
     }
   }
   finally {
@@ -220,13 +241,13 @@ async function handleResendCode() {
     const result = await authStore.login(buildLoginParams(), redirect.value)
     if (result?.codeSent) {
       codeSent.value = true
-      message.success(t('page.auth.code_resent'))
+      toast.success(t('page.auth.code_resent'))
     }
   }
   catch (err: unknown) {
     const error = err as { message?: string }
     if (error?.message)
-      message.error(error.message)
+      toast.error(error.message)
   }
   finally {
     sendingCode.value = false
@@ -235,7 +256,7 @@ async function handleResendCode() {
 
 function handleOtpComplete(codes: string[]) {
   twoFactorCode.value = codes
-  nextTick(() => handleLogin())
+  nextTick(() => onSubmit())
 }
 
 /** 返回双因素方式选择（多种方式时可换一种验证） */
@@ -247,7 +268,7 @@ function handleBackToMethodSelect() {
 
 function handleKeydown(e: KeyboardEvent) {
   if (e.key === 'Enter')
-    handleLogin()
+    onSubmit()
 }
 
 function goTo(path: string) {
@@ -257,11 +278,15 @@ function goTo(path: string) {
 onMounted(async () => {
   try {
     await loadLoginConfig()
+    if (loginConfig.value.captchaEnabled) {
+      await refreshCaptcha()
+    }
   }
   catch (error) {
-    message.error((error as Error)?.message || t('page.auth.load_config_failed'))
+    toast.error((error as Error)?.message || t('page.auth.load_config_failed'))
   }
 })
+const onAuthInvalid = useAuthFormInvalid()
 </script>
 
 <template>
@@ -275,9 +300,7 @@ onMounted(async () => {
               class="flex justify-center items-center w-11 h-11 rounded-xl"
               :class="isDark ? 'bg-white/10' : 'bg-[hsl(var(--primary)/0.08)]'"
             >
-              <NIcon :size="22" :class="isDark ? 'text-blue-400' : 'text-[hsl(var(--primary))]'">
-                <Icon :icon="methodIcons[selectedMethod] || 'lucide:shield-check'" />
-              </NIcon>
+              <span :class="isDark ? 'text-blue-400' : 'text-[hsl(var(--primary))]'" style="display: inline-flex; font-size: 22px"><Icon :icon="methodIcons[selectedMethod] || 'lucide:shield-check'" /></span>
             </div>
             <h1 class="text-[28px] font-semibold leading-tight sm:text-[32px]">
               {{ t('page.auth.two_factor_title') }}
@@ -299,14 +322,19 @@ onMounted(async () => {
           </p>
         </div>
 
-        <div class="flex flex-col items-center py-4" @keydown.enter="handleLogin">
-          <NInputOtp
+        <div class="flex flex-col items-center py-4" @keydown.enter="onSubmit">
+          <XhPinInputRoot
             v-model:value="twoFactorCode"
             :length="6"
-            size="large"
-            autofocus
-            @complete="handleOtpComplete"
-          />
+            otp
+            size="lg"
+            @value-complete="(details: { value: string[] }) => handleOtpComplete(details.value)"
+          >
+            <!-- 格间距长在格子自己身上，这层包裹只负责排成一行 -->
+            <div style="display: flex">
+              <XhPinInputInput v-for="i in 6" :key="i" :index="i - 1" />
+            </div>
+          </XhPinInputRoot>
           <p
             class="mt-4 text-xs"
             :class="isDark ? 'text-gray-500' : 'text-[hsl(var(--muted-foreground))]'"
@@ -315,35 +343,28 @@ onMounted(async () => {
           </p>
         </div>
 
-        <NButton
-          type="primary"
-          block
-          :loading="authStore.loginLoading"
-          :disabled="twoFactorCode.filter(Boolean).length < 6"
-          class="!mt-4 !h-12 !rounded-xl !text-[15px] !font-semibold"
-          @click="handleLogin"
-        >
+        <XhFormSubmitTrigger class="auth-submit !mt-4" :disabled="authStore.loginLoading">
           {{ t('page.auth.two_factor_verify') }}
-        </NButton>
+        </XhFormSubmitTrigger>
 
         <div class="flex gap-2 mt-3">
-          <NButton
+          <XhButton
             v-if="selectedMethod !== 'totp'"
             class="!h-11 flex-1 !rounded-xl"
-            quaternary
+            variant="ghost"
             :loading="sendingCode"
             @click="handleResendCode"
           >
             重新发送
-          </NButton>
-          <NButton
+          </XhButton>
+          <XhButton
             v-if="availableMethods.length > 1"
             class="!h-11 flex-1 !rounded-xl"
-            quaternary
+            variant="ghost"
             @click="handleBackToMethodSelect"
           >
             换种方式
-          </NButton>
+          </XhButton>
         </div>
       </div>
 
@@ -355,9 +376,7 @@ onMounted(async () => {
               class="flex justify-center items-center w-11 h-11 rounded-xl"
               :class="isDark ? 'bg-white/10' : 'bg-[hsl(var(--primary)/0.08)]'"
             >
-              <NIcon :size="22" :class="isDark ? 'text-blue-400' : 'text-[hsl(var(--primary))]'">
-                <Icon icon="lucide:shield-check" />
-              </NIcon>
+              <span :class="isDark ? 'text-blue-400' : 'text-[hsl(var(--primary))]'" style="display: inline-flex; font-size: 22px"><Icon icon="lucide:shield-check" /></span>
             </div>
             <h1 class="text-[28px] font-semibold leading-tight sm:text-[32px]">
               选择验证方式
@@ -382,35 +401,30 @@ onMounted(async () => {
               : isDark ? 'border-white/10 hover:border-white/25' : 'border-[hsl(var(--border))] hover:border-[hsl(var(--primary)/0.4)]'"
             @click="selectedMethod = m"
           >
-            <NIcon
-              :size="20"
+            <span
               :class="selectedMethod === m
                 ? 'text-[hsl(var(--primary))]'
-                : isDark ? 'text-gray-300' : 'text-[hsl(var(--muted-foreground))]'"
-            >
-              <Icon :icon="methodIcons[m] || 'lucide:shield-check'" />
-            </NIcon>
+                : isDark ? 'text-gray-300' : 'text-[hsl(var(--muted-foreground))]'" style="display: inline-flex; font-size: 20px"
+            ><Icon :icon="methodIcons[m] || 'lucide:shield-check'" /></span>
             <span class="text-[15px]">{{ methodLabels[m] || m }}</span>
           </button>
         </div>
 
-        <NButton
-          type="primary"
-          block
+        <XhButton
+          variant="solid"
+          tone="brand"
+          full-width
           :loading="sendingCode"
-          class="!h-12 !rounded-xl !text-[15px] !font-semibold"
+          class="auth-submit"
           @click="handleSelectMethod"
         >
           继续
-        </NButton>
+        </XhButton>
       </div>
 
       <!-- 阶段1：常规登录表单 -->
       <div v-else key="credentials">
         <div class="mb-8">
-          <h1 class="text-[32px] font-semibold leading-tight sm:text-[36px]">
-            {{ t('page.auth.welcome_back') }}
-          </h1>
           <p
             class="mt-3 text-[15px] leading-7"
             :class="isDark ? 'text-gray-300' : 'text-[hsl(var(--muted-foreground))]'"
@@ -419,61 +433,83 @@ onMounted(async () => {
           </p>
         </div>
 
-        <NForm
-          ref="formRef"
-          :model="formData"
+        <XhFormRoot
+          v-model:values="formData"
           :rules="rules"
-          label-placement="top"
-          size="large"
-          :show-label="false"
+          validate-on="blur"
+          @invalid="onAuthInvalid"
           @keydown="handleKeydown"
+          @submit="onSubmit"
         >
-          <NFormItem path="username" :show-feedback="false" class="!mb-6">
-            <NInput
-              v-model:value="formData.username"
-              size="large"
-              :placeholder="t('page.login.username_placeholder')"
-              :input-props="{ autocomplete: 'username' }"
-            />
-          </NFormItem>
-          <NFormItem path="password" :show-feedback="false" class="!mb-6">
-            <NInput
-              v-model:value="formData.password"
-              :type="showPassword ? 'text' : 'password'"
-              size="large"
-              :placeholder="t('page.login.password_placeholder')"
-              :input-props="{ autocomplete: 'current-password' }"
-            >
-              <template #suffix>
-                <NIcon
-                  class="cursor-pointer"
-                  :class="isDark ? 'text-gray-400' : 'text-[hsl(var(--muted-foreground))]'"
-                  @click="showPassword = !showPassword"
+          <XhFormFieldGroup value="username" class="!mb-6">
+            <XhFieldRoot>
+              <XhFieldControl>
+                <XInput
+                  v-model:value="formData.username"
+                  size="lg"
+                  :placeholder="t('page.login.username_placeholder')"
+                  autocomplete="username"
+                />
+              </XhFieldControl>
+            </XhFieldRoot>
+          </XhFormFieldGroup>
+          <XhFormFieldGroup value="password" class="!mb-6">
+            <XhFieldRoot>
+              <XhFieldControl>
+                <XInput
+                  v-model:value="formData.password"
+                  type="password"
+                  size="lg"
+                  :placeholder="t('page.login.password_placeholder')"
+                  autocomplete="current-password"
+                />
+              </XhFieldControl>
+            </XhFieldRoot>
+          </XhFormFieldGroup>
+          <XhFormFieldGroup v-if="loginConfig.captchaEnabled" value="captchaCode" class="!mb-6">
+            <XhFieldRoot>
+              <!-- 布局层留在控件外面：唯一子节点若不是控件，会被组件库当成输入控件本体上妆 -->
+              <div class="flex items-center gap-3">
+                <XhFieldControl>
+                  <XInput
+                    v-model:value="captchaCode"
+                    size="lg"
+                    :max-length="4"
+                    :placeholder="t('page.login.captcha_placeholder')"
+                    autocomplete="off"
+                  />
+                </XhFieldControl>
+                <div
+                  class="flex justify-center items-center shrink-0 w-[120px] h-[40px] rounded-lg overflow-hidden"
+                  :class="isDark ? 'bg-white/10' : 'bg-[hsl(var(--muted)/0.15)]'"
+                  :title="t('page.login.captcha_refresh_title')"
+                  @click="refreshCaptcha"
                 >
-                  <Icon :icon="showPassword ? 'lucide:eye-off' : 'lucide:eye'" width="16" />
-                </NIcon>
-              </template>
-            </NInput>
-          </NFormItem>
+                  <img
+                    v-if="captcha?.image"
+                    :src="captcha.image"
+                    :alt="t('page.login.captcha_refresh_title')"
+                    class="w-full h-full cursor-pointer select-none"
+                    draggable="false"
+                  >
+                  <span v-else-if="captchaLoading" class="animate-spin" style="display: inline-flex; font-size: 18px"><Icon icon="lucide:loader-2" /></span>
+                </div>
+              </div>
+            </XhFieldRoot>
+          </XhFormFieldGroup>
           <div class="flex justify-between items-center mb-5 text-sm">
-            <NCheckbox v-model:checked="rememberMe">
+            <XhCheckbox v-model:checked="rememberMe" size="sm">
               {{ t('page.login.remember_me') }}
-            </NCheckbox>
+            </XhCheckbox>
             <span class="cursor-pointer link-primary" @click="goTo('/auth/forget-password')">
               {{ t('page.login.forgot_password') }}?
             </span>
           </div>
 
-          <NButton
-            type="primary"
-            block
-            :loading="authStore.loginLoading"
-            class="!h-12 !rounded-xl !text-[15px] !font-semibold"
-            @click="handleLogin"
-          >
+          <XhFormSubmitTrigger class="auth-submit" :disabled="authStore.loginLoading">
             {{ t('page.login.login_btn') }}
-          </NButton>
-        </NForm>
+          </XhFormSubmitTrigger>
+        </XhFormRoot>
 
         <p
           class="mt-6 text-sm text-center"
@@ -485,47 +521,51 @@ onMounted(async () => {
           </span>
         </p>
 
-        <NDivider
-          v-if="oauthProviders.length > 0"
-          :class="isDark ? '!my-6 !border-white/10' : '!my-6 !border-[hsl(var(--border))]'"
-        >
-          {{ t('page.auth.third_party_login') }}
-        </NDivider>
-        <div v-if="oauthProviders.length > 0" class="flex flex-wrap gap-3 justify-center items-center">
-          <NButton
-            v-for="provider in oauthProviders"
+        <!-- 分隔线是纯线条、没有插槽，中缝那句文案要自己摆 -->
+        <div v-if="oauthProviders.length > 0" class="flex gap-3 items-center my-6">
+          <XhSeparator class="flex-1" :class="isDark ? '!border-white/10' : '!border-[hsl(var(--border))]'" />
+          <span class="text-xs" :class="isDark ? 'text-gray-500' : 'text-[hsl(var(--muted-foreground))]'">
+            {{ t('page.auth.third_party_login') }}
+          </span>
+          <XhSeparator class="flex-1" :class="isDark ? '!border-white/10' : '!border-[hsl(var(--border))]'" />
+        </div>
+        <div v-if="oauthProviders.length > 0" class="flex gap-3 justify-center items-center">
+          <XhButton
+            v-for="provider in inlineOauthProviders"
             :key="provider.name"
-            secondary
+            variant="subtle"
             class="!h-10 !rounded-xl !px-4 !text-sm"
             @click="handleOAuthLogin(provider)"
           >
-            <template #icon>
-              <Icon :icon="getOauthProviderIcon(provider.name)" width="16" />
-            </template>
+            <Icon :icon="getOauthProviderIcon(provider.name)" width="16" />
             {{ provider.displayName }}
-          </NButton>
-        </div>
+          </XhButton>
 
-        <!-- 快捷登录：内置演示账号，一键填入并登录（超管置顶） -->
-        <p
-          class="mt-6 text-xs text-center"
-          :class="isDark ? 'text-gray-500' : 'text-[hsl(var(--muted-foreground))]'"
-        >
-          {{ t('page.auth.demo_login') }}
-        </p>
-        <div class="flex flex-wrap gap-x-3 gap-y-1 justify-center items-center mt-1 text-xs">
-          <NButton
-            v-for="acc in quickAccounts"
-            :key="acc.login"
-            text
-            type="primary"
-            size="tiny"
-            class="!text-xs"
-            :disabled="authStore.loginLoading"
-            @click="quickLogin(acc)"
-          >
-            {{ acc.label }}
-          </NButton>
+          <!-- 触发器本身就是那颗按钮：浮层触发器渲染成 button，不能再往里套一颗 -->
+          <XhPopoverRoot v-if="moreOauthProviders.length > 0" v-model:open="showMoreOauth" placement="top">
+            <XhPopoverTrigger
+              class="oauth-more-trigger !h-10 !w-10 !rounded-xl"
+              :aria-label="t('page.auth.third_party_more')"
+            >
+              <Icon icon="lucide:ellipsis" width="16" />
+            </XhPopoverTrigger>
+            <XhPopoverPositioner>
+              <XhPopoverContent :aria-label="t('page.auth.third_party_more')">
+                <div class="oauth-more-grid">
+                  <XhButton
+                    v-for="provider in moreOauthProviders"
+                    :key="provider.name"
+                    variant="subtle"
+                    class="!h-10 !rounded-xl !px-4 !text-sm !justify-start"
+                    @click="handleOAuthLogin(provider)"
+                  >
+                    <Icon :icon="getOauthProviderIcon(provider.name)" width="16" />
+                    {{ provider.displayName }}
+                  </XhButton>
+                </div>
+              </XhPopoverContent>
+            </XhPopoverPositioner>
+          </XhPopoverRoot>
         </div>
       </div>
     </Transition>
@@ -533,6 +573,37 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+/* 「更多渠道」触发器：浮层触发器自己就是 button，套不了 XhButton，只能照 subtle 变体补皮。
+   尺寸走和旁边那几颗同一串工具类（!h-10 !w-10 !rounded-xl）——那是带 !important 的，
+   本作用域样式压不过它，两处各写一份迟早对不齐，所以这里只管观感不管尺寸。
+   边框留 1px 透明，与按钮同样的 border-box 盒模型 */
+.oauth-more-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: var(--xh-stroke-thin) solid transparent;
+  background: var(--xh-bg-subtle);
+  color: var(--xh-fg-default);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.oauth-more-trigger:hover {
+  background: var(--xh-bg-subtle-hover);
+}
+
+.oauth-more-trigger:active {
+  background: var(--xh-bg-subtle-active);
+}
+
+/* 收进浮层的渠道排两列，条目左对齐便于扫读 */
+.oauth-more-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(120px, 1fr));
+  gap: 8px;
+}
+
 .link-primary {
   color: hsl(var(--primary));
 }

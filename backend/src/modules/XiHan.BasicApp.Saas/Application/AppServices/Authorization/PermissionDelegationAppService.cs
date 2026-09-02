@@ -1,6 +1,7 @@
 // Copyright (c) 2021-Present XiHanFun and contributors.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
+using XiHan.BasicApp.Saas.Application.Services;
 using Microsoft.AspNetCore.Authorization;
 using XiHan.BasicApp.Saas.Application.Authorization;
 using XiHan.BasicApp.Saas.Application.Caching;
@@ -44,6 +45,8 @@ public sealed class PermissionDelegationAppService
     /// </summary>
     private readonly IAuthorizationChangeNotifier _authorizationChangeNotifier;
 
+    private readonly IImpersonationPolicyService _impersonationPolicyService;
+
     /// <summary>
     /// 构造函数
     /// </summary>
@@ -51,12 +54,14 @@ public sealed class PermissionDelegationAppService
         IPermissionDelegationDomainService permissionDelegationDomainService,
         IPermissionDelegationQueryService permissionDelegationQueryService,
         ISaasCacheInvalidator cacheInvalidator,
-        IAuthorizationChangeNotifier authorizationChangeNotifier)
+        IAuthorizationChangeNotifier authorizationChangeNotifier,
+        IImpersonationPolicyService impersonationPolicyService)
     {
         _permissionDelegationDomainService = permissionDelegationDomainService;
         _permissionDelegationQueryService = permissionDelegationQueryService;
         _cacheInvalidator = cacheInvalidator;
         _authorizationChangeNotifier = authorizationChangeNotifier;
+        _impersonationPolicyService = impersonationPolicyService;
     }
 
     /// <summary>
@@ -83,6 +88,8 @@ public sealed class PermissionDelegationAppService
     {
         ArgumentNullException.ThrowIfNull(input);
         cancellationToken.ThrowIfCancellationRequested();
+
+        await EnsureCanDelegateAsync(input.PermissionId, input.RoleId, cancellationToken);
 
         var result = await _permissionDelegationDomainService.CreatePermissionDelegationAsync(PermissionDelegationApplicationMapper.ToCreateCommand(input), cancellationToken);
         await _cacheInvalidator.InvalidateAuthorizationAsync(cancellationToken: cancellationToken);
@@ -116,6 +123,8 @@ public sealed class PermissionDelegationAppService
         ArgumentNullException.ThrowIfNull(input);
         cancellationToken.ThrowIfCancellationRequested();
 
+        await EnsureCanDelegateAsync(input.PermissionId, input.RoleId, cancellationToken);
+
         var result = await _permissionDelegationDomainService.UpdatePermissionDelegationAsync(PermissionDelegationApplicationMapper.ToUpdateCommand(input), cancellationToken);
         await _cacheInvalidator.InvalidateAuthorizationAsync(cancellationToken: cancellationToken);
         await NotifyDelegationChangeAsync(result, cancellationToken);
@@ -134,12 +143,36 @@ public sealed class PermissionDelegationAppService
         ArgumentNullException.ThrowIfNull(input);
         cancellationToken.ThrowIfCancellationRequested();
 
+        var delegation = await _permissionDelegationQueryService.GetPermissionDelegationDetailAsync(input.BasicId, cancellationToken)
+            ?? throw new InvalidOperationException("权限委托不存在。");
+        await EnsureCanDelegateAsync(delegation.PermissionId, delegation.RoleId, cancellationToken);
+
         var result = await _permissionDelegationDomainService.UpdatePermissionDelegationStatusAsync(PermissionDelegationApplicationMapper.ToStatusCommand(input), cancellationToken);
         await _cacheInvalidator.InvalidateAuthorizationAsync(cancellationToken: cancellationToken);
         await NotifyDelegationChangeAsync(result, cancellationToken);
 
         return await _permissionDelegationQueryService.GetPermissionDelegationDetailAsync(result.DelegationId, cancellationToken)
             ?? throw new InvalidOperationException("权限委托不存在。");
+    }
+
+    /// <summary>
+    /// 校验当前用户可以委托出这份权限与角色
+    /// </summary>
+    /// <remarks>
+    /// 委托是一条不经 RoleAppService / UserPermissionAppService 的授权路径，
+    /// 权限与角色两个通道都要过与直授同一道准入，否则可借委托把模仿权限交给任意人。
+    /// </remarks>
+    /// <param name="permissionId">被委托的权限主键</param>
+    /// <param name="roleId">被委托的角色主键</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    private async Task EnsureCanDelegateAsync(long? permissionId, long? roleId, CancellationToken cancellationToken)
+    {
+        await _impersonationPolicyService.EnsureCanGrantPermissionIdsAsync(
+            permissionId is > 0 ? [permissionId.Value] : [],
+            cancellationToken);
+        await _impersonationPolicyService.EnsureCanGrantRoleIdsAsync(
+            roleId is > 0 ? [roleId.Value] : [],
+            cancellationToken);
     }
 
     #endregion PermissionDelegation

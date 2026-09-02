@@ -1,6 +1,6 @@
 # 多租户与版本
 
-XiHan.BasicApp 是一套 **B2B SaaS 多租户内核**：一份代码、一套部署，同时承载多个互不可见的租户（企业客户），并以**版本（Edition）**作为订阅售卖与功能门控的单元。本页讲清楚隔离怎么落地、登录后落到哪里、超级管理员如何跨租户运维、版本白名单如何在运行时门控权限，以及请求如何解析到租户上下文。
+XiHan.BasicApp 是一套 **企业级通用中后台内核**：一份代码、一套部署，同时承载多个互不可见的租户（企业客户），并以**版本（Edition）**作为订阅售卖与功能门控的单元。本页讲清楚隔离怎么落地、登录后落到哪里、超级管理员如何跨租户运维、版本白名单如何在运行时门控权限，以及请求如何解析到租户上下文。
 
 权限码、数据范围、字段脱敏等细节见 [权限模型](./permission)；框架层的租户上下文、解析链与存储见 [XiHan.Framework.MultiTenancy](https://framework.docs.xihanfun.com/packages/multitenancy)。本页聚焦 BasicApp 应用层的租户与版本机制。
 
@@ -89,7 +89,7 @@ BasicApp 采用**先登录后选租户**：登录页不选择租户，统一在�
 
 ## 租户版本（Edition）：权限白名单 + 运行时门控
 
-版本是 B2B SaaS 的**订阅售卖单元 + 功能门控单元**。三张表分工明确：
+版本是**订阅售卖单元 + 功能门控单元**。三张表分工明确：
 
 | 实体 | 表 | 职责 |
 | --- | --- | --- |
@@ -120,7 +120,7 @@ BasicApp 采用**先登录后选租户**：登录页不选择租户，统一在�
 
 ### 开通一站式：建管理员 + 角色 + 授权
 
-创建租户时若同时提供 `AdminUserName` + `AdminPassword`（此时 `AdminEmail` 必填且须为有效邮箱），`CreateTenantAsync` 会调 `ProvisionTenantAdminAsync` 一站式开通（`TenantProvisionDomainService`），全程在新租户上下文内进行：
+创建租户时若同时提供 `AdminUserName` + `AdminPassword`（此时 `AdminEmail` 必填且须为有效邮箱），`CreateTenantAsync` 会调 `ProvisionTenantAdminAsync` 一站式开通（`TenantProvisionDomainService`），全程在**平台态**（`ICurrentTenant.Change(null)`）内进行——账号注册表与租户授权绑定都落平台库，各实体显式置 `TenantId`，平台态插入保留该预置值（库隔离租户的独立库此时还没建，见下面的「库隔离租户的开通顺序」）：
 
 1. **确保版本**：租户未指定则取默认版本并回写 `SysTenant.EditionId`；
 2. **建管理员**：创建 `SysUser`（校验邮箱全局唯一）+ `SysUserSecurity`（密码哈希）+ `SysTenantUser`（`MemberType=Owner`、`InviteStatus=Accepted`）；
@@ -128,6 +128,16 @@ BasicApp 采用**先登录后选租户**：登录页不选择租户，统一在�
 4. **绑定**：把管理员挂到 Owner 角色（`SysUserRole`）。
 
 于是新租户开通即"能登录、有 Owner、拥有版本范围内的全部权限"，无需人工逐项授权。
+
+#### 库隔离租户的开通顺序
+
+`Database` 隔离的租户创建出来时 `ConfigStatus` 是 `Pending`，独立库要等 `InitializeDatabase` 才建（建库是 DDL，不能包在事务型工作单元里，所以是独立一步）。因此开通期**不能碰租户库**：上面四步全部在平台态执行，写的是平台库。
+
+`InitializeDatabase` 建的是这个租户**一整套**布局：主库，加上它按约定自带的模块库。主连接下配了 `ModuleDataSourceConfigs` 的模块（如 `Erp`），租户也会有一个对应的库，库名由租户主库名派生成 `{租户库名}_{模块名}`——租户库叫 `qqq`，就还会建一个 `qqq_Erp`。主连接那条模块连接串留空（该模块不分库）时租户同样不分，模块表落它自己的主库。
+
+这条约定由框架实现（`XiHan:Data:SqlSugarCore:EnableTenantModuleDatabaseConvention`，默认开），应用侧不写代码、不加配置。含义是：**租户声明了库隔离，它的数据就都在它自己的库里**，不会有一部分悄悄落回公共模块库。要把某个租户的模块库指到别的机器上，在 `ISqlSugarTenantConnectionProvider` 里显式给出 `ModuleDataSourceConfigs` 即可，显式的优先。
+
+对应地，账号定位与授权绑定的读侧也都在平台态：登录统一在平台态按全局唯一邮箱定位账号（见上文「登录与落点」），`ExistsEmailGloballyAsync` / `ExistsUserNameInTenantAsync` 自身会切到平台态执行——租户上下文下连接会被解析到该租户独立库，"全平台判重"就会查错库。租户范围由入参显式落进 `WHERE`，不依赖当前上下文。
 
 ### 降级自动回收越权授权
 

@@ -17,6 +17,11 @@ public sealed class LoginConfigDto
     /// OAuth 提供商
     /// </summary>
     public List<OAuthProviderItemDto> OAuthProviders { get; set; } = [];
+
+    /// <summary>
+    /// 密码登录是否要求图形验证码（前端据此展示验证码输入区）
+    /// </summary>
+    public bool CaptchaEnabled { get; set; }
 }
 
 /// <summary>
@@ -49,6 +54,16 @@ public sealed class LoginRequestDto
     /// 密码
     /// </summary>
     public string Password { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 图形验证码标识（登录配置要求验证码时必填）
+    /// </summary>
+    public string? CaptchaId { get; set; }
+
+    /// <summary>
+    /// 图形验证码（登录配置要求验证码时必填）
+    /// </summary>
+    public string? CaptchaCode { get; set; }
 
     /// <summary>
     /// 双因素验证码
@@ -374,6 +389,47 @@ public sealed class UserInfoDto
     /// 权限编码
     /// </summary>
     public List<string> Permissions { get; set; } = [];
+
+    /// <summary>
+    /// 是否可发起模仿登录（服务端按实时权限判定；模仿态下恒为 false）
+    /// </summary>
+    public bool CanImpersonate { get; set; }
+
+    /// <summary>
+    /// 是否处于模仿态（当前身份由他人以模仿方式登录得到）
+    /// </summary>
+    public bool IsImpersonating { get; set; }
+
+    /// <summary>
+    /// 模仿者用户主键
+    /// </summary>
+    public long? ImpersonatorUserId { get; set; }
+
+    /// <summary>
+    /// 模仿者用户名
+    /// </summary>
+    public string? ImpersonatorUserName { get; set; }
+}
+
+/// <summary>
+/// 发起模仿登录请求 DTO
+/// </summary>
+public sealed class StartImpersonationRequestDto
+{
+    /// <summary>
+    /// 目标用户主键
+    /// </summary>
+    public long TargetUserId { get; set; }
+
+    /// <summary>
+    /// 目标租户主键；为空时沿用发起人当前上下文，平台运维态下按目标用户自身登录落点解析
+    /// </summary>
+    public long? TenantId { get; set; }
+
+    /// <summary>
+    /// 模仿事由（落审计，最长 200 字符）
+    /// </summary>
+    public string? Reason { get; set; }
 }
 
 /// <summary>
@@ -381,6 +437,11 @@ public sealed class UserInfoDto
 /// </summary>
 public sealed class PermissionInfoDto
 {
+    /// <summary>
+    /// 可用按钮码（页面按钮的门控由服务端判定，权限码不下发给客户端）
+    /// </summary>
+    public List<string> Buttons { get; set; } = [];
+
     /// <summary>
     /// 角色编码
     /// </summary>

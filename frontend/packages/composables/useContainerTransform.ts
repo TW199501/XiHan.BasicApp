@@ -8,9 +8,11 @@
  *   视觉上点击的行/按钮「长大」成了弹窗；
  * - 弹窗卸载时反向播放：幽灵从弹窗矩形收回点击源位置。
  *
- * 弹窗在 Naive 进场缩放动画中测量会失真：用 offsetWidth/offsetHeight（布局尺寸，
+ * 弹窗在 弹窗的进场缩放动画中测量会失真：用 offsetWidth/offsetHeight（布局尺寸，
  * 不受 transform 影响）+ 按计算样式的 transform 矩阵与 transform-origin 反解出布局位置。
  */
+
+import { onScopeDispose } from 'vue'
 
 interface SourceCapture {
   rect: DOMRect
@@ -18,7 +20,10 @@ interface SourceCapture {
 }
 
 /** 点击源识别选择器（就近匹配）：表格行优先于行内按钮之外的小元素 */
-const SOURCE_SELECTOR = 'button, [role="button"], a, .n-data-table-tr, .n-card'
+const SOURCE_SELECTOR = 'button, [role="button"], a, [data-scope="table"][data-part="row"], [data-scope="card"][data-part="root"]'
+
+/** 弹窗正文：变形的目标 */
+const DIALOG_SELECTOR = '[data-scope="dialog"][data-part="content"]'
 
 /** 点击 → 弹窗出现 的关联窗口（毫秒） */
 const LINK_WINDOW = 800
@@ -94,35 +99,44 @@ function findModal(node: Node): HTMLElement | null {
   if (!(node instanceof HTMLElement)) {
     return null
   }
-  if (node.classList.contains('n-modal')) {
+  if (node.matches(DIALOG_SELECTOR)) {
     return node
   }
-  return node.querySelector<HTMLElement>('.n-modal')
+  return node.querySelector<HTMLElement>(DIALOG_SELECTOR)
 }
+
+/** 未安装时返回的空卸载函数 */
+function noop(): void {}
+
+/** 当前这次安装的卸载入口（重复安装时原样返回，保证幂等语义下拿到的是同一个） */
+let teardown: (() => void) | null = null
 
 /**
  * 安装容器变形转场（幂等，应用内调用一次）。
  * options.enabled 为动态开关（如跟随「页面切换动画」偏好）。
+ *
+ * @returns 卸载函数：摘掉 pointerdown 监听、断开 MutationObserver 并释放点击源矩形。
+ *   在 effect 作用域（组件 setup）内调用时会自动随作用域销毁，无需手动调用。
  */
-export function setupContainerTransform(options?: { enabled?: () => boolean }): void {
-  if (installed || typeof document === 'undefined') {
-    return
+export function setupContainerTransform(options?: { enabled?: () => boolean }): () => void {
+  if (typeof document === 'undefined') {
+    return noop
+  }
+  if (installed) {
+    return teardown ?? noop
   }
   installed = true
 
   const enabled = () => (options?.enabled ? options.enabled() : true) && !reducedMotion()
 
   // 记录点击源（捕获期，任何 UI 框架处理前）
-  document.addEventListener(
-    'pointerdown',
-    (e) => {
-      const target = (e.target as HTMLElement | null)?.closest<HTMLElement>(SOURCE_SELECTOR)
-      if (target) {
-        lastSource = { rect: target.getBoundingClientRect(), time: Date.now() }
-      }
-    },
-    true,
-  )
+  const onPointerDown = (e: Event) => {
+    const target = (e.target as HTMLElement | null)?.closest<HTMLElement>(SOURCE_SELECTOR)
+    if (target) {
+      lastSource = { rect: target.getBoundingClientRect(), time: Date.now() }
+    }
+  }
+  document.addEventListener('pointerdown', onPointerDown, true)
 
   const onModalOpened = (modal: HTMLElement) => {
     if (!enabled() || !lastSource || Date.now() - lastSource.time > LINK_WINDOW) {
@@ -155,7 +169,7 @@ export function setupContainerTransform(options?: { enabled?: () => boolean }): 
     morph(link.modal, link.source, CLOSE_DURATION)
   }
 
-  new MutationObserver((mutations) => {
+  const observer = new MutationObserver((mutations) => {
     for (const mutation of mutations) {
       for (const node of mutation.addedNodes) {
         const modal = findModal(node)
@@ -170,5 +184,22 @@ export function setupContainerTransform(options?: { enabled?: () => boolean }): 
         }
       }
     }
-  }).observe(document.body, { childList: true })
+  })
+  observer.observe(document.body, { childList: true })
+
+  const dispose = () => {
+    // 只有当前这次安装的持有者能卸载；重复卸载与卸载后再装互不干扰
+    if (teardown !== dispose) {
+      return
+    }
+    installed = false
+    teardown = null
+    lastSource = null
+    document.removeEventListener('pointerdown', onPointerDown, true)
+    observer.disconnect()
+  }
+  teardown = dispose
+  // 在组件 setup 内安装时随作用域自动卸载；脱离作用域调用则静默跳过（由调用方自行 dispose）
+  onScopeDispose(dispose, true)
+  return dispose
 }

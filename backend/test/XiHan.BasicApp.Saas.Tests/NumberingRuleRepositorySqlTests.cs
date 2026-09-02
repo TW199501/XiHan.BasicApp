@@ -178,10 +178,7 @@ public sealed class NumberingRuleRepositorySqlTests : IDisposable
     {
         _client.Ado.Connection.Close();
         _client.Dispose();
-        if (File.Exists(_databasePath))
-        {
-            File.Delete(_databasePath);
-        }
+        SaasTestHelper.DeleteTemporaryDatabase(_databasePath);
     }
 
     /// <summary>
@@ -238,6 +235,13 @@ public sealed class NumberingRuleRepositorySqlTests : IDisposable
         public ISqlSugarClient GetCurrentClient() => client;
 
         /// <summary>
+        /// 获取实体对应的客户端
+        /// </summary>
+        /// <param name="entityType">实体类型</param>
+        /// <returns>Scope 级客户端</returns>
+        public ISqlSugarClient GetClientForEntity(Type entityType) => client;
+
+        /// <summary>
         /// 按 ConfigId 获取指定客户端
         /// </summary>
         /// <param name="configId">连接配置标识</param>
@@ -248,6 +252,11 @@ public sealed class NumberingRuleRepositorySqlTests : IDisposable
         /// 获取全部连接配置标识
         /// </summary>
         public IReadOnlyCollection<string> GetAllConfigIds() => [];
+
+        /// <summary>
+        /// 获取当前布局的全部连接配置标识
+        /// </summary>
+        public IReadOnlyList<string> GetCurrentLayoutConfigIds() => [];
 
         /// <summary>
         /// 按顺序获取所有库的客户端（初始化/种子数据等场景使用）

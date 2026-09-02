@@ -3,6 +3,7 @@ import type { HeaderMode } from '../contracts'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { MOBILE_BREAKPOINT } from '~/composables/useIsMobile'
+import { setScrollRoot } from '~/composables/useScrollRoot'
 import { useContentMaximize } from '~/hooks'
 import { useAppStore, useLayoutBridgeStore } from '~/stores'
 import { useEffectiveLayoutMode } from './use-effective-layout-mode'
@@ -340,9 +341,7 @@ export function useLayoutShellAdapter() {
   }
 
   // --- Event handlers ---
-  function handleSidebarMouseEnter(e: MouseEvent) {
-    if (e?.offsetX < 10)
-      return
+  function handleSidebarMouseEnter() {
     if (appStore.sidebarExpandOnHover)
       return
     if (!sidebarExpandOnHovering.value) {
@@ -398,19 +397,19 @@ export function useLayoutShellAdapter() {
     handleAutoScrollHeader()
   }
 
-  // 内容滚动容器由布局通过 :ref 注入；滚动搬入容器后，滚动源改读容器 scrollTop（back-top/顶栏阴影/自动隐藏都依赖它）
+  // 内容滚动容器由布局通过 :ref 注入；滚动搬入容器后，滚动源改读容器 scrollTop（back-top/顶栏阴影/自动隐藏都依赖它）。
+  // 组件实例取 $el 拿到它的根元素，收到的必须是真正 overflow:auto 的那层
   function setContentScrollEl(el: ComponentPublicInstance | Element | null) {
-    const next = (el as HTMLElement) ?? null
+    const host = el && '$el' in el ? (el.$el as HTMLElement | null) : el
+    const next = (host as HTMLElement | null) ?? null
     if (next === contentScrollEl.value)
       return
     contentScrollEl.value?.removeEventListener('scroll', handleScroll)
     contentScrollEl.value = next
     next?.addEventListener('scroll', handleScroll, { passive: true })
+    // 组件库的滚动锁默认探 body，本应用的滚动在容器里，得把它指过去
+    setScrollRoot(next)
     handleScroll()
-  }
-
-  function scrollContentToTop() {
-    contentScrollEl.value?.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   function handleMouseMove(e: MouseEvent) {
@@ -482,6 +481,7 @@ export function useLayoutShellAdapter() {
   onBeforeUnmount(() => {
     window.removeEventListener('resize', updateViewportWidth)
     contentScrollEl.value?.removeEventListener('scroll', handleScroll)
+    setScrollRoot(null)
     window.removeEventListener('mousemove', handleMouseMove)
   })
 
@@ -509,7 +509,6 @@ export function useLayoutShellAdapter() {
     headerIsHidden,
     scrollY,
     setContentScrollEl,
-    scrollContentToTop,
 
     headerHeight,
     tabbarHeight,

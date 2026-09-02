@@ -1,18 +1,25 @@
 <script setup lang="ts">
 import type { ExportTaskDto, PageResult } from '@/api'
 import type { ListFieldSchema, PageSchema, SchemaActionPayload } from '~/components'
-import { NProgress, NTag, useDialog, useMessage } from 'naive-ui'
+import { XhProgress, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
 import { computed, h, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ExportFormat, ExportScope, exportTaskApi, ExportTaskStatus, fileApi } from '@/api'
+import {
+  createPageRequest,
+  ExportFormat,
+  ExportScope,
+  exportTaskApi,
+  ExportTaskStatus,
+  fileApi,
+  querySortsFromSchema,
+} from '@/api'
 import { SchemaPage } from '~/components'
+import { dialog, toast } from '~/composables'
 import { downloadBlob, getOptionLabel } from '~/utils'
 
 defineOptions({ name: 'SettingExportCenterPage' })
 
 const { t } = useI18n()
-const message = useMessage()
-const dialog = useDialog()
 
 const schemaPageRef = ref<InstanceType<typeof SchemaPage> | null>(null)
 
@@ -57,12 +64,29 @@ const formatOptions = [
   { label: 'Excel', value: ExportFormat.Xlsx },
 ]
 
-function statusTagType(status: ExportTaskStatus): 'default' | 'error' | 'info' | 'success' {
+// 业务类型取值的真源在后端：每个 IExportProvider 实现的 BusinessType（见 Application/Exporting/Providers/）。
+// 此处为筛选下拉的展示副本，后端新增 Provider 后需同步补一条；未登记的取值在列上原样显示业务码，不会变成占位符。
+const businessTypeOptions = computed(() => [
+  { label: t('file.export_center.business_type.access_log'), value: 'log.access' },
+  { label: t('file.export_center.business_type.api_log'), value: 'log.api' },
+  { label: t('file.export_center.business_type.login_log'), value: 'log.login' },
+  { label: t('file.export_center.business_type.exception_log'), value: 'log.exception' },
+  { label: t('file.export_center.business_type.diff_log'), value: 'log.diff' },
+  { label: t('file.export_center.business_type.operation_log'), value: 'log.operation' },
+  { label: t('file.export_center.business_type.user'), value: 'system.user' },
+])
+
+/** 过滤值清洗：空串/空白按未填处理 */
+function toStr(v: unknown): string | undefined {
+  return (v as string | undefined)?.trim() || undefined
+}
+
+function statusTagType(status: ExportTaskStatus): 'neutral' | 'danger' | 'info' | 'success' {
   switch (status) {
     case ExportTaskStatus.Success: return 'success'
-    case ExportTaskStatus.Failed: return 'error'
+    case ExportTaskStatus.Failed: return 'danger'
     case ExportTaskStatus.Processing: return 'info'
-    default: return 'default'
+    default: return 'neutral'
   }
 }
 
@@ -81,20 +105,35 @@ function formatBytes(bytes: number): string {
 }
 
 const fields = computed<ListFieldSchema[]>(() => [
+  { key: 'keyword', title: t('file.export_center.columns.keyword'), dataType: 'string', visible: false, searchable: true, searchPlaceholder: t('file.export_center.columns.keyword_placeholder'), width: 220, order: 0 },
   { key: 'taskName', title: t('file.export_center.columns.task_name'), dataType: 'string', minWidth: 220, order: 10 },
-  { key: 'businessType', title: t('file.export_center.columns.business_type'), dataType: 'string', width: 150, order: 11 },
+  {
+    key: 'businessType',
+    title: t('file.export_center.columns.business_type'),
+    dataType: 'enum',
+    searchable: true,
+    searchMultiple: true,
+    options: businessTypeOptions.value,
+    searchPlaceholder: t('file.export_center.columns.business_type_placeholder'),
+    width: 150,
+    order: 11,
+    // 后端新增 Provider 而此处未同步时，回退显示原始业务码而非「-」
+    render: (row) => {
+      const businessType = (row as unknown as ExportTaskDto).businessType
+      return getOptionLabel(businessTypeOptions.value, businessType, businessType)
+    },
+  },
   {
     key: 'status',
     title: t('file.export_center.columns.status'),
     dataType: 'enum',
+    searchable: true,
+    searchMultiple: true,
     options: statusOptions.value,
+    searchPlaceholder: t('file.export_center.columns.status_placeholder'),
     width: 100,
     order: 12,
-    render: row => h(
-      NTag,
-      { size: 'small', round: true, bordered: false, type: statusTagType((row as unknown as ExportTaskDto).status) },
-      () => getOptionLabel(statusOptions.value, (row as unknown as ExportTaskDto).status),
-    ),
+    render: row => h(XhTagRoot, { variant: 'outline', tone: statusTagType((row as unknown as ExportTaskDto).status) }, () => h(XhTagLabel, () => getOptionLabel(statusOptions.value, (row as unknown as ExportTaskDto).status))),
   },
   {
     key: 'progress',
@@ -105,7 +144,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     render: (row) => {
       const r = row as unknown as ExportTaskDto
       if (r.status === ExportTaskStatus.Processing) {
-        return h(NProgress, {
+        return h(XhProgress, {
           type: 'line',
           percentage: r.progress,
           height: 8,
@@ -119,11 +158,11 @@ const fields = computed<ListFieldSchema[]>(() => [
       return h('span', { style: 'opacity:.5' }, '–')
     },
   },
-  { key: 'scope', title: t('file.export_center.columns.scope'), dataType: 'enum', options: scopeOptions.value, width: 100, order: 14, render: row => getOptionLabel(scopeOptions.value, (row as unknown as ExportTaskDto).scope) },
-  { key: 'format', title: t('file.export_center.columns.format'), dataType: 'enum', options: formatOptions, width: 90, order: 15, render: row => getOptionLabel(formatOptions, (row as unknown as ExportTaskDto).format) },
+  { key: 'scope', title: t('file.export_center.columns.scope'), dataType: 'enum', searchable: true, searchMultiple: true, options: scopeOptions.value, searchPlaceholder: t('file.export_center.columns.scope_placeholder'), width: 100, order: 14, render: row => getOptionLabel(scopeOptions.value, (row as unknown as ExportTaskDto).scope) },
+  { key: 'format', title: t('file.export_center.columns.format'), dataType: 'enum', searchable: true, searchMultiple: true, options: formatOptions, searchPlaceholder: t('file.export_center.columns.format_placeholder'), width: 90, order: 15, render: row => getOptionLabel(formatOptions, (row as unknown as ExportTaskDto).format) },
   { key: 'fileSize', title: t('file.export_center.columns.file_size'), dataType: 'string', width: 110, order: 16, render: row => formatBytes((row as unknown as ExportTaskDto).fileSize) },
-  { key: 'createdTime', title: t('file.export_center.columns.created_time'), dataType: 'datetime', minWidth: 170, order: 17 },
-  { key: 'finishedTime', title: t('file.export_center.columns.finished_time'), dataType: 'datetime', minWidth: 170, order: 18 },
+  { key: 'createdTime', title: t('file.export_center.columns.created_time'), dataType: 'datetime', sortable: true, searchable: true, searchRange: true, minWidth: 170, order: 17 },
+  { key: 'finishedTime', title: t('file.export_center.columns.finished_time'), dataType: 'datetime', advancedSearch: true, searchRange: true, minWidth: 170, order: 18 },
   { key: 'errorMessage', title: t('file.export_center.columns.error_message'), dataType: 'text', visible: false, order: 30 },
 ])
 
@@ -131,10 +170,18 @@ const schema = computed<PageSchema>(() => ({
   pageCode: 'file.export-center',
   pageName: t('file.export_center.page_name'),
   rowKey: 'basicId',
-  scrollX: 1400,
   fields: fields.value,
   resource: {
-    page: params => exportTaskApi.mine(params.page, params.pageSize) as unknown as Promise<PageResult<Record<string, unknown>>>,
+    page: (params) => {
+      return exportTaskApi.mine({
+        // 排序 + 区间(createdTime/finishedTime)/多选(businessType/status/scope/format) 统一走 conditions
+        ...createPageRequest({
+          page: { pageIndex: params.page, pageSize: params.pageSize },
+          conditions: { sorts: querySortsFromSchema(params.sorts), filters: params.conditionFilters ?? [] },
+        }),
+        keyword: toStr(params.filters.keyword),
+      }) as unknown as Promise<PageResult<Record<string, unknown>>>
+    },
   },
   actions: [
     { key: 'download', title: t('file.export_center.actions.download'), scope: 'row', icon: 'lucide:download', type: 'primary', visible: row => (row as unknown as ExportTaskDto).status === ExportTaskStatus.Success && !!(row as unknown as ExportTaskDto).fileId },
@@ -161,7 +208,7 @@ function onAction(payload: SchemaActionPayload) {
 
 async function handleDownload(row: ExportTaskDto) {
   if (!row.fileId) {
-    message.warning(t('file.export_center.product_not_exist'))
+    toast.warning(t('file.export_center.product_not_exist'))
     return
   }
   try {
@@ -169,35 +216,37 @@ async function handleDownload(row: ExportTaskDto) {
     downloadBlob(blob, row.fileName || `${row.taskName}.csv`)
   }
   catch (e) {
-    message.error((e as Error).message || t('file.export_center.download_failed'))
+    toast.error((e as Error).message || t('file.export_center.download_failed'))
   }
 }
 
 async function handleCancel(row: ExportTaskDto) {
   try {
     await exportTaskApi.cancel(row.basicId)
-    message.success(t('file.export_center.canceled'))
+    toast.success(t('file.export_center.canceled'))
     reload()
   }
   catch (e) {
-    message.error((e as Error).message || t('file.export_center.cancel_failed'))
+    toast.error((e as Error).message || t('file.export_center.cancel_failed'))
   }
 }
 
 function handleDelete(row: ExportTaskDto) {
-  dialog.warning({
+  void dialog.confirm({
+    badge: 'warning',
+    tone: 'danger',
     title: t('file.export_center.delete_title'),
     content: t('file.export_center.delete_content', { name: row.taskName }),
-    positiveText: t('file.export_center.actions.delete'),
-    negativeText: t('file.export_center.actions.cancel'),
-    onPositiveClick: async () => {
+    okText: t('file.export_center.actions.delete'),
+    cancelText: t('file.export_center.actions.cancel'),
+    onOk: async () => {
       try {
         await exportTaskApi.remove(row.basicId)
-        message.success(t('file.export_center.deleted'))
+        toast.success(t('file.export_center.deleted'))
         reload()
       }
       catch (e) {
-        message.error((e as Error).message || t('file.export_center.delete_failed'))
+        toast.error((e as Error).message || t('file.export_center.delete_failed'))
       }
     },
   })

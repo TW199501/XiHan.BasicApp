@@ -3,11 +3,13 @@ import type { LogDetailField } from '../_components/log-detail.types.ts'
 import type { TracePreset } from '../_components/trace-nav'
 import type { TraceTimelineItemDto, TraceTimelineResultDto } from '@/api'
 import type { ListFieldSchema } from '~/components'
-import { NCard, NEmpty, NSpin, NText, useMessage, useThemeVars } from 'naive-ui'
+import { XhCardBody, XhCardRoot, XhEmptyStateDescription, XhEmptyStateIcon, XhEmptyStateRoot, XhEmptyStateTitle, XhSpinner } from '@xihan-ui/vue'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { logManagementApi, TraceDimension, TraceLogType } from '@/api'
 import { SchemaSearchPanel } from '~/components'
+import { toast } from '~/composables'
+import { Icon } from '~/iconify'
 import { formatDate } from '~/utils'
 import {
   accessLogDetailFields,
@@ -24,8 +26,6 @@ import { tracePreset } from '../_components/trace-nav'
 defineOptions({ name: 'LogTracePage' })
 
 const { t } = useI18n()
-const message = useMessage()
-const themeVars = useThemeVars()
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -144,26 +144,26 @@ const detailTitle = computed(() =>
 async function runQuery() {
   const dimension = filters.dimension as TraceDimension | null | undefined
   if (!dimension) {
-    message.warning(t('log.trace.dimension_required'))
+    toast.warning(t('log.trace.dimension_required'))
     return
   }
 
   const value = String(filters.value ?? '').trim()
   if (!value) {
-    message.warning(t('log.trace.value_required'))
+    toast.warning(t('log.trace.value_required'))
     return
   }
 
   const range = filters.timeRange as [number, number] | null
   if (!range) {
-    message.warning(t('log.trace.range_required'))
+    toast.warning(t('log.trace.range_required'))
     return
   }
 
   const disabled = disabledTypes.value
   const effectiveTypes = ((filters.logTypes as TraceLogType[] | undefined) ?? []).filter(type => !disabled.includes(type))
   if (effectiveTypes.length === 0) {
-    message.warning(t('log.trace.type_required'))
+    toast.warning(t('log.trace.type_required'))
     return
   }
 
@@ -180,7 +180,7 @@ async function runQuery() {
     hasQueried.value = true
   }
   catch (error) {
-    message.error((error as Error)?.message || t('log.trace.query_failed'))
+    toast.error((error as Error)?.message || t('log.trace.query_failed'))
   }
   finally {
     loading.value = false
@@ -274,14 +274,14 @@ function minuteKey(value: string): string {
   return formatDate(value).slice(0, 16)
 }
 
-/** 分钟分组：外层时间线按分钟连接，分钟内为卡片子时间线 */
+/** 分钟分组：外层时间线按分钟连接，分钟内为卡片；datetime 为 <time> 的机读值 */
 const groups = computed(() => {
-  const out: { key: string, minute: string, items: TraceTimelineItemDto[] }[] = []
+  const out: { key: string, datetime: string, minute: string, items: TraceTimelineItemDto[] }[] = []
   let prev = ''
   for (const item of items.value) {
     const key = minuteKey(item.time)
     if (key !== prev) {
-      out.push({ key, minute: timeText(item.time).slice(0, 5), items: [] })
+      out.push({ key, datetime: key.replace(' ', 'T'), minute: timeText(item.time).slice(0, 5), items: [] })
       prev = key
     }
     out[out.length - 1]!.items.push(item)
@@ -357,7 +357,7 @@ async function openDetail(item: TraceTimelineItemDto) {
   }
   catch (error) {
     detailData.value = item as unknown as Record<string, unknown>
-    message.error((error as Error)?.message || t('log.trace.detail_load_failed'))
+    toast.error((error as Error)?.message || t('log.trace.detail_load_failed'))
   }
   finally {
     detailLoading.value = false
@@ -407,98 +407,117 @@ watch(tracePreset, (preset) => {
 
 <template>
   <div class="trace-page">
-    <NCard size="small" :content-style="{ padding: '12px 16px' }" :style="{ overflow: 'visible' }">
-      <SchemaSearchPanel
-        :advanced-fields="EMPTY_FIELDS"
-        :common-fields="searchFields"
-        :model="filters"
-        @reset="reset"
-        @search="runQuery"
-      />
-      <NText v-if="showUnsupportedHint" depth="3" class="trace-hint">
-        {{ t('log.trace.unsupported_hint') }}
-      </NText>
-    </NCard>
+    <XhCardRoot variant="ghost">
+      <XhCardBody>
+        <SchemaSearchPanel
+          :advanced-fields="EMPTY_FIELDS"
+          :common-fields="searchFields"
+          :model="filters"
+          @reset="reset"
+          @search="runQuery"
+        />
+        <span v-if="showUnsupportedHint" class="trace-hint">
+          {{ t('log.trace.unsupported_hint') }}
+        </span>
+      </XhCardBody>
+    </XhCardRoot>
 
-    <NCard
-      size="small"
-      class="flex-1"
-      style="height: 0"
-      :content-style="{ height: '100%', display: 'flex', flexDirection: 'column', minHeight: '0', padding: '0' }"
-    >
-      <NSpin :show="loading" class="trace-scroll">
-        <div v-if="result" class="trace-panel">
-          <div class="trace-panel__header">
-            <div class="trace-panel__titlerow">
-              <span class="trace-panel__title">{{ t('log.trace.page_name') }}</span>
-              <span class="trace-panel__count">{{ t('log.trace.summary_total', { total: result.totalCount }) }}</span>
-              <span class="trace-panel__grow" />
-              <span
-                v-for="(count, type) in result.typeCounts"
-                :key="type"
-                class="trace-chip"
-                :class="{ 'is-error': String(type).toLowerCase() === 'exception' }"
-              >
-                {{ logTypeLabel(type) }}<i>·</i><b>{{ count }}</b>
-              </span>
-            </div>
-            <div v-if="result.truncated" class="trace-panel__warn">
-              <span class="trace-panel__warndot" />
-              {{ t('log.trace.truncated') }}
-            </div>
+    <XhCardRoot class="flex-1" style="height: 0">
+      <XhCardBody style="height: 100%; display: flex; flex-direction: column; min-height: 0; padding: 0">
+        <div class="xh-loading-stage" :class="{ 'is-loading': loading }">
+          <div class="xh-loading-stage__veil">
+            <XhSpinner />
           </div>
-
-          <div v-if="groups.length" class="trace-panel__list">
-            <div v-for="grp in groups" :key="grp.key" class="trace-grp">
-              <div class="trace-grp__minute">
-                <span class="trace-grp__node" />
-                <span class="trace-grp__label">{{ grp.minute }}</span>
-                <span class="trace-grp__count">{{ grp.items.length }}</span>
-              </div>
-              <div class="trace-grp__cards">
-                <div
-                  v-for="item in grp.items"
-                  :key="`${item.logType}-${item.basicId}`"
-                  class="trace-card"
-                  :class="`is-${statusKind(item)}`"
-                  @click="openDetail(item)"
+          <div v-if="result" class="trace-panel">
+            <div class="trace-panel__header">
+              <div class="trace-panel__titlerow">
+                <span class="trace-panel__title">{{ t('log.trace.page_name') }}</span>
+                <span class="trace-panel__count">{{ t('log.trace.summary_total', { total: result.totalCount }) }}</span>
+                <span class="trace-panel__grow" />
+                <span
+                  v-for="(count, type) in result.typeCounts"
+                  :key="type"
+                  class="trace-chip"
+                  :class="{ 'is-error': String(type).toLowerCase() === 'exception' }"
                 >
-                  <div class="trace-card__head">
-                    <span class="trace-card__time">{{ timeText(item.time) }}</span>
-                    <span class="trace-card__chip" :class="logTypeClass(item)">{{ logTypeLabel(item.logType) }}</span>
-                    <span v-if="item.method" class="trace-card__chip" :class="methodClass(item)">{{ item.method }}</span>
-                    <span class="trace-card__grow" />
-                    <span class="trace-card__status">{{ statusText(item) }}</span>
-                  </div>
-                  <div class="trace-card__path">
-                    {{ pathOf(item) }}
-                  </div>
-                  <div v-if="item.summary" class="trace-card__summary">
-                    {{ item.summary }}
-                  </div>
-                  <div v-if="hasDuration(item)" class="trace-card__dur" :class="`dur-${durationLevel(item)}`">
-                    <span class="trace-card__bar">
-                      <span class="trace-card__barfill" :style="{ width: barWidth(item) }" />
-                    </span>
-                    <span class="trace-card__durlabel">{{ item.executionTime }}ms</span>
-                  </div>
-                  <div v-if="metaParts(item).length" class="trace-card__meta">
-                    <div v-for="p in metaParts(item)" :key="p.key" class="trace-card__metarow">
-                      <span class="trace-card__metak">{{ p.label }}</span>
-                      <span class="trace-card__metav">{{ p.value }}</span>
+                  {{ logTypeLabel(type) }}<i>·</i><b>{{ count }}</b>
+                </span>
+              </div>
+              <div v-if="result.truncated" class="trace-panel__warn">
+                <span class="trace-panel__warndot" />
+                {{ t('log.trace.truncated') }}
+              </div>
+            </div>
+
+            <XhTimelineRoot v-if="groups.length" class="trace-panel__list">
+              <XhTimelineItem v-for="grp in groups" :key="grp.key" tone="brand">
+                <XhTimelineIndicator />
+                <XhTimelineConnector />
+                <XhTimelineContent>
+                  <XhTimelineTitle class="trace-grp__minute">
+                    <XhTimelineTime :datetime="grp.datetime">
+                      {{ grp.minute }}
+                    </XhTimelineTime>
+                    <span class="trace-grp__count">{{ grp.items.length }}</span>
+                  </XhTimelineTitle>
+                  <div class="trace-grp__cards">
+                    <div
+                      v-for="item in grp.items"
+                      :key="`${item.logType}-${item.basicId}`"
+                      class="trace-card"
+                      :class="`is-${statusKind(item)}`"
+                      @click="openDetail(item)"
+                    >
+                      <div class="trace-card__head">
+                        <span class="trace-card__time">{{ timeText(item.time) }}</span>
+                        <span class="trace-card__chip" :class="logTypeClass(item)">{{ logTypeLabel(item.logType) }}</span>
+                        <span v-if="item.method" class="trace-card__chip" :class="methodClass(item)">{{ item.method }}</span>
+                        <span class="trace-card__grow" />
+                        <span class="trace-card__status">{{ statusText(item) }}</span>
+                      </div>
+                      <div class="trace-card__path">
+                        {{ pathOf(item) }}
+                      </div>
+                      <div v-if="item.summary" class="trace-card__summary">
+                        {{ item.summary }}
+                      </div>
+                      <div v-if="hasDuration(item)" class="trace-card__dur" :class="`dur-${durationLevel(item)}`">
+                        <span class="trace-card__bar">
+                          <span class="trace-card__barfill" :style="{ width: barWidth(item) }" />
+                        </span>
+                        <span class="trace-card__durlabel">{{ item.executionTime }}ms</span>
+                      </div>
+                      <div v-if="metaParts(item).length" class="trace-card__meta">
+                        <div v-for="p in metaParts(item)" :key="p.key" class="trace-card__metarow">
+                          <span class="trace-card__metak">{{ p.label }}</span>
+                          <span class="trace-card__metav">{{ p.value }}</span>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </div>
-            </div>
+                </XhTimelineContent>
+              </XhTimelineItem>
+            </XhTimelineRoot>
+
+            <XhEmptyStateRoot v-else class="trace-empty">
+              <XhEmptyStateIcon>
+                <Icon height="28" icon="lucide:search-x" width="28" />
+              </XhEmptyStateIcon>
+              <XhEmptyStateTitle>{{ t('common.no_data') }}</XhEmptyStateTitle>
+              <XhEmptyStateDescription>{{ emptyDescription }}</XhEmptyStateDescription>
+            </XhEmptyStateRoot>
           </div>
 
-          <NEmpty v-else :description="emptyDescription" class="trace-empty" />
+          <XhEmptyStateRoot v-else class="trace-empty">
+            <XhEmptyStateIcon>
+              <Icon height="28" icon="lucide:search-x" width="28" />
+            </XhEmptyStateIcon>
+            <XhEmptyStateTitle>{{ t('common.no_data') }}</XhEmptyStateTitle>
+            <XhEmptyStateDescription>{{ emptyDescription }}</XhEmptyStateDescription>
+          </XhEmptyStateRoot>
         </div>
-
-        <NEmpty v-else :description="emptyDescription" class="trace-empty" />
-      </NSpin>
-    </NCard>
+      </XhCardBody>
+    </XhCardRoot>
 
     <LogDetailDrawer
       v-model:show="detailVisible"
@@ -531,6 +550,7 @@ watch(tracePreset, (preset) => {
 .trace-hint {
   display: block;
   margin-top: 8px;
+  color: var(--xh-fg-muted);
   font-size: 12px;
 }
 
@@ -538,15 +558,15 @@ watch(tracePreset, (preset) => {
 .trace-panel {
   --trace-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   /* 状态色 / 耗时色 / 请求方式色 + 底色（卡片用 color-mix 调浅色） */
-  --t-card: v-bind('themeVars.cardColor');
-  --t-action: v-bind('themeVars.actionColor');
-  --t-border: v-bind('themeVars.borderColor');
-  --t-succ: v-bind('themeVars.successColor');
-  --t-err: v-bind('themeVars.errorColor');
-  --t-warn: v-bind('themeVars.warningColor');
-  --t-info: v-bind('themeVars.infoColor');
-  --t-primary: v-bind('themeVars.primaryColor');
-  --t-text: v-bind('themeVars.textColor1');
+  --t-card: var(--xh-bg-surface);
+  --t-action: var(--xh-bg-subtle);
+  --t-border: var(--xh-border-default);
+  --t-succ: var(--xh-color-success-600);
+  --t-err: var(--xh-color-danger-600);
+  --t-warn: var(--xh-color-warning-600);
+  --t-info: var(--xh-color-info-600);
+  --t-primary: var(--xh-color-brand-600);
+  --t-text: var(--xh-fg-default);
 }
 
 /* 头部吸顶：随内容滚动固定在结果卡顶部 */
@@ -555,8 +575,8 @@ watch(tracePreset, (preset) => {
   top: 0;
   z-index: 1;
   padding: 14px 20px 12px;
-  background: v-bind('themeVars.cardColor');
-  border-bottom: 1px solid v-bind('themeVars.dividerColor');
+  background: var(--xh-bg-surface);
+  border-bottom: 1px solid var(--xh-border-subtle);
 }
 
 .trace-panel__titlerow {
@@ -570,12 +590,12 @@ watch(tracePreset, (preset) => {
   font-size: 15px;
   font-weight: 600;
   letter-spacing: -0.01em;
-  color: v-bind('themeVars.textColor1');
+  color: var(--xh-fg-default);
 }
 
 .trace-panel__count {
   font-size: 12px;
-  color: v-bind('themeVars.textColor3');
+  color: var(--xh-fg-subtle);
 }
 
 .trace-panel__grow {
@@ -588,8 +608,8 @@ watch(tracePreset, (preset) => {
   gap: 4px;
   padding: 3px 8px;
   border-radius: 5px;
-  background: v-bind('themeVars.actionColor');
-  color: v-bind('themeVars.textColor3');
+  background: var(--xh-bg-subtle);
+  color: var(--xh-fg-subtle);
   font-family: var(--trace-mono);
   font-size: 11px;
 }
@@ -601,12 +621,12 @@ watch(tracePreset, (preset) => {
 
 .trace-chip b {
   font-weight: 500;
-  color: v-bind('themeVars.textColor2');
+  color: var(--xh-fg-muted);
 }
 
 .trace-chip.is-error,
 .trace-chip.is-error b {
-  color: v-bind('themeVars.errorColor');
+  color: var(--xh-color-danger-600);
 }
 
 .trace-panel__warn {
@@ -615,89 +635,51 @@ watch(tracePreset, (preset) => {
   gap: 7px;
   margin-top: 9px;
   font-size: 11px;
-  color: v-bind('themeVars.warningColor');
+  color: var(--xh-color-warning-600);
 }
 
 .trace-panel__warndot {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: v-bind('themeVars.warningColor');
+  background: var(--xh-color-warning-600);
 }
 
+/* ── 外层时间线（组件库 timeline）：圆点、连线、间距由皮肤负责，这里只改令牌 ── */
 .trace-panel__list {
-  padding: 6px 20px 16px;
+  --xh-timeline-connector-bg: var(--xh-border-subtle);
+  --xh-timeline-title-font-size: 12px;
+  --xh-timeline-time-font-size: 12px;
+  --xh-timeline-time-fg: var(--xh-fg-default);
+
+  padding: 12px 20px 16px;
 }
 
-/* ── 外层时间线：按分钟连接 ── */
-.trace-grp {
-  position: relative;
-}
-
-/* 贯穿分钟节点的竖直主线（相邻分组无间距 → 连续） */
-.trace-grp::before {
-  content: '';
-  position: absolute;
-  left: 6px;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: v-bind('themeVars.dividerColor');
-}
-
-.trace-grp:first-child::before {
-  top: 22px;
-}
-
-.trace-grp:last-child::before {
-  bottom: auto;
-  height: 24px;
-}
-
-/* 分钟节点 */
+/* 分钟标题行：时刻 + 该分钟内条数 */
 .trace-grp__minute {
-  position: relative;
   display: flex;
   align-items: center;
   gap: 9px;
-  min-height: 20px;
-  padding: 12px 0 10px 26px;
-}
-
-.trace-grp__node {
-  position: absolute;
-  left: 1px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: v-bind('themeVars.primaryColor');
-  box-shadow: 0 0 0 3px v-bind('themeVars.cardColor');
-}
-
-.trace-grp__label {
   font-family: var(--trace-mono);
-  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.02em;
-  color: v-bind('themeVars.textColor1');
 }
 
 .trace-grp__count {
   padding: 1px 6px;
   border-radius: 8px;
-  background: v-bind('themeVars.actionColor');
-  color: v-bind('themeVars.textColor3');
+  background: var(--xh-bg-subtle);
+  color: var(--xh-fg-subtle);
   font-family: var(--trace-mono);
   font-size: 10.5px;
+  font-weight: 400;
+  letter-spacing: normal;
   line-height: 1.5;
 }
 
 /* ── 分钟内：卡片横向排列（自适应换行），信息竖向堆叠完整展示 ── */
 .trace-grp__cards {
-  margin-left: 27px;
-  padding-bottom: 16px;
+  margin-top: 4px;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 10px;
@@ -763,9 +745,9 @@ watch(tracePreset, (preset) => {
   flex: none;
   padding: 2px 7px;
   border-radius: 5px;
-  border: 1px solid v-bind('themeVars.borderColor');
-  background: v-bind('themeVars.actionColor');
-  color: v-bind('themeVars.textColor3');
+  border: 1px solid var(--xh-border-default);
+  background: var(--xh-bg-subtle);
+  color: var(--xh-fg-subtle);
   font-family: var(--trace-mono);
   font-size: 10.5px;
   font-weight: 600;
@@ -819,7 +801,7 @@ watch(tracePreset, (preset) => {
   flex: none;
   font-family: var(--trace-mono);
   font-size: 11.5px;
-  color: v-bind('themeVars.textColor3');
+  color: var(--xh-fg-subtle);
 }
 
 .trace-card__grow {
@@ -845,14 +827,14 @@ watch(tracePreset, (preset) => {
   font-weight: 500;
   letter-spacing: -0.01em;
   line-height: 1.45;
-  color: v-bind('themeVars.textColor1');
+  color: var(--xh-fg-default);
   word-break: break-all;
 }
 
 .trace-card__summary {
   font-size: 12px;
   line-height: 1.45;
-  color: v-bind('themeVars.textColor2');
+  color: var(--xh-fg-muted);
   word-break: break-word;
 }
 
@@ -911,7 +893,7 @@ watch(tracePreset, (preset) => {
   gap: 4px;
   margin-top: 2px;
   padding-top: 9px;
-  border-top: 1px dashed v-bind('themeVars.dividerColor');
+  border-top: 1px dashed var(--xh-border-subtle);
 }
 
 .trace-card__metarow {
@@ -925,11 +907,11 @@ watch(tracePreset, (preset) => {
 .trace-card__metak {
   flex: none;
   min-width: 58px;
-  color: v-bind('themeVars.textColor3');
+  color: var(--xh-fg-subtle);
 }
 
 .trace-card__metav {
-  color: v-bind('themeVars.textColor2');
+  color: var(--xh-fg-muted);
   word-break: break-all;
 }
 
