@@ -3,9 +3,8 @@
 // i18n 校验门禁（零依赖）。每次改 locale/组件后必跑：
 //   node scripts/validate-i18n.mjs
 // 校验三件事：
-//   1. 按 langs/<locale>/index.ts 的实际合并逻辑（自动识别 nest `x,` 与 spread `...x`）重建 LOCALES
-//      内的每个语言，flatten 成扁平 key 集；以 zh-CN 为基准逐语言比对，各语言 key 集必须完全对称
-//      （互无缺失）。新增语言只需登记进 LOCALES，比对自动覆盖。
+//   1. 按 langs/<locale>/index.ts 的实际合并逻辑（自动识别 nest `x,` 与 spread `...x`）重建 zh-CN/en-US，
+//      flatten 成扁平 key 集；两语言 key 集必须完全对称（互无缺失）。
 //   2. 全库（packages + src）扫描 t('...') / $t('...') 字面量 key，凡“首段是已知模块、但完整 key 不在 locale”
 //      的即“孤儿键”（引用了但未定义，vue-i18n 运行期只返回 key 字符串、type-check/eslint 抓不到）。孤儿必须为 0。
 //   3. 退出码非 0 表示校验失败，可挂 CI / 批末门禁。
@@ -148,7 +147,7 @@ function main() {
   }
 
   // 2) 孤儿键：扫全库 t()/$t() 字面量
-  const topModules = new Set([...keys[BASE_LOCALE]].map(k => k.split('.')[0]))
+  const topModules = new Set([...keys['zh-CN']].map(k => k.split('.')[0]))
   const re = /(?:^|[^\w$])\$?t\(\s*['"]([a-z]\w*(?:\.\w+)+)['"]/g
   const used = new Map()
   for (const dir of ['packages', 'src']) {
@@ -169,7 +168,7 @@ function main() {
       }
     }
   }
-  const orphans = [...used].filter(([k]) => !keys[BASE_LOCALE].has(k))
+  const orphans = [...used].filter(([k]) => !keys['zh-CN'].has(k))
 
   // 报告
   console.log(`locale keys: ${LOCALES.map(l => `${l}=${keys[l].size}`).join(' ')}`)

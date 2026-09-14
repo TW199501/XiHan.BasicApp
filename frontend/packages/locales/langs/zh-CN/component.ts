@@ -439,7 +439,7 @@ export default {
     feature_stability_value: '生产可用',
     feature_data_label: '数据层',
     feature_i18n_label: '国际化',
-    feature_i18n_value: '五种语言',
+    feature_i18n_value: '中英双语',
     feature_architecture_label: '架构模式',
     feature_architecture_value: '模块化分层',
     backend_dependencies: '后端生产环境依赖 (NuGet)',
