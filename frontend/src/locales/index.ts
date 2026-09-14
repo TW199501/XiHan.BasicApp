@@ -13,6 +13,7 @@
  */
 import { registerLocaleMessages } from '~/locales'
 import enUS from './langs/en-US'
+import hiIN from './langs/hi-IN'
 import jaJP from './langs/ja-JP'
 import koKR from './langs/ko-KR'
 import zhCN from './langs/zh-CN'
@@ -28,6 +29,7 @@ export function setupBusinessLocales() {
     'en-US': enUS,
     'ja-JP': jaJP,
     'ko-KR': koKR,
+    'hi-IN': hiIN,
   })
 
   for (const [path, mod] of Object.entries(moduleLocales)) {

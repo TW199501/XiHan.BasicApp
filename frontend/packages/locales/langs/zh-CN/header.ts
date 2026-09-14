@@ -32,6 +32,7 @@ export default {
     en_us: 'English',
     ja_jp: '日本語',
     ko_kr: '한국어',
+    hi_in: 'हिन्दी',
   },
   timezone: {
     switch_success: '已切换时区：{timezone}',

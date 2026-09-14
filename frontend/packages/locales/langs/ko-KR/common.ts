@@ -1,12 +1,12 @@
 export default {
-  // Common actions
+  // 通用动作
   actions: {
     edit: '편집',
     delete: '삭제',
     view: '보기',
     detail: '상세',
     view_detail: '상세 보기',
-    search: '검색',
+    search: '조회',
     reset: '초기화',
     save: '저장',
     cancel: '취소',
@@ -18,25 +18,25 @@ export default {
     copy: '복사',
     enable: '활성화',
     disable: '비활성화',
-    resend: '재전송',
+    resend: '재발송',
     prev_step: '이전',
     next_step: '다음',
   },
-  // Common fields
+  // 通用字段
   fields: {
     keyword: '키워드',
     status: '상태',
     sort: '정렬',
     remark: '비고',
-    created_time: '생성 일시',
+    created_time: '생성 시간',
     created_by: '생성자',
   },
-  // Common statuses
+  // 通用状态
   statuses: {
-    enabled: '활성',
-    disabled: '비활성',
+    enabled: '활성화',
+    disabled: '비활성화',
     yes: '예',
-    no: '아니요',
+    no: '아니오',
     success: '성공',
     failed: '실패',
     allow: '허용',
@@ -47,26 +47,31 @@ export default {
     not_builtin: '내장 아님',
     builtin_tag: '내장',
     default_tag: '기본',
-    loading: '불러오는 중…',
+    loading: '로딩 중…',
     no_data: '데이터 없음',
   },
-  // Common messages
+  // 通用消息
   messages: {
-    save_success: '저장되었습니다',
-    save_failed: '저장하지 못했습니다',
-    delete_success: '삭제되었습니다',
-    delete_failed: '삭제하지 못했습니다',
-    status_updated: '상태가 변경되었습니다',
-    status_failed: '상태를 변경하지 못했습니다',
-    operation_failed: '작업에 실패했습니다',
-    batch_delete_failed: '일괄 삭제에 실패했습니다',
-    batch_action_failed: '일괄 작업에 실패했습니다',
+    validate_failed: '입력 내용을 확인해 주세요',
+    save_success: '저장했어요',
+    save_failed: '저장하지 못했어요',
+    delete_success: '삭제했어요',
+    delete_failed: '삭제하지 못했어요',
+    status_updated: '상태를 변경했어요',
+    status_failed: '상태를 변경하지 못했어요',
+    load_failed: '불러오지 못했어요',
+    operation_failed: '작업에 실패했어요',
+    batch_delete_failed: '일괄 삭제하지 못했어요',
+    batch_action_failed: '일괄 작업에 실패했어요',
   },
-  // Gender (reused across modules)
+  // 性别（跨模块复用）
   gender: {
     unknown: '알 수 없음',
     male: '남성',
     female: '여성',
   },
   no_data: '데이터 없음',
+  empty: '데이터 없음',
+  no_result: '일치하는 결과가 없어요',
+  loading: '로딩 중…',
 }

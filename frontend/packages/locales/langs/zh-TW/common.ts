@@ -7,7 +7,7 @@ export default {
     detail: '詳情',
     view_detail: '檢視詳情',
     search: '查詢',
-    reset: '重置',
+    reset: '重設',
     save: '儲存',
     cancel: '取消',
     confirm: '確認',
@@ -18,18 +18,18 @@ export default {
     copy: '複製',
     enable: '啟用',
     disable: '停用',
-    resend: '重發',
+    resend: '重新傳送',
     prev_step: '上一步',
     next_step: '下一步',
   },
   // 通用字段
   fields: {
-    keyword: '關鍵詞',
+    keyword: '關鍵字',
     status: '狀態',
     sort: '排序',
     remark: '備註',
     created_time: '建立時間',
-    created_by: '建立人',
+    created_by: '建立者',
   },
   // 通用状态
   statuses: {
@@ -52,12 +52,14 @@ export default {
   },
   // 通用消息
   messages: {
+    validate_failed: '請檢查表單填寫內容',
     save_success: '儲存成功',
     save_failed: '儲存失敗',
     delete_success: '刪除成功',
     delete_failed: '刪除失敗',
     status_updated: '狀態已更新',
     status_failed: '狀態更新失敗',
+    load_failed: '載入失敗',
     operation_failed: '操作失敗',
     batch_delete_failed: '批次刪除失敗',
     batch_action_failed: '批次操作失敗',
@@ -69,4 +71,7 @@ export default {
     female: '女',
   },
   no_data: '暫無資料',
+  empty: '暫無資料',
+  no_result: '沒有符合的結果',
+  loading: '載入中…',
 }

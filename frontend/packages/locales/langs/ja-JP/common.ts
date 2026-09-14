@@ -1,5 +1,5 @@
 export default {
-  // Common actions
+  // 通用动作
   actions: {
     edit: '編集',
     delete: '削除',
@@ -22,7 +22,7 @@ export default {
     prev_step: '前へ',
     next_step: '次へ',
   },
-  // Common fields
+  // 通用字段
   fields: {
     keyword: 'キーワード',
     status: 'ステータス',
@@ -31,7 +31,7 @@ export default {
     created_time: '作成日時',
     created_by: '作成者',
   },
-  // Common statuses
+  // 通用状态
   statuses: {
     enabled: '有効',
     disabled: '無効',
@@ -40,33 +40,38 @@ export default {
     success: '成功',
     failed: '失敗',
     allow: '許可',
-    forbid: '禁止',
+    forbid: '拒否',
     global: 'グローバル',
-    not_global: '非グローバル',
+    not_global: 'グローバル以外',
     builtin: '組み込み',
-    not_builtin: '非組み込み',
+    not_builtin: '組み込み以外',
     builtin_tag: '組み込み',
-    default_tag: '既定',
+    default_tag: 'デフォルト',
     loading: '読み込み中…',
     no_data: 'データなし',
   },
-  // Common messages
+  // 通用消息
   messages: {
+    validate_failed: '入力内容をご確認ください',
     save_success: '保存しました',
     save_failed: '保存に失敗しました',
     delete_success: '削除しました',
     delete_failed: '削除に失敗しました',
     status_updated: 'ステータスを更新しました',
     status_failed: 'ステータスの更新に失敗しました',
+    load_failed: '読み込みに失敗しました',
     operation_failed: '操作に失敗しました',
     batch_delete_failed: '一括削除に失敗しました',
     batch_action_failed: '一括操作に失敗しました',
   },
-  // Gender (reused across modules)
+  // 性别（跨模块复用）
   gender: {
     unknown: '不明',
     male: '男性',
     female: '女性',
   },
-  no_data: 'データなし',
+  no_data: 'データがありません',
+  empty: 'データがありません',
+  no_result: '一致する結果がありません',
+  loading: '読み込み中…',
 }

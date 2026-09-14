@@ -6,7 +6,7 @@
 //   1. 模块目录只允许出现约定条目：views/ api/ locales/ setup.ts README.md；
 //   2. 模块视图重键后（/src/modules/<m>/views/** → /src/views/**）不得与 src/views
 //      既有文件同键，模块之间也不得互相同键——冲突即构建门禁失败；
-//   3. locales/ 下只允许 ALLOWED_LOCALES 内的文件，且各语言文件必须齐备。
+//   3. locales/ 下只允许 ALLOWED_LOCALES 里的语言文件，且必须齐备（缺一种即失败）。
 // 退出码非 0 表示校验失败，挂 CI。
 // ----------------------------------------------------------------
 import { existsSync, readdirSync, statSync } from 'node:fs'
@@ -18,10 +18,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const MODULES = join(ROOT, 'src/modules')
 const VIEWS = join(ROOT, 'src/views')
 const ALLOWED_ENTRIES = new Set(['views', 'api', 'locales', 'setup.ts', 'README.md'])
-// 新增语言时在此登记，模块 locales 必须同步补齐，否则门禁失败。
-// 这是严格白名单：未登记的语言文件出现在模块 locales/ 下同样报错，
-// 所以「先建骨架、后登记」的顺序会让门禁短暂变红——建档时就要一并补这里。
-const ALLOWED_LOCALES = ['zh-CN.ts', 'en-US.ts', 'ja-JP.ts', 'ko-KR.ts', 'zh-TW.ts']
+const ALLOWED_LOCALES = ['zh-CN.ts', 'zh-TW.ts', 'en-US.ts', 'ja-JP.ts', 'ko-KR.ts', 'hi-IN.ts']
 
 function walkVues(dir, out = []) {
   if (!existsSync(dir))
