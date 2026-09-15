@@ -1,0 +1,123 @@
+.agents/skills/create-pr/agents/openai.yaml
+  s_98275fb4752bd5::t_b364a3a41940fd 1-7
+.agents/skills/fullstack-contracts/references/architecture.md
+  s_98275fb4752bd5::t_b364a3a41940fd 1-53
+.agents/skills/version-release/agents/openai.yaml
+  s_98275fb4752bd5::t_b364a3a41940fd 1-7
+.agents/skills/changelog-collect/agents/openai.yaml
+  s_98275fb4752bd5::t_b364a3a41940fd 1-7
+.agents/skills/issue-reply/SKILL.md
+  s_98275fb4752bd5::t_b364a3a41940fd 1-25
+backend/test/XiHan.BasicApp.Saas.Tests/NumberingFormatterTests.cs
+  s_98275fb4752bd5::t_b364a3a41940fd 176-183
+  s_98275fb4752bd5::t_169e283910f681 175
+backend/test/XiHan.BasicApp.Saas.Tests/XiHan.BasicApp.Saas.Tests.csproj
+  s_98275fb4752bd5::t_b364a3a41940fd 6
+.agents/skills/fullstack-contracts/agents/openai.yaml
+  s_98275fb4752bd5::t_b364a3a41940fd 1-7
+.agents/skills/fullstack-contracts/references/contracts-security-and-operations.md
+  s_98275fb4752bd5::t_b364a3a41940fd 1-52
+.agents/skills/changelog-collect/SKILL.md
+  s_98275fb4752bd5::t_b364a3a41940fd 1-24
+.claude/skills
+  s_98275fb4752bd5::t_b364a3a41940fd 1
+backend/test/XiHan.BasicApp.Api.Tests/XiHan.BasicApp.Api.Tests.csproj
+  s_98275fb4752bd5::t_b364a3a41940fd 6
+backend/test/XiHan.BasicApp.Core.Tests/XiHan.BasicApp.Core.Tests.csproj
+  s_98275fb4752bd5::t_b364a3a41940fd 6
+backend/src/modules/XiHan.BasicApp.Saas/Domain/Repositories/Identity/IUserSessionRepository.cs
+  s_98275fb4752bd5::t_b364a3a41940fd 19-22
+  s_98275fb4752bd5::t_a0b5819ad1901f 18
+CLAUDE.md
+  s_98275fb4752bd5::t_b364a3a41940fd 1
+backend/src/modules/XiHan.BasicApp.Saas/Infrastructure/Repositories/Identity/UserSessionRepository.cs
+  s_98275fb4752bd5::t_b364a3a41940fd 31-43
+  s_98275fb4752bd5::t_a97f5b72d3f666 30
+frontend/src/views/identity/online-user/index.vue
+  s_98275fb4752bd5::t_b364a3a41940fd 5,32-36,39,41,46-51
+.agents/skills/test-review/agents/openai.yaml
+  s_98275fb4752bd5::t_b364a3a41940fd 1-7
+backend/src/framework/XiHan.BasicApp.Web.Core/XiHan.BasicApp.Web.Core.csproj
+  s_98275fb4752bd5::t_b364a3a41940fd 20-26
+backend/test/XiHan.BasicApp.Web.Core.Tests/XiHan.BasicApp.Web.Core.Tests.csproj
+  s_98275fb4752bd5::t_b364a3a41940fd 6
+backend/test/XiHan.BasicApp.CodeGeneration.Tests/XiHan.BasicApp.CodeGeneration.Tests.csproj
+  s_98275fb4752bd5::t_b364a3a41940fd 6
+.agents/skills/fullstack-contracts/SKILL.md
+  s_98275fb4752bd5::t_b364a3a41940fd 1-29
+backend/src/modules/XiHan.BasicApp.Saas/Infrastructure/Auth/SaasRefreshTokenStore.cs
+  s_98275fb4752bd5::t_b364a3a41940fd 1-85
+backend/test/XiHan.BasicApp.Printing.Tests/XiHan.BasicApp.Printing.Tests.csproj
+  s_98275fb4752bd5::t_b364a3a41940fd 6
+backend/test/XiHan.BasicApp.WebHost.Tests/XiHan.BasicApp.WebHost.Tests.csproj
+  s_98275fb4752bd5::t_b364a3a41940fd 6
+backend/src/framework/XiHan.BasicApp.Core/XiHan.BasicApp.Core.csproj
+  s_98275fb4752bd5::t_b364a3a41940fd 23-78
+backend/test/XiHan.BasicApp.Chat.Tests/XiHan.BasicApp.Chat.Tests.csproj
+  s_98275fb4752bd5::t_b364a3a41940fd 6
+.agents/skills/backend-development/references/backend.md
+  s_98275fb4752bd5::t_b364a3a41940fd 1-60
+.agents/skills/issue-reply/agents/openai.yaml
+  s_98275fb4752bd5::t_b364a3a41940fd 1-7
+.agents/skills/test-review/SKILL.md
+  s_98275fb4752bd5::t_b364a3a41940fd 1-23
+.agents/skills/frontend-development/references/frontend.md
+  s_98275fb4752bd5::t_b364a3a41940fd 1-60
+AGENTS.md
+  s_98275fb4752bd5::t_b364a3a41940fd 1,3,5,7,9,11-17,19,21-26,28,30-50,52-156
+backend/props/test.props
+  s_98275fb4752bd5::t_b364a3a41940fd 1-30
+backend/XiHan.BasicApp.slnx
+  s_98275fb4752bd5::t_b364a3a41940fd 47,50
+backend/src/modules/XiHan.BasicApp.Saas/Infrastructure/Messaging/SaasTelegramUpdateDeduplicator.cs
+  s_98275fb4752bd5::t_b364a3a41940fd 30,44
+.agents/skills/commit-msg/SKILL.md
+  s_98275fb4752bd5::t_b364a3a41940fd 1-16
+.agents/skills/commit-msg/agents/openai.yaml
+  s_98275fb4752bd5::t_b364a3a41940fd 1-7
+.agents/skills/frontend-development/agents/openai.yaml
+  s_98275fb4752bd5::t_b364a3a41940fd 1-7
+backend/src/modules/XiHan.BasicApp.Saas/XiHanBasicAppSaasModule.cs
+  s_98275fb4752bd5::t_b364a3a41940fd 87
+backend/test/XiHan.BasicApp.AI.Tests/XiHan.BasicApp.AI.Tests.csproj
+  s_98275fb4752bd5::t_b364a3a41940fd 6
+.agents/skills/create-pr/SKILL.md
+  s_98275fb4752bd5::t_b364a3a41940fd 1-25
+.agents/skills/frontend-development/SKILL.md
+  s_98275fb4752bd5::t_b364a3a41940fd 1-28
+backend/src/modules/XiHan.BasicApp.Saas/Infrastructure/Tasks/SaasJobStore.cs
+  s_98275fb4752bd5::t_b364a3a41940fd 99,118,350-356
+  s_98275fb4752bd5::t_0dda47f4cbd89c 357
+backend/test/XiHan.BasicApp.Saas.Tests/OnlineUserSummaryTests.cs
+  s_98275fb4752bd5::t_b364a3a41940fd 1-55
+backend/src/modules/XiHan.BasicApp.Saas/Extensions/ServiceCollectionExtensions.cs
+  s_98275fb4752bd5::t_b364a3a41940fd 27,353-355,395
+backend/test/XiHan.BasicApp.Workflow.Tests/XiHan.BasicApp.Workflow.Tests.csproj
+  s_98275fb4752bd5::t_b364a3a41940fd 6
+.agents/skills/backend-development/SKILL.md
+  s_98275fb4752bd5::t_b364a3a41940fd 1-29
+.agents/skills/version-release/SKILL.md
+  s_98275fb4752bd5::t_b364a3a41940fd 1-27
+.agents/skills/backend-development/agents/openai.yaml
+  s_98275fb4752bd5::t_b364a3a41940fd 1-7
+backend/test/XiHan.BasicApp.Saas.Tests/SaasJobStoreMemoryTests.cs
+  s_98275fb4752bd5::t_b364a3a41940fd 1-156
+backend/src/modules/XiHan.BasicApp.Saas/Application/QueryServices/Identity/OnlineUserQueryService.cs
+  s_98275fb4752bd5::t_b364a3a41940fd 149,152,157-158
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "fdb9b24480b8d412832fbfa70898eb788bc55e34",
+  "prompts": {},
+  "sessions": {
+    "s_98275fb4752bd5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e197f4a2-700b-44d3-a731-61a0c2e0897d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
