@@ -1,0 +1,19 @@
+frontend/scripts/validate-i18n.mjs
+  s_98275fb4752bd5::t_61b9d9c718a3ba 96-98
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "fdbddfe565a64ee3063354fd0877b213fac03f6d",
+  "prompts": {},
+  "sessions": {
+    "s_98275fb4752bd5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e197f4a2-700b-44d3-a731-61a0c2e0897d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
