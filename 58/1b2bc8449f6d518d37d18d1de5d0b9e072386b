@@ -1,0 +1,19 @@
+frontend/pnpm-workspace.yaml
+  s_98275fb4752bd5::t_d7376c90fc6dad 17-19,22-25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "581b2bc8449f6d518d37d18d1de5d0b9e072386b",
+  "prompts": {},
+  "sessions": {
+    "s_98275fb4752bd5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e197f4a2-700b-44d3-a731-61a0c2e0897d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
