@@ -1,0 +1,35 @@
+frontend/src/locales/langs/de-DE/file.ts
+  s_20ffc66aca9b27::t_ad03625a1f8acc 1-459
+frontend/src/locales/langs/de-DE/approval.ts
+  s_20ffc66aca9b27::t_ad03625a1f8acc 1-193
+frontend/src/locales/langs/de-DE/message.ts
+  s_20ffc66aca9b27::t_4fa89010099862 1-4
+frontend/src/locales/langs/de-DE/openapi.ts
+  s_20ffc66aca9b27::t_4fa89010099862 1-4
+frontend/src/locales/langs/de-DE/setting.ts
+  s_20ffc66aca9b27::t_4fa89010099862 1-4
+frontend/src/locales/langs/de-DE/tenant.ts
+  s_20ffc66aca9b27::t_ad03625a1f8acc 1-212
+frontend/src/locales/langs/de-DE/workbench.ts
+  s_20ffc66aca9b27::t_ad03625a1f8acc 1-74
+frontend/src/locales/langs/de-DE/log.ts
+  s_20ffc66aca9b27::t_4fa89010099862 1-4
+frontend/src/locales/langs/de-DE/identity.ts
+  s_20ffc66aca9b27::t_4fa89010099862 1-4
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "6eb79e19830161221713b3a4608ef749fd7f35de",
+  "prompts": {},
+  "sessions": {
+    "s_20ffc66aca9b27": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a00f1b-a193-7490-8142-bc1974a061d9",
+        "model": "gpt-5.6-terra"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
