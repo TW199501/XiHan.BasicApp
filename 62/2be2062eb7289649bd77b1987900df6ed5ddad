@@ -1,0 +1,24 @@
+backend/props/test.props
+  s_98275fb4752bd5::t_46303700f54481 17
+  s_98275fb4752bd5::t_d6d0a1da0e45bb 18
+global.json
+  s_98275fb4752bd5::t_edbeaa2d4f79ca 1-5
+.github/workflows/ci.yml
+  s_98275fb4752bd5::t_8fba3dab068ce8 43-44,46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "622be2062eb7289649bd77b1987900df6ed5ddad",
+  "prompts": {},
+  "sessions": {
+    "s_98275fb4752bd5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e197f4a2-700b-44d3-a731-61a0c2e0897d",
+        "model": "claude-opus-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
