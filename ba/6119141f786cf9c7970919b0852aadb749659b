@@ -1,0 +1,29 @@
+frontend/packages/composables/xh-config.test.ts
+  s_04048039e208f0::t_954df8051955fc 1-36
+frontend/packages/composables/xh-config.ts
+  s_04048039e208f0::t_83dd8bd1e2fbee 15-22
+frontend/packages/stores/app/preferences.test.ts
+  s_04048039e208f0::t_134936ffe63b94 32
+  s_04048039e208f0::t_f102a62a9a60f7 177-193
+frontend/packages/locales/xihan-ui.ts
+  s_04048039e208f0::t_5d230acfc3f756 113-114
+frontend/packages/stores/app/preferences.ts
+  s_04048039e208f0::t_3fdfc16b6a5d22 44
+  s_04048039e208f0::t_dfd27c18ab4bc9 110-112
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "ba6119141f786cf9c7970919b0852aadb749659b",
+  "prompts": {},
+  "sessions": {
+    "s_04048039e208f0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11e49693-8ef2-4c65-91c6-44ec80c10f5c",
+        "model": "claude-opus-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
