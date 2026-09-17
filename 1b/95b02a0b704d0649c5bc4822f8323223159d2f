@@ -1,0 +1,35 @@
+frontend/packages/locales/langs/en-US/page.ts
+  s_04048039e208f0::t_34221afe2f6c23 1-167
+frontend/packages/views/_core/authentication/AuthEntrySwitcher.test.ts
+  s_04048039e208f0::t_6f31d540678852 1-70
+frontend/packages/views/_core/authentication/AuthEntrySwitcher.vue
+  s_04048039e208f0::t_34221afe2f6c23 1-48
+frontend/packages/locales/langs/ja-JP/page.ts
+  s_04048039e208f0::t_34221afe2f6c23 1-166
+frontend/packages/locales/langs/hi-IN/page.ts
+  s_04048039e208f0::t_34221afe2f6c23 1-166
+frontend/packages/locales/langs/de-DE/page.ts
+  s_04048039e208f0::t_34221afe2f6c23 1-167
+frontend/packages/locales/langs/ko-KR/page.ts
+  s_04048039e208f0::t_34221afe2f6c23 1-166
+frontend/packages/locales/langs/zh-CN/page.ts
+  s_04048039e208f0::t_34221afe2f6c23 1-166
+frontend/packages/locales/langs/zh-TW/page.ts
+  s_04048039e208f0::t_34221afe2f6c23 1-166
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "1b95b02a0b704d0649c5bc4822f8323223159d2f",
+  "prompts": {},
+  "sessions": {
+    "s_04048039e208f0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11e49693-8ef2-4c65-91c6-44ec80c10f5c",
+        "model": "claude-opus-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
