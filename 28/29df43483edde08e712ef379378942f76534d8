@@ -1,0 +1,19 @@
+.vscode/settings.json
+  s_04048039e208f0::t_d6dc1e33cff5a0 1-23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "2829df43483edde08e712ef379378942f76534d8",
+  "prompts": {},
+  "sessions": {
+    "s_04048039e208f0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11e49693-8ef2-4c65-91c6-44ec80c10f5c",
+        "model": "unknown"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
