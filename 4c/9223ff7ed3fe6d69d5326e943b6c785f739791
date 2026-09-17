@@ -1,0 +1,28 @@
+frontend/packages/constants/app.ts
+  s_04048039e208f0::t_881c223018cef1 10-13
+frontend/scripts/vitest-setup.ts
+  s_04048039e208f0::t_46fa0bfdab1247 60-68
+  s_04048039e208f0::t_7f37b80e58a1de 59
+frontend/packages/utils/locale.ts
+  s_04048039e208f0::t_142f0557ff5f45 1-49
+frontend/packages/utils/locale.test.ts
+  s_04048039e208f0::t_14ba970b4ecb00 1-110
+frontend/packages/utils/index.ts
+  s_04048039e208f0::t_1a1af9fb6baa0b 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "4c9223ff7ed3fe6d69d5326e943b6c785f739791",
+  "prompts": {},
+  "sessions": {
+    "s_04048039e208f0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11e49693-8ef2-4c65-91c6-44ec80c10f5c",
+        "model": "claude-opus-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
