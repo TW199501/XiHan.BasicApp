@@ -1,0 +1,23 @@
+backend/src/modules/XiHan.BasicApp.Saas/Domain/Repositories/Identity/IUserRepository.cs
+  s_04048039e208f0::t_7711389dd8a98f 61-63
+  s_04048039e208f0::t_a56ed91a04cefd 31,33-36
+backend/src/modules/XiHan.BasicApp.Saas/Infrastructure/Repositories/Identity/UserRepository.cs
+  s_04048039e208f0::t_93ec57f9eaf8be 60,62-65
+  s_04048039e208f0::t_04dbcccfa5b88c 124-126
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "afb0b0c7782eb7d0031b1e94f59ea8f039a6b53a",
+  "prompts": {},
+  "sessions": {
+    "s_04048039e208f0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11e49693-8ef2-4c65-91c6-44ec80c10f5c",
+        "model": "claude-opus-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
