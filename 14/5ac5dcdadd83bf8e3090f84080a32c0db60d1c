@@ -1,0 +1,29 @@
+frontend/packages/utils/package.json
+  s_04048039e208f0::t_51605d43562f20 9
+frontend/packages/utils/phone.ts
+  s_04048039e208f0::t_19b3346e756f4e 1-33,35-65
+  s_04048039e208f0::t_b2b3bf44e48c50 34
+frontend/packages/utils/index.ts
+  s_04048039e208f0::t_7e1d8480314fc2 7
+frontend/pnpm-workspace.yaml
+  s_04048039e208f0::t_91189b81f83317 103
+frontend/packages/utils/phone.test.ts
+  s_04048039e208f0::t_e8e9f88d744d4d 1-26,28-64
+  s_04048039e208f0::t_e5db0c11126c9b 27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "145ac5dcdadd83bf8e3090f84080a32c0db60d1c",
+  "prompts": {},
+  "sessions": {
+    "s_04048039e208f0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11e49693-8ef2-4c65-91c6-44ec80c10f5c",
+        "model": "claude-opus-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
