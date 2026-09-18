@@ -1,0 +1,25 @@
+frontend/packages/views/_core/authentication/code-login.vue
+  s_04048039e208f0::t_2c87cb4bd10d4e 35-37,39
+frontend/src/views/identity/user/index.vue
+  s_04048039e208f0::t_cb63cf27cb3d0f 720-725
+  s_04048039e208f0::t_cbe1110a8f4530 1174
+  s_04048039e208f0::t_2214e54c49c2b2 105-106
+  s_04048039e208f0::t_e502c325948c69 603-604
+  s_04048039e208f0::t_e12a736277034f 571-573
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "770f84acdbd85fa07bd2760bd7b70ff5b9ae45d1",
+  "prompts": {},
+  "sessions": {
+    "s_04048039e208f0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11e49693-8ef2-4c65-91c6-44ec80c10f5c",
+        "model": "claude-opus-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
