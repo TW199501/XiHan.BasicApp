@@ -1,0 +1,38 @@
+frontend/packages/locales/langs/de-DE/component.ts
+  s_04048039e208f0::t_5204ca65044ac1 717-721
+frontend/packages/locales/langs/zh-CN/component.ts
+  s_04048039e208f0::t_27ac397b7aef06 715-719
+frontend/packages/components/common/PhoneInput.vue
+  s_04048039e208f0::t_9858670c4eaaad 1-92
+frontend/packages/components/common/PhoneInput.test.ts
+  s_04048039e208f0::t_bc5c031d9dcd2c 1-15,17-47
+  s_04048039e208f0::t_6fffbf11f76de4 16
+frontend/packages/locales/langs/en-US/component.ts
+  s_04048039e208f0::t_d9d1529f4dc4f7 717-721
+frontend/packages/locales/langs/zh-TW/component.ts
+  s_04048039e208f0::t_9f01ea5b7500c4 715-719
+frontend/packages/locales/langs/ko-KR/component.ts
+  s_04048039e208f0::t_b497813e8b6f7a 715-719
+frontend/packages/components/common/index.ts
+  s_04048039e208f0::t_2e511c4b027244 18
+frontend/packages/locales/langs/ja-JP/component.ts
+  s_04048039e208f0::t_9a906a44940fd9 715-719
+frontend/packages/locales/langs/hi-IN/component.ts
+  s_04048039e208f0::t_8b2b8def25bf2f 715-719
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c5396ba8a5ac5f3e1f459ae28865ce6bfb580132",
+  "prompts": {},
+  "sessions": {
+    "s_04048039e208f0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11e49693-8ef2-4c65-91c6-44ec80c10f5c",
+        "model": "claude-opus-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
