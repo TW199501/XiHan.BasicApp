@@ -1,0 +1,28 @@
+backend/src/modules/XiHan.BasicApp.Saas/Domain/DomainServices/Identity/IPhoneNumberNormalizer.cs
+  s_04048039e208f0::t_153db6c5dca719 1-27
+backend/src/modules/XiHan.BasicApp.Saas/Domain/DomainServices/Identity/Implementations/PhoneNumberNormalizer.cs
+  s_04048039e208f0::t_4ed9f4fc104074 1-65
+backend/src/modules/XiHan.BasicApp.Saas/Extensions/ServiceCollectionExtensions.cs
+  s_04048039e208f0::t_9b85fef68924c6 74-75
+backend/src/modules/XiHan.BasicApp.Saas/XiHan.BasicApp.Saas.csproj
+  s_04048039e208f0::t_3e7cca0a71036f 27-29
+  s_04048039e208f0::t_9f763f3a8e99e6 26
+backend/test/XiHan.BasicApp.Saas.Tests/PhoneNumberNormalizerTests.cs
+  s_04048039e208f0::t_af51dead3db752 1-62
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "c6148bfae200ab125c0416afe553f957d0017d4d",
+  "prompts": {},
+  "sessions": {
+    "s_04048039e208f0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11e49693-8ef2-4c65-91c6-44ec80c10f5c",
+        "model": "claude-opus-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
