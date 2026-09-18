@@ -1,0 +1,42 @@
+backend/src/modules/XiHan.BasicApp.Saas/Extensions/ServiceCollectionExtensions.cs
+  s_04048039e208f0::t_9b1ef3c4dcb1b2 227
+backend/src/modules/XiHan.BasicApp.Saas/Application/Dtos/Auth/AuthDtos.cs
+  s_04048039e208f0::t_e4d053feb7e19e 183-214
+backend/src/modules/XiHan.BasicApp.Saas/Application/Services/Auth/AuthPhoneLoginCodeService.cs
+  s_04048039e208f0::t_fc27fde6194295 1-77
+backend/src/modules/XiHan.BasicApp.Saas/Domain/DomainServices/Identity/IAuthenticationDomainService.cs
+  s_04048039e208f0::t_5b2abc9612ea32 40-53
+backend/src/modules/XiHan.BasicApp.Saas/Application/Contracts/Auth/IAuthAppService.cs
+  s_04048039e208f0::t_8730d08b904a91 69-84
+backend/test/XiHan.BasicApp.Saas.Tests/PhoneLoginContractTests.cs
+  s_04048039e208f0::t_66df9dd6dfe335 1-4,6-38
+  s_04048039e208f0::t_6a7c924fa68117 5
+backend/src/modules/XiHan.BasicApp.Saas/Application/AppServices/Auth/AuthAppService.cs
+  s_04048039e208f0::t_a56b71fde648df 152-153
+  s_04048039e208f0::t_d249041b694cfe 747-776,779-836,1798
+  s_04048039e208f0::t_8b2839caeaa335 777-778
+  s_04048039e208f0::t_f9fb6976de4a54 1799-1841
+  s_04048039e208f0::t_f272c479daa737 77-80
+  s_04048039e208f0::t_abacf457d2adb7 194-195
+backend/src/modules/XiHan.BasicApp.Saas/Domain/DomainServices/Identity/Implementations/AuthenticationDomainService.cs
+  s_04048039e208f0::t_56a90d51049e97 124-145
+  s_04048039e208f0::t_31ee27ed7ffb05 118-123
+backend/src/modules/XiHan.BasicApp.Saas/Application/Services/Auth/IAuthPhoneLoginCodeService.cs
+  s_04048039e208f0::t_5f39569e96ee37 1-37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "5c6219d0111d52f1051411e46648966d99f533ae",
+  "prompts": {},
+  "sessions": {
+    "s_04048039e208f0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11e49693-8ef2-4c65-91c6-44ec80c10f5c",
+        "model": "claude-opus-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
