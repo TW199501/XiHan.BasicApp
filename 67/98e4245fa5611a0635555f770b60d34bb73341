@@ -1,0 +1,58 @@
+backend/src/modules/XiHan.BasicApp.Saas/Domain/Repositories/Identity/IUserRepository.cs
+  s_04048039e208f0::t_42cb96b360c327 30-37,54-61
+  s_04048039e208f0::t_1e853484a796de 62
+backend/test/XiHan.BasicApp.Api.Tests/UniqueIndexTenantScopeTests.cs
+  s_04048039e208f0::t_a4c3ca748f7cb5 58,60
+backend/src/modules/XiHan.BasicApp.Saas/Domain/DomainServices/Profile/Implementations/ProfileDomainService.cs
+  s_04048039e208f0::t_1c34150b7cf9b9 40-41
+  s_04048039e208f0::t_b7e143aadeb8d6 51
+  s_04048039e208f0::t_10d4db4a9e21ec 62
+  s_04048039e208f0::t_50846e4f12c7e3 164-165
+backend/test/XiHan.BasicApp.Saas.Tests/PhoneIdentityServiceTests.cs
+  s_04048039e208f0::t_d13da72935edcb 1-84
+backend/test/XiHan.BasicApp.Saas.Tests/UserRoleGrantSoDEnforcementTests.cs
+  s_04048039e208f0::t_e57e6ef1bc0a2c 208
+backend/test/XiHan.BasicApp.Saas.Tests/SaasAppImpersonationRevokeTests.cs
+  s_04048039e208f0::t_75e9ecb8d675b3 185
+backend/src/modules/XiHan.BasicApp.Saas/Domain/Entities/SysUser.cs
+  s_04048039e208f0::t_c23e2715ec8c90 96
+  s_04048039e208f0::t_b97463dfd468c2 58
+  s_04048039e208f0::t_c8379919abb525 35
+backend/test/XiHan.BasicApp.Saas.Tests/UserCreateSeatQuotaTests.cs
+  s_04048039e208f0::t_f9a60df312b140 143
+backend/src/modules/XiHan.BasicApp.Saas/Infrastructure/Repositories/Identity/UserRepository.cs
+  s_04048039e208f0::t_276c636f43da81 70
+  s_04048039e208f0::t_0ed3cf0044d432 60-69,71-74
+  s_04048039e208f0::t_64d723ba7a4b7b 118-139
+  s_04048039e208f0::t_8017d64aaa8f9e 59
+  s_04048039e208f0::t_87827c5fcd5330 117
+backend/src/modules/XiHan.BasicApp.Saas/Domain/DomainServices/Identity/IPhoneIdentityService.cs
+  s_04048039e208f0::t_4044b29a1c0b5f 1-19
+backend/src/modules/XiHan.BasicApp.Saas/Extensions/ServiceCollectionExtensions.cs
+  s_04048039e208f0::t_28500f17a2c905 89-90
+backend/src/modules/XiHan.BasicApp.Saas/Domain/DomainServices/Identity/Implementations/UserDomainService.cs
+  s_04048039e208f0::t_9a0a82c84ffdaa 116
+  s_04048039e208f0::t_a58e242b5a8dae 186-187,196
+  s_04048039e208f0::t_a9dc905bf15ae8 28-31
+  s_04048039e208f0::t_96eaaafb21cba9 136
+  s_04048039e208f0::t_23a79a884c7c78 227
+  s_04048039e208f0::t_8d52c5f8f0b938 27
+backend/src/modules/XiHan.BasicApp.Saas/Domain/DomainServices/Identity/Implementations/PhoneIdentityService.cs
+  s_04048039e208f0::t_abe71948f801b0 1-46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "6798e4245fa5611a0635555f770b60d34bb73341",
+  "prompts": {},
+  "sessions": {
+    "s_04048039e208f0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11e49693-8ef2-4c65-91c6-44ec80c10f5c",
+        "model": "claude-opus-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
