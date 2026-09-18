@@ -1,0 +1,42 @@
+frontend/src/views/identity/user/index.vue
+  s_04048039e208f0::t_6ade157fd5813e 36
+  s_04048039e208f0::t_22777e7deafeb5 1161
+frontend/packages/views/_core/profile/ProfileTabInfo.vue
+  s_04048039e208f0::t_8c19acde786aa9 687,689,691
+  s_04048039e208f0::t_d526aefbda1c69 6
+frontend/packages/locales/langs/ko-KR/page.ts
+  s_04048039e208f0::t_4e41a5c61fe27e 41
+frontend/packages/locales/langs/hi-IN/page.ts
+  s_04048039e208f0::t_021aa123a5a6e3 41
+frontend/packages/locales/langs/de-DE/page.ts
+  s_04048039e208f0::t_b818249ccccc8e 41
+frontend/packages/locales/langs/zh-CN/page.ts
+  s_04048039e208f0::t_2c35812de9ed5a 41
+frontend/packages/locales/langs/zh-TW/page.ts
+  s_04048039e208f0::t_6f9a656d5ccc48 41
+frontend/packages/views/_core/authentication/code-login.vue
+  s_04048039e208f0::t_50bbf37868e1dc 6
+  s_04048039e208f0::t_b4475a2310e723 24,28-29,36-37
+  s_04048039e208f0::t_6ce798a82ff945 117,121
+  s_04048039e208f0::t_bda284fcfd3aeb 52
+frontend/packages/locales/langs/ja-JP/page.ts
+  s_04048039e208f0::t_940e4b23c52683 41
+frontend/packages/locales/langs/en-US/page.ts
+  s_04048039e208f0::t_c5053b51468483 41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "ea622e9a79dc524947e6ba805a03cbc9382d13e7",
+  "prompts": {},
+  "sessions": {
+    "s_04048039e208f0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11e49693-8ef2-4c65-91c6-44ec80c10f5c",
+        "model": "claude-opus-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
