@@ -1,0 +1,35 @@
+backend/test/XiHan.BasicApp.Saas.Tests/AuthPhoneLoginCodeServiceTests.cs
+  s_04048039e208f0::t_9a32a6111ec5da 1-95
+backend/test/XiHan.BasicApp.Saas.Tests/AuthAppServicePhoneLoginCodeThrottleTests.cs
+  s_04048039e208f0::t_ab67e520e935ea 1-40
+backend/test/XiHan.BasicApp.Saas.Tests/VerificationThrottleServiceTests.cs
+  s_04048039e208f0::t_5938b290957263 1-199
+backend/src/main/XiHan.BasicApp.WebHost/UpdateScripts/5.2.0/5.2.0.sql
+  s_04048039e208f0::t_56f98295902b5c 2,7-8,10,16-18,23,25,30,35,37,39,41-47,50-52,57,64,77-78,81-132
+backend/src/modules/XiHan.BasicApp.Saas/Application/AppServices/Auth/AuthAppService.cs
+  s_04048039e208f0::t_bf627b066790c3 783-786
+  s_04048039e208f0::t_012009c0072575 85-86
+  s_04048039e208f0::t_9b7d94483c1740 158
+  s_04048039e208f0::t_78407a90366684 201
+  s_04048039e208f0::t_c1cdcd112ab43c 768,782
+backend/test/XiHan.BasicApp.Saas.Tests/AuthenticationDomainServicePhoneLoginTests.cs
+  s_04048039e208f0::t_d3fc9477d0913a 1-120
+backend/src/modules/XiHan.BasicApp.Saas/Application/Services/Profile/ProfileVerificationModels.cs
+  s_04048039e208f0::t_82bdea84a63146 39-44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "eaf8888b7be487e5c398bc87ecaf9b4d195bac2c",
+  "prompts": {},
+  "sessions": {
+    "s_04048039e208f0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "11e49693-8ef2-4c65-91c6-44ec80c10f5c",
+        "model": "claude-opus-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
