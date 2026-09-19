@@ -1,0 +1,43 @@
+frontend/packages/components/common/XSegmented.test.ts
+  s_afa7c6a945f639::t_8d7359e63ecc08 1-16,18,20-46
+  s_afa7c6a945f639::t_9b87070d6aa18c 17,19
+frontend/packages/components/common/XSegmented.vue
+  s_afa7c6a945f639::t_5365300ef71513 79-82
+  s_afa7c6a945f639::t_497cb1435efd9f 60-62,66-69,71-78,83
+  s_afa7c6a945f639::t_6a14d07ba5d172 4
+  s_afa7c6a945f639::t_4bfe059e484c41 11-12,17-18,23
+  s_afa7c6a945f639::t_1bd7cf0efd9353 63-65
+  s_afa7c6a945f639::t_def535b5418d85 37-39
+frontend/packages/views/_core/authentication/AuthEntrySwitcher.vue
+  s_afa7c6a945f639::t_b4ef0f73ba9a0e 88-93,95-98
+  s_afa7c6a945f639::t_b12fc6038307d9 2-3
+  s_afa7c6a945f639::t_119c3b6697139c 21-24,27-54,58-71
+  s_afa7c6a945f639::t_c8b0030e2f5cad 18
+  s_afa7c6a945f639::t_361c6fa9f14029 94
+  s_afa7c6a945f639::t_5b21c19d688112 55-57
+  s_3c4b15cf685750::t_904bbd2a1dde80 72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "71e3707e3d55f167753ecefae93cde31d5848107",
+  "prompts": {},
+  "sessions": {
+    "s_3c4b15cf685750": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d4170aeb-af03-4e31-beac-a4304e83c419",
+        "model": "claude-opus-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    },
+    "s_afa7c6a945f639": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "15016eeb-ef84-4c7b-ad2f-26f48b90ce5f",
+        "model": "claude-opus-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
