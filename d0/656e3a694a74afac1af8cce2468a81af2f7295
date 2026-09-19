@@ -1,0 +1,24 @@
+frontend/packages/design/ui.css
+  s_afa7c6a945f639::t_d9fb4aa53af52d 449-452
+  s_afa7c6a945f639::t_304f38387f70c0 445-448,453-461
+frontend/packages/views/_core/authentication/code-login.vue
+  s_afa7c6a945f639::t_72ef4716b1628f 131
+frontend/packages/views/_core/authentication/email-login.vue
+  s_afa7c6a945f639::t_e952333b57c0a9 133
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "d0656e3a694a74afac1af8cce2468a81af2f7295",
+  "prompts": {},
+  "sessions": {
+    "s_afa7c6a945f639": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "15016eeb-ef84-4c7b-ad2f-26f48b90ce5f",
+        "model": "claude-opus-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
