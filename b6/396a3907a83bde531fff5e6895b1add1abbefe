@@ -1,0 +1,19 @@
+frontend/packages/views/_core/authentication/AuthEntrySwitcher.vue
+  s_afa7c6a945f639::t_a1db7290572159 46-48
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "b6396a3907a83bde531fff5e6895b1add1abbefe",
+  "prompts": {},
+  "sessions": {
+    "s_afa7c6a945f639": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "15016eeb-ef84-4c7b-ad2f-26f48b90ce5f",
+        "model": "claude-opus-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
