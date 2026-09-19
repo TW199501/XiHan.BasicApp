@@ -1,0 +1,32 @@
+frontend/packages/components/common/PhoneInput.test.ts
+  s_afa7c6a945f639::t_7bd287e8185278 9
+  s_afa7c6a945f639::t_4ad3cf5cf7f95a 14-15
+  s_afa7c6a945f639::t_dee97ab763c89a 49-60,75-85
+  s_afa7c6a945f639::t_e813453dc7b326 61-74
+frontend/packages/components/common/PhoneInput.vue
+  s_afa7c6a945f639::t_923d437238d3b8 132
+  s_afa7c6a945f639::t_3977fccaed9948 59,62-66,69-71
+  s_afa7c6a945f639::t_9f09f698f5280b 141
+  s_afa7c6a945f639::t_366c9ffd95c028 154-157,162-180
+  s_afa7c6a945f639::t_2d0b662ed60779 158-161
+  s_afa7c6a945f639::t_00aa2780d3bc94 131,140
+  s_afa7c6a945f639::t_8f00c85369e9ec 73-84
+  s_afa7c6a945f639::t_ec00177fe74cba 43-47
+  s_afa7c6a945f639::t_c494aa9d863a00 72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "018513bb81767083ccf813d5c3cac5ed7a51b740",
+  "prompts": {},
+  "sessions": {
+    "s_afa7c6a945f639": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "15016eeb-ef84-4c7b-ad2f-26f48b90ce5f",
+        "model": "claude-opus-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
