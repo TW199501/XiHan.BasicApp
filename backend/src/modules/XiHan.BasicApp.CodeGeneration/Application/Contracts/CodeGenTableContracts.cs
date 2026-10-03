@@ -49,4 +49,9 @@ public interface ICodeGenTableQueryService : IApplicationService
     /// 获取表配置详情
     /// </summary>
     Task<CodeGenTableDetailDto?> GetDetailAsync(long id, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 获取父菜单候选（平台菜单树：目录可选，菜单只表明位置）
+    /// </summary>
+    Task<IReadOnlyList<CodeGenParentMenuOptionDto>> GetParentMenuOptionsAsync(CancellationToken cancellationToken = default);
 }

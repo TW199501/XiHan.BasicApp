@@ -10,7 +10,7 @@ import type {
 } from '@/api'
 import type { ListFieldSchema, PageSchema, SchemaActionPayload, XDataTableColumn } from '~/components'
 import type { SelectOption } from '~/types'
-import { XhButton, XhCheckboxGroupIndicator, XhCheckboxGroupItem, XhCheckboxGroupItemText, XhCheckboxGroupRoot, XhDescriptionsItem, XhDescriptionsLabel, XhDescriptionsRoot, XhDescriptionsValue, XhDrawerCloseTrigger, XhDrawerContent, XhDrawerRoot, XhDrawerTitle, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFormFieldGroup, XhFormRoot, XhPopconfirmCancelTrigger, XhPopconfirmConfirmTrigger, XhPopconfirmContent, XhPopconfirmDescription, XhPopconfirmPositioner, XhPopconfirmRoot, XhPopconfirmTrigger, XhSwitch, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
+import { XhButton, XhButtonIndicator, XhButtonLabel, XhCheckboxGroupIndicator, XhCheckboxGroupItem, XhCheckboxGroupItemText, XhCheckboxGroupRoot, XhDescriptionsItem, XhDescriptionsLabel, XhDescriptionsRoot, XhDescriptionsValue, XhDrawerCloseTrigger, XhDrawerContent, XhDrawerRoot, XhDrawerTitle, XhFieldControl, XhFieldDescription, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFormFieldGroup, XhFormRoot, XhPopconfirmCancelTrigger, XhPopconfirmConfirmTrigger, XhPopconfirmContent, XhPopconfirmDescription, XhPopconfirmPositioner, XhPopconfirmRoot, XhPopconfirmTrigger, XhSwitch, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
 import { computed, h, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
@@ -25,7 +25,7 @@ import {
   querySortsFromSchema,
   roleApi,
 } from '@/api'
-import { IconPicker, NotificationContent, SchemaPage, SchemaPagination, XContentEditorField, XDataTable, XDatePicker, XEditModal, XInput, XMdEditor, XSelect, XTagsInput } from '~/components'
+import { IconPicker, NotificationContent, SchemaPage, XContentEditorField, XDataTable, XDatePicker, XEditModal, XInput, XMdEditor, XSelect, XTagsInput } from '~/components'
 import { dialog, toast } from '~/composables'
 import { useEnumOptions } from '~/hooks'
 import { downloadBlob, formatDate, getOptionLabel } from '~/utils'
@@ -142,7 +142,7 @@ async function loadTargetOptions() {
     targetOptionsLoaded.value = true
   }
   catch (e) {
-    toast.error((e as Error).message || t('message.notification.msg_load_failed'))
+    toast.danger((e as Error).message || t('message.notification.msg_load_failed'))
   }
 }
 
@@ -230,7 +230,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 11,
     render: (row) => {
       const r = row as unknown as NotificationListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: NOTIFICATION_TYPE_TAG[r.notificationType] ?? 'neutral' }, () => h(XhTagLabel, () => getOptionLabel(notificationTypeOptions.value, r.notificationType)))
+      return h(XhTagRoot, { variant: 'subtle', tone: NOTIFICATION_TYPE_TAG[r.notificationType] ?? 'neutral' }, () => h(XhTagLabel, () => getOptionLabel(notificationTypeOptions.value, r.notificationType)))
     },
   },
   {
@@ -255,7 +255,7 @@ const fields = computed<ListFieldSchema[]>(() => [
         'div',
         { style: 'display:flex;flex-wrap:wrap;gap:4px' },
         channelsToArray(mask).map(bit =>
-          h(XhTagRoot, { variant: 'outline', key: bit, tone: bit === MessageChannel.SiteNotification ? 'neutral' : 'info' }, () => h(XhTagLabel, () => getOptionLabel(deliveryChannelOptions.value, bit)))),
+          h(XhTagRoot, { variant: 'subtle', key: bit, tone: bit === MessageChannel.SiteNotification ? 'neutral' : 'info' }, () => h(XhTagLabel, () => getOptionLabel(deliveryChannelOptions.value, bit)))),
       )
     },
   },
@@ -271,7 +271,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 14,
     render: (row) => {
       const published = (row as unknown as NotificationListItemDto).isPublished
-      return h(XhTagRoot, { variant: 'outline', tone: published ? 'success' : 'neutral' }, () => h(XhTagLabel, () => published ? t('message.notification.published') : t('message.notification.unpublished')))
+      return h(XhTagRoot, { variant: 'subtle', tone: published ? 'success' : 'neutral' }, () => h(XhTagLabel, () => published ? t('message.notification.published') : t('message.notification.unpublished')))
     },
   },
   { key: 'sendTime', title: t('message.notification.col_send_time'), dataType: 'datetime', sortable: true, minWidth: 170, order: 15 },
@@ -351,13 +351,13 @@ async function openDetail(row: NotificationListItemDto) {
   try {
     currentDetail.value = await notificationApi.detail(row.basicId)
     if (!currentDetail.value) {
-      toast.error(t('message.notification.msg_not_found'))
+      toast.danger(t('message.notification.msg_not_found'))
       return
     }
     detailVisible.value = true
   }
   catch (e) {
-    toast.error((e as Error).message || t('message.notification.msg_load_detail_failed'))
+    toast.danger((e as Error).message || t('message.notification.msg_load_detail_failed'))
   }
 }
 
@@ -366,7 +366,7 @@ async function openEdit(row: NotificationListItemDto) {
   try {
     const detail = await notificationApi.detail(row.basicId)
     if (!detail) {
-      toast.error(t('message.notification.msg_not_found'))
+      toast.danger(t('message.notification.msg_not_found'))
       return
     }
     if (detail.isPublished) {
@@ -399,7 +399,7 @@ async function openEdit(row: NotificationListItemDto) {
     modalVisible.value = true
   }
   catch (e) {
-    toast.error((e as Error).message || t('message.notification.msg_load_failed'))
+    toast.danger((e as Error).message || t('message.notification.msg_load_failed'))
   }
 }
 
@@ -421,7 +421,7 @@ function confirmPublish(row: NotificationListItemDto) {
         void schemaPageRef.value?.reload()
       }
       catch (e) {
-        toast.error((e as Error).message || t('message.notification.msg_publish_failed'))
+        toast.danger((e as Error).message || t('message.notification.msg_publish_failed'))
       }
     },
   })
@@ -435,7 +435,7 @@ async function removeRow(row: NotificationListItemDto) {
     void schemaPageRef.value?.reload()
   }
   catch (e) {
-    toast.error((e as Error).message || t('message.notification.msg_delete_failed'))
+    toast.danger((e as Error).message || t('message.notification.msg_delete_failed'))
   }
 }
 
@@ -492,7 +492,7 @@ async function openStats(row: NotificationListItemDto) {
     readStats.value = stats
   }
   catch (e) {
-    toast.error((e as Error).message || t('message.notification.msg_load_failed'))
+    toast.danger((e as Error).message || t('message.notification.msg_load_failed'))
   }
   finally {
     statsLoading.value = false
@@ -509,7 +509,7 @@ async function handleUnreadPageChange(page: number) {
     await loadUnreadUsers(statsRow.value.id, page)
   }
   catch (e) {
-    toast.error((e as Error).message || t('message.notification.msg_load_failed'))
+    toast.danger((e as Error).message || t('message.notification.msg_load_failed'))
   }
   finally {
     statsLoading.value = false
@@ -528,7 +528,7 @@ async function confirmRemind() {
     readStats.value = await notificationApi.readStats(row.id)
   }
   catch (e) {
-    toast.error((e as Error).message || t('message.notification.msg_publish_failed'))
+    toast.danger((e as Error).message || t('message.notification.msg_publish_failed'))
   }
   finally {
     remindLoading.value = false
@@ -566,7 +566,7 @@ async function exportUnread() {
     downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `unread-users-${row.id}.csv`)
   }
   catch (e) {
-    toast.error((e as Error).message || t('message.notification.msg_load_failed'))
+    toast.danger((e as Error).message || t('message.notification.msg_load_failed'))
   }
   finally {
     exportLoading.value = false
@@ -676,7 +676,7 @@ async function handleSubmit() {
     void schemaPageRef.value?.reload()
   }
   catch (e) {
-    toast.error((e as Error).message || t('message.notification.msg_save_failed'))
+    toast.danger((e as Error).message || t('message.notification.msg_save_failed'))
   }
   finally {
     submitLoading.value = false
@@ -700,7 +700,7 @@ async function handleSubmit() {
         class="xh-edit-form-grid"
         @submit="handleSubmit"
       >
-        <XhFormFieldGroup value="title" class="xh-span-2">
+        <XhFormFieldGroup name="title" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.notification.form_title') }}</XhFieldLabel>
             <XhFieldControl>
@@ -709,7 +709,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="priority">
+        <XhFormFieldGroup name="priority">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.notification.form_priority') }}</XhFieldLabel>
             <XhFieldControl>
@@ -718,7 +718,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="contentFormat">
+        <XhFormFieldGroup name="contentFormat">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.notification.form_content_format') }}</XhFieldLabel>
             <XhFieldControl>
@@ -727,7 +727,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="content" class="xh-span-2">
+        <XhFormFieldGroup name="content" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.notification.form_content') }}</XhFieldLabel>
             <XhFieldControl :as-child="false">
@@ -759,7 +759,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="notificationType">
+        <XhFormFieldGroup name="notificationType">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.notification.form_type') }}</XhFieldLabel>
             <XhFieldControl>
@@ -768,7 +768,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="targetType">
+        <XhFormFieldGroup name="targetType">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.notification.form_target_type') }}</XhFieldLabel>
             <XhFieldControl>
@@ -777,38 +777,34 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="deliveryChannels" class="xh-span-2">
+        <XhFormFieldGroup name="deliveryChannels" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.notification.form_delivery_channels') }}</XhFieldLabel>
-            <div>
-              <XhFieldControl>
-                <XhCheckboxGroupRoot
-                  orientation="horizontal"
-                  style="--xh-checkbox-group-gap: 12px"
-                  :value="notificationForm.deliveryChannels.map(String)"
-                  @update:value="(value: string[]) => (notificationForm.deliveryChannels = value as unknown as MessageChannel[])"
+            <XhFieldControl>
+              <XhCheckboxGroupRoot
+                orientation="horizontal"
+                style="--xh-checkbox-group-gap: 12px"
+                :value="notificationForm.deliveryChannels.map(String)"
+                @update:value="(value: string[]) => (notificationForm.deliveryChannels = value as unknown as MessageChannel[])"
+              >
+                <XhCheckboxGroupItem
+                  v-for="option in deliveryChannelOptions"
+                  :key="option.value"
+                  :value="String(option.value)"
+                  :disabled="option.disabled"
                 >
-                  <XhCheckboxGroupItem
-                    v-for="option in deliveryChannelOptions"
-                    :key="option.value"
-                    :value="String(option.value)"
-                    :disabled="option.disabled"
-                  >
-                    <XhCheckboxGroupIndicator />
-                    <XhCheckboxGroupItemText>
-                      {{ option.label }}
-                    </XhCheckboxGroupItemText>
-                  </XhCheckboxGroupItem>
-                </XhCheckboxGroupRoot>
-              </XhFieldControl>
-              <p class="channel-hint">
-                {{ t('message.notification.form_delivery_channels_hint') }}
-              </p>
-            </div>
+                  <XhCheckboxGroupIndicator />
+                  <XhCheckboxGroupItemText>
+                    {{ option.label }}
+                  </XhCheckboxGroupItemText>
+                </XhCheckboxGroupItem>
+              </XhCheckboxGroupRoot>
+            </XhFieldControl>
+            <XhFieldDescription>{{ t('message.notification.form_delivery_channels_hint') }}</XhFieldDescription>
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup v-if="isUserTarget" value="userIds" class="xh-span-2">
+        <XhFormFieldGroup v-if="isUserTarget" name="userIds" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.notification.form_user_ids') }}</XhFieldLabel>
             <XhFieldControl>
@@ -817,7 +813,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup v-else-if="isRoleTarget" value="userIds" class="xh-span-2">
+        <XhFormFieldGroup v-else-if="isRoleTarget" name="userIds" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.notification.form_role_ids') }}</XhFieldLabel>
             <XhFieldControl>
@@ -826,7 +822,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup v-else-if="isDepartmentTarget" value="userIds" class="xh-span-2">
+        <XhFormFieldGroup v-else-if="isDepartmentTarget" name="userIds" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.notification.form_department_ids') }}</XhFieldLabel>
             <XhFieldControl>
@@ -835,7 +831,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="icon">
+        <XhFormFieldGroup name="icon">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.notification.form_icon') }}</XhFieldLabel>
             <XhFieldControl :as-child="false">
@@ -844,7 +840,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="link">
+        <XhFormFieldGroup name="link">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.notification.form_link') }}</XhFieldLabel>
             <XhFieldControl>
@@ -853,34 +849,34 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="startTime">
+        <XhFormFieldGroup name="startTime">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.notification.form_start_time') }}</XhFieldLabel>
             <XhFieldControl>
               <XDatePicker
                 v-model:value="notificationForm.startTime"
-                type="datetime"
+                show-time
                 clearable
               />
             </XhFieldControl>
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="expirationTime">
+        <XhFormFieldGroup name="expirationTime">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.notification.form_expiration_time') }}</XhFieldLabel>
             <XhFieldControl>
               <XDatePicker
                 v-model:value="notificationForm.expirationTime"
-                type="datetime"
+                show-time
                 clearable
-                :placeholder="t('message.notification.form_expiration_placeholder')"
               />
             </XhFieldControl>
+            <XhFieldDescription>{{ t('message.notification.form_expiration_placeholder') }}</XhFieldDescription>
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="needConfirm">
+        <XhFormFieldGroup name="needConfirm">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.notification.form_need_confirm') }}</XhFieldLabel>
             <XhFieldControl>
@@ -889,7 +885,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="isMandatory">
+        <XhFormFieldGroup name="isMandatory">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.notification.form_mandatory') }}</XhFieldLabel>
             <XhFieldControl>
@@ -898,7 +894,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="isBanner">
+        <XhFormFieldGroup name="isBanner">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.notification.form_banner') }}</XhFieldLabel>
             <XhFieldControl>
@@ -907,7 +903,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="isPopup">
+        <XhFormFieldGroup name="isPopup">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.notification.form_popup') }}</XhFieldLabel>
             <XhFieldControl>
@@ -928,7 +924,7 @@ async function handleSubmit() {
         <XhDrawerTitle>{{ t('message.notification.detail_title') }}</XhDrawerTitle>
         <XhDrawerCloseTrigger />
         <template v-if="currentDetail">
-          <XhDescriptionsRoot :columns="2" bordered placement="left" size="sm">
+          <XhDescriptionsRoot :columns="2" variant="outline" placement="left" size="sm">
             <XhDescriptionsItem style="grid-column: span 2">
               <XhDescriptionsLabel>{{ t('message.notification.detail.label.title') }}</XhDescriptionsLabel>
               <XhDescriptionsValue>
@@ -1096,7 +1092,14 @@ async function handleSubmit() {
           </div>
           <div class="stats__rate">
             <span class="stats__rate-label">{{ t('message.notification.stats_read_rate') }}</span>
-            <XhProgress variant="line" :value="readRate" :stroke-width="12" />
+            <!-- 线形的厚度走令牌，stroke-width 只管环形 -->
+            <XhProgress
+              variant="line"
+              semantics="meter"
+              :value="readRate"
+              :aria-label="t('message.notification.stats_read_rate')"
+              style="--xh-progress-thickness: var(--xh-space-3)"
+            />
           </div>
           <!-- 操作区 -->
           <div class="stats__ops">
@@ -1105,15 +1108,16 @@ async function handleSubmit() {
                 {{ t('message.notification.stats_remind') }}
               </XhPopconfirmTrigger>
               <XhPopconfirmPositioner>
-                <XhPopconfirmContent>
+                <XhPopconfirmContent :aria-label="t('message.notification.stats_remind')">
                   <XhPopconfirmDescription>{{ t('message.notification.stats_remind_confirm', { count: readStats.unreadCount }) }}</XhPopconfirmDescription>
                   <XhPopconfirmCancelTrigger>{{ t('common.actions.cancel') }}</XhPopconfirmCancelTrigger>
                   <XhPopconfirmConfirmTrigger>{{ t('common.actions.confirm') }}</XhPopconfirmConfirmTrigger>
                 </XhPopconfirmContent>
               </XhPopconfirmPositioner>
             </XhPopconfirmRoot>
-            <XhButton size="sm" :loading="exportLoading" @click="exportUnread">
-              {{ t('message.notification.stats_export') }}
+            <XhButton variant="subtle" size="sm" :loading="exportLoading" @click="exportUnread">
+              <XhButtonIndicator />
+              <XhButtonLabel>{{ t('message.notification.stats_export') }}</XhButtonLabel>
             </XhButton>
           </div>
           <!-- 未读人员区 -->
@@ -1125,16 +1129,14 @@ async function handleSubmit() {
             :data="unreadUsers"
             :loading="statsLoading"
             :row-key="(row: NotificationUnreadUserDto) => String(row.userId)"
-            size="sm"
+            :pagination="{
+              page: unreadPage,
+              pageSize: STATS_PAGE_SIZE,
+              itemCount: unreadTotal,
+              onUpdatePage: handleUnreadPageChange,
+              compact: true,
+            }"
           />
-          <div class="stats__pager">
-            <SchemaPagination
-              :page="unreadPage"
-              :total="unreadTotal"
-              :page-size="STATS_PAGE_SIZE" compact
-              @update:page="handleUnreadPageChange"
-            />
-          </div>
         </div>
       </XhDrawerContent>
     </XhDrawerRoot>
@@ -1146,12 +1148,6 @@ async function handleSubmit() {
   margin: 0 0 8px;
   font-size: 12px;
   color: hsl(var(--warning, 38 92% 50%));
-}
-
-.channel-hint {
-  margin: 6px 0 0;
-  font-size: 12px;
-  color: var(--text-color-3, #999);
 }
 
 .stats {
@@ -1186,10 +1182,5 @@ async function handleSubmit() {
 .stats__section-title {
   font-size: 14px;
   font-weight: 600;
-}
-
-.stats__pager {
-  display: flex;
-  justify-content: flex-end;
 }
 </style>

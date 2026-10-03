@@ -26,6 +26,7 @@ public static class CodeGenTableColumnApplicationMapper
             input.CSharpProperty,
             input.TsType,
             input.IsRequired,
+            input.IsUnique,
             input.IsList,
             input.IsInsert,
             input.IsEdit,
@@ -36,6 +37,8 @@ public static class CodeGenTableColumnApplicationMapper
             input.DictCode,
             input.EnumTypeName,
             input.ConstValues,
+            input.RelationTableId,
+            input.RelationLabelColumn,
             input.DefaultValue,
             input.RegexPattern,
             input.ValidationMessage,
@@ -81,6 +84,7 @@ public static class CodeGenTableColumnApplicationMapper
             IsIdentity = column.IsIdentity,
             IsNullable = column.IsNullable,
             IsRequired = column.IsRequired,
+            IsUnique = column.IsUnique,
             IsList = column.IsList,
             IsInsert = column.IsInsert,
             IsEdit = column.IsEdit,
@@ -91,6 +95,8 @@ public static class CodeGenTableColumnApplicationMapper
             DictCode = column.DictCode,
             EnumTypeName = column.EnumTypeName,
             ConstValues = column.ConstValues,
+            RelationTableId = column.RelationTableId,
+            RelationLabelColumn = column.RelationLabelColumn,
             Sort = column.Sort,
             Status = column.Status
         };

@@ -1,8 +1,10 @@
 // Copyright (c) 2021-Present XiHanFun and contributors.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
+using System.Text;
 using System.Text.RegularExpressions;
 using XiHan.BasicApp.CodeGeneration.Domain.Generation;
+using XiHan.BasicApp.CodeGeneration.Domain.Permissions;
 
 namespace XiHan.BasicApp.CodeGeneration.Infrastructure.Generation;
 
@@ -18,8 +20,37 @@ internal static class MenuPermissionArtifactShared
     /// <summary>二阶产物统一输出目录</summary>
     public const string OutputFolder = "_GeneratedMenuPermission";
 
+    /// <summary>
+    /// 权限码常量与权限定义的位置（相对后端模块项目根）
+    /// </summary>
+    public const string PermissionsFolder = "Domain/Permissions";
+
+    /// <summary>
+    /// 种子骨架的位置（相对后端模块项目根）
+    /// </summary>
+    public const string SeedersFolder = "Infrastructure/Seeders";
+
     /// <summary>二阶产物统一模板编码（用于产物溯源标识）</summary>
     public const string TemplateCode = "_menu_permission";
+
+    /// <summary>C# 产物的标准版权文件头（缺了会被仓内分析器 XHFH001 报警）</summary>
+    public static readonly IReadOnlyList<string> CSharpFileHeaderLines =
+    [
+        "// Copyright (c) 2021-Present XiHanFun and contributors.",
+        "// Licensed under the MIT License. See LICENSE in the project root for license information."
+    ];
+
+    /// <summary>
+    /// 写入 C# 产物文件头（逐行 AppendLine，换行与正文一致）
+    /// </summary>
+    /// <param name="sb">产物内容</param>
+    public static void AppendCSharpFileHeader(StringBuilder sb)
+    {
+        foreach (var line in CSharpFileHeaderLines)
+        {
+            sb.AppendLine(line);
+        }
+    }
 
     /// <summary>
     /// 动作元数据（对齐平台操作字典 SysOperation：标题 / 是否审计 / 是否危险）
@@ -31,24 +62,42 @@ internal static class MenuPermissionArtifactShared
         ["update"] = new("更新", true, false),
         ["delete"] = new("删除", true, true),
         ["export"] = new("导出", false, false),
-        ["import"] = new("导入", true, false)
+        ["import"] = new("导入", true, false),
+        ["status"] = new("状态", true, false)
     };
 
     /// <summary>
-    /// 生效动作集：读取基线 read 恒在，追加已启用写操作（引擎已归一化 EnabledActions 为 create/update/delete 子集）
+    /// 生效动作集（权限码的操作段）：读取基线 read 恒在，追加已启用操作
     /// </summary>
+    /// <remarks>
+    /// 打印不是权限动作：打印按钮跟列表的读取权限走（取模板另需打印模板的使用权限），不派生独立权限码。
+    /// </remarks>
     public static IReadOnlyList<string> EffectiveActions(CodeGenerationContext context)
     {
         var actions = new List<string> { "read" };
         foreach (var action in context.EnabledActions)
         {
-            if (!actions.Contains(action))
+            if (action != CodeGenActions.Print && !actions.Contains(action))
             {
                 actions.Add(action);
             }
         }
 
         return actions;
+    }
+
+    /// <summary>
+    /// 要登记的页面按钮
+    /// </summary>
+    /// <remarks>
+    /// 写操作按钮随其动作启用；打印按钮随「打印」启用，挂读取权限；查询与详情走列表页读取权限，没有独立按钮。
+    /// </remarks>
+    public static IEnumerable<CodeGenButtonPermission> EnabledButtons(CodeGenerationContext context)
+    {
+        var effective = EffectiveActions(context);
+        return ButtonPermissionMappings.Buttons.Where(button => button.Key == CodeGenActions.Print
+            ? context.EnabledActions.Contains(CodeGenActions.Print)
+            : button.Action != "read" && effective.Contains(button.Action));
     }
 
     /// <summary>
@@ -60,13 +109,18 @@ internal static class MenuPermissionArtifactShared
     /// <summary>
     /// 资源编码（权限码资源段）= 表名（snake，全局唯一）
     /// </summary>
-    public static string Resource(CodeGenerationContext context) => context.TableName;
+    public static string Resource(CodeGenerationContext context) => context.TableName.ToLowerInvariant();
 
     /// <summary>
-    /// 展示名（业务名优先，回退类名）
+    /// 展示名（业务名优先，其次表注释，最后类名）
     /// </summary>
+    /// <remarks>
+    /// 菜单、权限名与页面上的文案（页面名、按钮、确认语、提示）共用这一个名字，避免菜单叫「示例便签」、页面却叫「示例便签表」。
+    /// </remarks>
     public static string Display(CodeGenerationContext context)
-        => string.IsNullOrWhiteSpace(context.BusinessName) ? context.ClassName : context.BusinessName!.Trim();
+        => !string.IsNullOrWhiteSpace(context.BusinessName) ? context.BusinessName!.Trim()
+            : !string.IsNullOrWhiteSpace(context.TableComment) ? context.TableComment!.Trim()
+            : context.ClassName;
 
     /// <summary>
     /// 命名空间（表配置命名空间优先，回退模块段/类名）

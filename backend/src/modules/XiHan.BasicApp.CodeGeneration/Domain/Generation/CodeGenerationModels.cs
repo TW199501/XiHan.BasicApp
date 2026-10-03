@@ -53,6 +53,9 @@ public sealed class ColumnSchema
     /// <summary>是否必填（表单）</summary>
     public bool IsRequired { get; set; }
 
+    /// <summary>是否唯一（租户内唯一索引 + 新增更新查重）</summary>
+    public bool IsUnique { get; set; }
+
     /// <summary>是否进入列表</summary>
     public bool IsList { get; set; } = true;
 
@@ -97,6 +100,49 @@ public sealed class ColumnSchema
 
     /// <summary>常量项 JSON（ConstSelector 时生效）</summary>
     public string? ConstValues { get; set; }
+
+    /// <summary>关联的表配置主键（TableSelector / TreeSelector 时生效）</summary>
+    public long? RelationTableId { get; set; }
+
+    /// <summary>关联显示列（目标表的列名；关联树为空时取目标树表的名称列）</summary>
+    public string? RelationLabelColumn { get; set; }
+
+    /// <summary>解析后的关联目标（引擎按表配置解析，关联选择器列非空）</summary>
+    public RelationTarget? Relation { get; set; }
+}
+
+/// <summary>
+/// 关联选择器的目标（外键指向的另一张表）
+/// </summary>
+/// <remarks>
+/// 按「不焊外键」约定，产物里没有导航属性也没有 JOIN：本表生成一个选项接口，
+/// 仓储按目标实体查「主键 + 显示列（+ 父级列）」，前端据此出下拉、树形下拉与列表显示名。
+/// </remarks>
+public sealed class RelationTarget
+{
+    /// <summary>目标表配置主键</summary>
+    public long TableId { get; set; }
+
+    /// <summary>目标表名</summary>
+    public string TableName { get; set; } = string.Empty;
+
+    /// <summary>目标表注释</summary>
+    public string? TableComment { get; set; }
+
+    /// <summary>目标实体类名</summary>
+    public string ClassName { get; set; } = string.Empty;
+
+    /// <summary>目标实体限定类型名（{命名空间}.Domain.Entities.{类名}）</summary>
+    public string EntityTypeQualified { get; set; } = string.Empty;
+
+    /// <summary>显示列属性名（文本列）</summary>
+    public string LabelProperty { get; set; } = string.Empty;
+
+    /// <summary>父级列属性名（关联树时非空，long 标识）</summary>
+    public string? ParentProperty { get; set; }
+
+    /// <summary>是否关联树</summary>
+    public bool IsTree { get; set; }
 }
 
 /// <summary>
@@ -204,6 +250,27 @@ public sealed class CodeGenerationContext
     /// </remarks>
     public IReadOnlyList<string> EnabledActions { get; set; } = [];
 
+    /// <summary>
+    /// 状态列（勾了状态切换时非空：表里的 EnableStatus 业务列，由引擎 fail-closed 解析）
+    /// </summary>
+    public ColumnSchema? StatusColumn { get; set; }
+
+    /// <summary>
+    /// 已有实体的命名空间（表由手写实体建出时非空：沿用这个实体，不再生成实体）
+    /// </summary>
+    /// <remarks>
+    /// 本仓库的表一般由实体自动建出，导入这类表生成时实体已在代码里；只有外部库的表才需要生成实体。
+    /// </remarks>
+    public string? ExistingEntityNamespace { get; set; }
+
+    /// <summary>
+    /// 父菜单码（表配置选了父菜单时非空：生成的菜单登记挂到这个目录下；未选即顶级菜单）
+    /// </summary>
+    /// <remarks>
+    /// 表配置存的是菜单主键，主键各库不同，菜单登记按菜单码挂靠，由引擎在生成时解析。
+    /// </remarks>
+    public string? ParentMenuCode { get; set; }
+
     /// <summary>主键列</summary>
     public ColumnSchema? PrimaryKey { get; set; }
 
@@ -234,12 +301,26 @@ public sealed class CodeGenerationContext
 /// <param name="Content">文件内容</param>
 /// <param name="TemplateCode">来源模板编码</param>
 /// <param name="WriteMode">写入策略（自动文件总是覆盖；手动文件仅首次创建）</param>
+/// <param name="Side">归属（后端产物相对后端项目根、前端产物相对前端工程根；为空表示模板分组未标明归属，不能生成到项目）</param>
 public sealed record GeneratedArtifact(
     string RelativePath,
     string FileName,
     string Content,
     string? TemplateCode,
-    ArtifactWriteMode WriteMode = ArtifactWriteMode.AlwaysOverwrite);
+    ArtifactWriteMode WriteMode = ArtifactWriteMode.AlwaysOverwrite,
+    ArtifactSide? Side = null);
+
+/// <summary>
+/// 产物归属
+/// </summary>
+public enum ArtifactSide
+{
+    /// <summary>后端（相对后端模块项目根）</summary>
+    Backend,
+
+    /// <summary>前端（相对前端工程根）</summary>
+    Frontend
+}
 
 /// <summary>
 /// 生成请求
@@ -273,11 +354,14 @@ public sealed class GenerationResult
     /// <summary>打包字节流（GenType.Zip 时填充）</summary>
     public byte[]? Package { get; set; }
 
-    /// <summary>实际写入文件数（GenType.CustomPath 时填充）</summary>
+    /// <summary>实际写入文件数（GenType.Project 时填充）</summary>
     public int WrittenCount { get; set; }
 
-    /// <summary>被跳过的手动文件相对路径（GenType.CustomPath 时填充；目标已存在，未覆盖）</summary>
+    /// <summary>被跳过的手动文件相对路径（GenType.Project 时填充；目标已存在，未覆盖）</summary>
     public IReadOnlyList<string> SkippedPaths { get; set; } = [];
+
+    /// <summary>写入的项目目录（GenType.Project 时填充：后端项目目录、前端工程目录）</summary>
+    public IReadOnlyList<string> TargetRoots { get; set; } = [];
 
     /// <summary>耗时（毫秒）</summary>
     public long DurationMilliseconds { get; set; }

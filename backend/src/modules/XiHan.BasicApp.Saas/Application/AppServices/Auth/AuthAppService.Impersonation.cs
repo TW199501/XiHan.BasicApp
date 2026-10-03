@@ -64,10 +64,7 @@ public sealed partial class AuthAppService
         }
 
         // 一条原会话同时只挂一条模仿会话：多挂的那些在「结束模仿」时吊销不到，会滞留到过期
-        var activeImpersonations = await _userSessionRepository.GetListAsync(
-            session => session.ImpersonatorSessionId == originSession.UserSessionId && session.Status == SessionStatus.Active,
-            cancellationToken);
-        if (activeImpersonations.Count > 0)
+        if (await _userSessionRepository.HasActiveImpersonationIgnoreTenantAsync(originSession.UserSessionId, cancellationToken))
         {
             throw new UserFriendlyException("当前已有进行中的模仿会话，请先结束。");
         }
@@ -221,9 +218,9 @@ public sealed partial class AuthAppService
                 operatorTokenPermissions,
                 originSession.DeviceId));
 
-        _ = await _loginSessionDomainService.SwitchTenantAsync(
+        // 原会话就在发起模仿时的上下文里：原地重签令牌，不换会话
+        _ = await _loginSessionDomainService.ReissueAsync(
             originSession,
-            originTenantId,
             accessTokenJti,
             tokenIssue.TokenResult,
             now,
@@ -286,15 +283,20 @@ public sealed partial class AuthAppService
     }
 
     /// <summary>
-    /// 读取模仿会话存活时长配置，越界回落到上下限
+    /// 读取模仿登录设置
+    /// </summary>
+    private Task<SaasImpersonationSettings> GetImpersonationSettingsAsync(CancellationToken cancellationToken)
+    {
+        return _saasConfigurationService.GetJsonAsync(SaasConfigKeys.Auth.Impersonation, new SaasImpersonationSettings(), cancellationToken);
+    }
+
+    /// <summary>
+    /// 读取模仿会话存活时长配置，越界按上下限归一
     /// </summary>
     private async Task<TimeSpan> ResolveImpersonationLifetimeAsync(CancellationToken cancellationToken)
     {
-        var minutes = await _saasConfigurationService.GetInt32Async(
-            SaasConfigKeys.Auth.ImpersonationSessionMinutes,
-            ImpersonationDefaults.DefaultSessionMinutes,
-            cancellationToken);
-        return ImpersonationDefaults.NormalizeSessionLifetime(minutes);
+        var settings = await GetImpersonationSettingsAsync(cancellationToken);
+        return ImpersonationDefaults.NormalizeSessionLifetime(settings.SessionMinutes);
     }
 
     /// <summary>
@@ -307,11 +309,8 @@ public sealed partial class AuthAppService
         TimeSpan lifetime,
         CancellationToken cancellationToken)
     {
-        var notifyEnabled = await _saasConfigurationService.GetBooleanAsync(
-            SaasConfigKeys.Auth.ImpersonationNotifyTarget,
-            true,
-            cancellationToken);
-        if (!notifyEnabled)
+        var settings = await GetImpersonationSettingsAsync(cancellationToken);
+        if (!settings.NotifyTarget)
         {
             return;
         }

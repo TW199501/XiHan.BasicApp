@@ -11,6 +11,8 @@ using XiHan.BasicApp.CodeGeneration.Domain.Repositories;
 using XiHan.BasicApp.Core.Dtos;
 using XiHan.BasicApp.Saas.Application.Extensions;
 using XiHan.BasicApp.Saas.Application.Services;
+using XiHan.BasicApp.Saas.Domain.Repositories;
+using MenuType = XiHan.BasicApp.Saas.Domain.Entities.MenuType;
 using XiHan.Framework.Application.Attributes;
 using XiHan.Framework.Authorization.AspNetCore;
 using XiHan.Framework.Domain.Shared.Paging.Dtos;
@@ -31,17 +33,21 @@ public sealed class CodeGenTableQueryService : CodeGenerationApplicationService,
 
     private readonly IFieldSecurityService _fieldSecurity;
 
+    private readonly IMenuRepository _menuRepository;
+
     /// <summary>
     /// 构造函数
     /// </summary>
     public CodeGenTableQueryService(
         ICodeGenTableRepository tableRepository,
         ICodeGenTableColumnRepository columnRepository,
-        IFieldSecurityService fieldSecurityService)
+        IFieldSecurityService fieldSecurityService,
+        IMenuRepository menuRepository)
     {
         _tableRepository = tableRepository;
         _columnRepository = columnRepository;
         _fieldSecurity = fieldSecurityService;
+        _menuRepository = menuRepository;
     }
 
     /// <summary>
@@ -73,11 +79,9 @@ public sealed class CodeGenTableQueryService : CodeGenerationApplicationService,
 
         var request = BuildPageRequest(input);
 
-        // 过滤：前端区间(Between)/多选(In)等条件经 conditions.filters 下发，FLS 门控剔除不可读/已脱敏字段后由框架统一应用
-        await _fieldSecurity.GuardFiltersAsync(request.Conditions, "SysCodeGenTable", cancellationToken);
+        // 字段安全：剔除读受保护字段上的排序、过滤与关键字搜索（防按结果反推原值）
+        await _fieldSecurity.GuardQueryAsync(request.Conditions, typeof(SysCodeGenTable), cancellationToken);
 
-        // 排序：前端选择优先，FLS 门控剔除不可读/已脱敏字段；无有效排序回退默认排序
-        await _fieldSecurity.GuardSortsAsync(request.Conditions, "SysCodeGenTable", cancellationToken);
         if (request.Conditions.Sorts.Count == 0)
         {
             ApplyTableSorts(request);
@@ -122,6 +126,35 @@ public sealed class CodeGenTableQueryService : CodeGenerationApplicationService,
 
         var columns = await _columnRepository.GetByTableIdAsync(table.BasicId, cancellationToken);
         return CodeGenTableApplicationMapper.ToDetailDto(table, columns);
+    }
+
+    /// <summary>
+    /// 获取父菜单候选
+    /// </summary>
+    /// <remarks>
+    /// 返回平台菜单树（目录与菜单，不含按钮），和菜单管理页的上级菜单同一棵树，带上级主键供前端组树。
+    /// 只有目录可选：页面挂在菜单下会被当成父路由；目录还须有菜单码，生成的菜单登记按菜单码找父级。
+    /// 与代码生成同一个查看权限，不要求菜单管理权限。
+    /// </remarks>
+    [PermissionAuthorize(CodeGenPermissionCodes.Read)]
+    public async Task<IReadOnlyList<CodeGenParentMenuOptionDto>> GetParentMenuOptionsAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var menus = await _menuRepository.GetListAsync(
+            menu => menu.TenantId == 0 && menu.MenuType != MenuType.Button,
+            cancellationToken);
+
+        return [.. menus
+            .OrderBy(menu => menu.Sort)
+            .ThenBy(menu => menu.MenuName, StringComparer.Ordinal)
+            .Select(menu => new CodeGenParentMenuOptionDto
+            {
+                Value = menu.BasicId,
+                Label = menu.MenuName,
+                ParentValue = menu.ParentId,
+                Selectable = menu.MenuType == MenuType.Directory && !string.IsNullOrWhiteSpace(menu.MenuCode)
+            })];
     }
 
     /// <summary>

@@ -2,10 +2,8 @@ import type { DynamicApiParams } from '../../base'
 import type { ApiId } from '../../types'
 import type {
   RoleDataScopeDetailDto,
-  RoleDataScopeGrantDto,
   RoleDataScopeListItemDto,
-  RoleDataScopeStatusUpdateDto,
-  RoleDataScopeUpdateDto,
+  RoleDataScopeSetDto,
 } from './role-data-scope.types'
 import { appendDynamicApiParam, createDynamicApiClient } from '../../base'
 
@@ -19,9 +17,6 @@ export const roleDataScopeApi = {
       { id },
     )
   },
-  grant(input: RoleDataScopeGrantDto) {
-    return roleDataScopeCommandApi.post<RoleDataScopeDetailDto, RoleDataScopeGrantDto>('RoleDataScope', input)
-  },
   list(roleId: ApiId, onlyValid = false) {
     const params: DynamicApiParams = {}
     appendDynamicApiParam(params, 'OnlyValid', onlyValid)
@@ -31,16 +26,8 @@ export const roleDataScopeApi = {
       { ...params, roleId },
     )
   },
-  revoke(id: ApiId) {
-    return roleDataScopeCommandApi.delete('RoleDataScope', { id })
-  },
-  update(input: RoleDataScopeUpdateDto) {
-    return roleDataScopeCommandApi.put<RoleDataScopeDetailDto, RoleDataScopeUpdateDto>('RoleDataScope', input)
-  },
-  updateStatus(input: RoleDataScopeStatusUpdateDto) {
-    return roleDataScopeCommandApi.put<RoleDataScopeDetailDto, RoleDataScopeStatusUpdateDto>(
-      'RoleDataScopeStatus',
-      input,
-    )
+  /** 档位与自定义部门一次提交（单事务） */
+  set(input: RoleDataScopeSetDto) {
+    return roleDataScopeCommandApi.post<void, RoleDataScopeSetDto>('SetRoleDataScope', input)
   },
 }

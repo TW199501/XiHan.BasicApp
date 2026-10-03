@@ -1,12 +1,12 @@
 <div align="center">
 
-<img src="./assets/banner.png" alt="XiHan.BasicApp" />
+<img src="./assets/banner_cn.png" alt="XiHan.BasicApp" />
 
 <h1>XiHan.BasicApp</h1>
 
-<p><b>基于 .Net + Vue 的超高颜值通用中后台内核</b></p>
+<p><b>基于 XiHan.Framework 和 XiHan.UI 的超高颜值通用中后台内核</b></p>
 
-<p>后端基于 .NET 10 与 <a href="https://github.com/XiHanFun/XiHan.Framework">XiHan.Framework</a>，前端基于 Vue 3 与 <a href="https://github.com/XiHanFun/XiHan.UI">XiHan.UI</a><br/>多租户 · RBAC + 数据范围 + 字段脱敏 · 代码生成 · 实时通信</p>
+<p>后端基于 .NET 与 <a href="https://github.com/XiHanFun/XiHan.Framework">XiHan.Framework</a>，前端基于 Vue 与 <a href="https://github.com/XiHanFun/XiHan.UI">XiHan.UI</a><br/>多租户 · RBAC + 数据范围 + 字段脱敏 · 代码生成 · 实时通信</p>
 
 <p><a href="./README.md">English</a> | <b>简体中文</b></p>
 
@@ -18,12 +18,12 @@
 
 
 <p>
-  <img alt=".NET" src="https://img.shields.io/badge/.NET-10.0-512BD4?style=flat-square&logo=dotnet&logoColor=white" />
-  <a href="https://github.com/XiHanFun/XiHan.Framework"><img alt="XiHan.Framework" src="https://img.shields.io/badge/XiHan.Framework-4.0.0-6f42c1?style=flat-square" /></a>
-  <img alt="Vue" src="https://img.shields.io/badge/Vue-3.5-4FC08D?style=flat-square&logo=vuedotjs&logoColor=white" />
-  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-6.0-3178C6?style=flat-square&logo=typescript&logoColor=white" />
-  <img alt="Vite" src="https://img.shields.io/badge/Vite-8-646CFF?style=flat-square&logo=vite&logoColor=white" />
-  <img alt="Tailwind CSS" src="https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white" />
+  <img alt=".NET" src="https://img.shields.io/badge/.NET-512BD4?style=flat-square&logo=dotnet&logoColor=white" />
+  <a href="https://github.com/XiHanFun/XiHan.Framework"><img alt="XiHan.Framework" src="https://img.shields.io/badge/XiHan.Framework-6f42c1?style=flat-square" /></a>
+  <img alt="Vue" src="https://img.shields.io/badge/Vue-4FC08D?style=flat-square&logo=vuedotjs&logoColor=white" />
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white" />
+  <img alt="Vite" src="https://img.shields.io/badge/Vite-646CFF?style=flat-square&logo=vite&logoColor=white" />
+  <img alt="Tailwind CSS" src="https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white" />
   <a href="https://www.nuget.org/packages?q=XiHan.BasicApp"><img alt="NuGet" src="https://img.shields.io/nuget/v/XiHan.BasicApp.Core?style=flat-square&logo=nuget&logoColor=white&label=NuGet&color=004880" /></a>
 </p>
 
@@ -46,13 +46,13 @@
 </p>
 
 
-<img src="./assets/login.png" alt="登录" />
+<img src="./assets/preview/login.png" alt="登录" />
 
 </div>
 
 ## 简介
 
-XiHan.BasicApp 采用前后端分离架构。后端遵循 DDD 分层，写路径走应用服务、读路径走查询服务，应用服务经动态 API 直接暴露为 REST 接口；前端使用 Vue 3 + TypeScript + XiHan.UI，后端使用 .NET 10 + XiHan.Framework。系统内置完整的身份、权限、租户与审计能力，既可作为中后台项目的起点，也可作为 .NET + Vue 全栈实践的参考。属于曦寒懿（XiHanFun）开源生态的基础应用，拥有底座、组件、应用的完整生态。
+XiHan.BasicApp 采用前后端分离架构。后端遵循 DDD 分层，写路径走应用服务、读路径走查询服务，应用服务经动态 API 直接暴露为 REST 接口；前端使用 Vue + TypeScript + XiHan.UI，后端使用 .NET + XiHan.Framework。系统内置完整的身份、权限、租户与审计能力，既可作为中后台项目的起点，也可作为 .NET + Vue 全栈实践的参考。属于曦寒懿（XiHanFun）开源生态的基础应用。
 
 ## 文档
 
@@ -66,99 +66,228 @@ XiHan.BasicApp 采用前后端分离架构。后端遵循 DDD 分层，写路径
 
 <table>
   <tr>
-    <td align="center"><img src="./assets/tenant-select.png" /><br/>租户选择</td>
-    <td align="center"><img src="./assets/user-management.png" /><br/>用户管理</td>
+    <td align="center" width="50%"><a href="./assets/preview/dashboard.png"><img src="./assets/preview/dashboard.png" alt="工作台" /></a><br/>工作台</td>
+    <td align="center" width="50%"><a href="./assets/preview/user.png"><img src="./assets/preview/user.png" alt="用户管理" /></a><br/>用户管理</td>
   </tr>
   <tr>
-    <td align="center"><img src="./assets/user-management-dark.png" /><br/>用户管理（暗色）</td>
-    <td align="center"><img src="./assets/server-monitor.png" /><br/>服务监控</td>
+    <td align="center" width="50%"><a href="./assets/preview/log-trace.png"><img src="./assets/preview/log-trace.png" alt="日志链路追踪" /></a><br/>日志链路追踪</td>
+    <td align="center" width="50%"><a href="./assets/preview/printing.png"><img src="./assets/preview/printing.png" alt="打印模板" /></a><br/>打印模板</td>
   </tr>
   <tr>
-    <td align="center"><img src="./assets/preference-settings.png" /><br/>偏好设置</td>
-    <td align="center"><img src="./assets/operation-log.png" /><br/>操作日志</td>
+    <td align="center" width="50%"><a href="./assets/preview/control-center.png"><img src="./assets/preview/control-center.png" alt="控制中心" /></a><br/>控制中心</td>
+    <td align="center" width="50%"><a href="./assets/preview/login.png"><img src="./assets/preview/login.png" alt="登录认证" /></a><br/>登录认证</td>
   </tr>
   <tr>
-    <td align="center"><img src="./assets/log-traceability.png" /><br/>日志链路</td>
-    <td align="center"><img src="./assets/about.png" /><br/>关于</td>
+    <td align="center" width="50%"><a href="./assets/preview/profile.png"><img src="./assets/preview/profile.png" alt="个人中心" /></a><br/>个人中心</td>
+    <td align="center" width="50%"><a href="./assets/preview/profile-security.png"><img src="./assets/preview/profile-security.png" alt="个人中心（安全设置）" /></a><br/>个人中心（安全设置）</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/online-user.png"><img src="./assets/preview/online-user.png" alt="在线用户" /></a><br/>在线用户</td>
+    <td align="center" width="50%"><a href="./assets/preview/role.png"><img src="./assets/preview/role.png" alt="角色管理" /></a><br/>角色管理</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/org.png"><img src="./assets/preview/org.png" alt="组织机构" /></a><br/>组织机构</td>
+    <td align="center" width="50%"><a href="./assets/preview/position.png"><img src="./assets/preview/position.png" alt="岗位管理" /></a><br/>岗位管理</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/permission.png"><img src="./assets/preview/permission.png" alt="权限管理" /></a><br/>权限管理</td>
+    <td align="center" width="50%"><a href="./assets/preview/menu.png"><img src="./assets/preview/menu.png" alt="菜单管理" /></a><br/>菜单管理</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/field-security.png"><img src="./assets/preview/field-security.png" alt="字段安全" /></a><br/>字段安全</td>
+    <td align="center" width="50%"><a href="./assets/preview/authorization.png"><img src="./assets/preview/authorization.png" alt="授权申请与委托" /></a><br/>授权申请与委托</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/review.png"><img src="./assets/preview/review.png" alt="审批中心" /></a><br/>审批中心</td>
+    <td align="center" width="50%"><a href="./assets/preview/constraint.png"><img src="./assets/preview/constraint.png" alt="审批约束" /></a><br/>审批约束</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/tenant.png"><img src="./assets/preview/tenant.png" alt="租户管理" /></a><br/>租户管理</td>
+    <td align="center" width="50%"><a href="./assets/preview/tenant-members.png"><img src="./assets/preview/tenant-members.png" alt="租户成员" /></a><br/>租户成员</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/edition.png"><img src="./assets/preview/edition.png" alt="版本套餐" /></a><br/>版本套餐</td>
+    <td align="center" width="50%"><a href="./assets/preview/subscription.png"><img src="./assets/preview/subscription.png" alt="我的订阅" /></a><br/>我的订阅</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/notification.png"><img src="./assets/preview/notification.png" alt="通知公告" /></a><br/>通知公告</td>
+    <td align="center" width="50%"><a href="./assets/preview/inbox.png"><img src="./assets/preview/inbox.png" alt="我的消息" /></a><br/>我的消息</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/message-template.png"><img src="./assets/preview/message-template.png" alt="消息模板" /></a><br/>消息模板</td>
+    <td align="center" width="50%"><a href="./assets/preview/message-record.png"><img src="./assets/preview/message-record.png" alt="邮件短信" /></a><br/>邮件短信</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/chat.png"><img src="./assets/preview/chat.png" alt="在线聊天" /></a><br/>在线聊天</td>
+    <td align="center" width="50%"><a href="./assets/preview/chat-audit.png"><img src="./assets/preview/chat-audit.png" alt="聊天审计" /></a><br/>聊天审计</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/file-library.png"><img src="./assets/preview/file-library.png" alt="文件管理" /></a><br/>文件管理</td>
+    <td align="center" width="50%"><a href="./assets/preview/file-storage.png"><img src="./assets/preview/file-storage.png" alt="存储配置" /></a><br/>存储配置</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/export-center.png"><img src="./assets/preview/export-center.png" alt="导出中心" /></a><br/>导出中心</td>
+    <td align="center" width="50%"><a href="./assets/preview/dict.png"><img src="./assets/preview/dict.png" alt="字典管理" /></a><br/>字典管理</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/config.png"><img src="./assets/preview/config.png" alt="参数配置" /></a><br/>参数配置</td>
+    <td align="center" width="50%"><a href="./assets/preview/numbering.png"><img src="./assets/preview/numbering.png" alt="业务编号" /></a><br/>业务编号</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/job.png"><img src="./assets/preview/job.png" alt="任务调度" /></a><br/>任务调度</td>
+    <td align="center" width="50%"><a href="./assets/preview/cache.png"><img src="./assets/preview/cache.png" alt="缓存管理" /></a><br/>缓存管理</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/server.png"><img src="./assets/preview/server.png" alt="服务监控" /></a><br/>服务监控</td>
+    <td align="center" width="50%"><a href="./assets/preview/version.png"><img src="./assets/preview/version.png" alt="版本管理" /></a><br/>版本管理</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/email-config.png"><img src="./assets/preview/email-config.png" alt="邮件配置" /></a><br/>邮件配置</td>
+    <td align="center" width="50%"><a href="./assets/preview/sms-config.png"><img src="./assets/preview/sms-config.png" alt="短信配置" /></a><br/>短信配置</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/bot-config.png"><img src="./assets/preview/bot-config.png" alt="机器人配置" /></a><br/>机器人配置</td>
+    <td align="center" width="50%"><a href="./assets/preview/telegram-bot.png"><img src="./assets/preview/telegram-bot.png" alt="Telegram 机器人" /></a><br/>Telegram 机器人</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/openapi-app.png"><img src="./assets/preview/openapi-app.png" alt="应用管理" /></a><br/>应用管理</td>
+    <td align="center" width="50%"><a href="./assets/preview/openapi-credentials.png"><img src="./assets/preview/openapi-credentials.png" alt="开放接口凭证" /></a><br/>开放接口凭证</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/log-access.png"><img src="./assets/preview/log-access.png" alt="访问日志" /></a><br/>访问日志</td>
+    <td align="center" width="50%"><a href="./assets/preview/log-api.png"><img src="./assets/preview/log-api.png" alt="开放接口日志" /></a><br/>开放接口日志</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/log-operation.png"><img src="./assets/preview/log-operation.png" alt="操作日志" /></a><br/>操作日志</td>
+    <td align="center" width="50%"><a href="./assets/preview/log-login.png"><img src="./assets/preview/log-login.png" alt="登录日志" /></a><br/>登录日志</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/log-exception.png"><img src="./assets/preview/log-exception.png" alt="异常日志" /></a><br/>异常日志</td>
+    <td align="center" width="50%"><a href="./assets/preview/log-diff.png"><img src="./assets/preview/log-diff.png" alt="数据变更日志" /></a><br/>数据变更日志</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/log-permission.png"><img src="./assets/preview/log-permission.png" alt="权限变更日志" /></a><br/>权限变更日志</td>
+    <td align="center" width="50%"><a href="./assets/preview/log-trace-timeline.png"><img src="./assets/preview/log-trace-timeline.png" alt="日志链路时间线" /></a><br/>日志链路时间线</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/log-migration.png"><img src="./assets/preview/log-migration.png" alt="升级记录" /></a><br/>升级记录</td>
+    <td align="center" width="50%"><a href="./assets/preview/codegen.png"><img src="./assets/preview/codegen.png" alt="代码生成" /></a><br/>代码生成</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/ai-provider.png"><img src="./assets/preview/ai-provider.png" alt="AI 提供商" /></a><br/>AI 提供商</td>
+    <td align="center" width="50%"><a href="./assets/preview/ai-prompt.png"><img src="./assets/preview/ai-prompt.png" alt="AI 提示词" /></a><br/>AI 提示词</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/knowledge.png"><img src="./assets/preview/knowledge.png" alt="知识库" /></a><br/>知识库</td>
+    <td align="center" width="50%"><a href="./assets/preview/ai-assistant.png"><img src="./assets/preview/ai-assistant.png" alt="AI 助手" /></a><br/>AI 助手</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/workflow-definition.png"><img src="./assets/preview/workflow-definition.png" alt="流程定义" /></a><br/>流程定义</td>
+    <td align="center" width="50%"><a href="./assets/preview/workflow-json.png"><img src="./assets/preview/workflow-json.png" alt="流程 JSON 编辑" /></a><br/>流程 JSON 编辑</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/workflow-instance.png"><img src="./assets/preview/workflow-instance.png" alt="流程实例" /></a><br/>流程实例</td>
+    <td align="center" width="50%"><a href="./assets/preview/workflow-todo.png"><img src="./assets/preview/workflow-todo.png" alt="我的待办" /></a><br/>我的待办</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/preferences.png"><img src="./assets/preview/preferences.png" alt="偏好设置" /></a><br/>偏好设置</td>
+    <td align="center" width="50%"><a href="./assets/preview/schema-page.png"><img src="./assets/preview/schema-page.png" alt="高级列表" /></a><br/>高级列表</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/editors.png"><img src="./assets/preview/editors.png" alt="Markdown 编辑器" /></a><br/>Markdown 编辑器</td>
+    <td align="center" width="50%"><a href="./assets/preview/editor-json.png"><img src="./assets/preview/editor-json.png" alt="JSON 编辑器" /></a><br/>JSON 编辑器</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/editor-rich-text.png"><img src="./assets/preview/editor-rich-text.png" alt="富文本编辑器" /></a><br/>富文本编辑器</td>
+    <td align="center" width="50%"><a href="./assets/preview/navigation.png"><img src="./assets/preview/navigation.png" alt="全局导航" /></a><br/>全局导航</td>
   </tr>
 </table>
 
-
-
-移动端：
-
-<img src="./assets/mobile.png" />
-
 ## 功能
 
-**身份与认证**
+### 工作台与身份权限
 
-- 用户、角色、部门、菜单管理
-- JWT 双令牌（Access 120 分钟 + Refresh 7 天），多端登录与会话管理
-- 多种登录方式：账号密码、邮箱 / 短信验证码、2FA（TOTP / 邮箱 / 短信，可位组合）
-- OAuth 内置八家自研提供商：GitHub、Gitee、Google、QQ、微信、企业微信、钉钉、飞书，按配置启用
-- 登录防护：自绘 SVG 图形验证码（一次性消费、可配置关闭）、账号+IP 与纯 IP 双维度防爆破节流、失败计数锁定、默认密码登录强制改密
-- 密码 PBKDF2 哈希（OWASP 推荐迭代次数）；一次性验证码消费即销毁、恒定时间比较
+- **工作台**：通过可定制小组件展示统计、图表、公告和待办，支持调整布局与保存个人看板。
+- **控制中心**：集中展示可进入的租户与平台管理入口，支持切换租户和选择工作上下文。
+- **登录认证**：支持账号密码、手机和邮箱验证码、第三方登录及双因素验证，提供验证码、登录节流和账号锁定防护。
+- **个人中心**：维护个人资料、密码、手机和邮箱，管理第三方绑定、登录设备、通知偏好、租户归属和个人使用统计。
+- **用户管理**：查询与维护用户，支持高级搜索、启用禁用、多角色与多部门配置、直接授权、数据范围、账号锁定、密码重置、模拟登录和强制下线。
+- **在线用户**：查看活跃会话、客户端和实时连接状态，支持按用户检索并吊销指定会话。
+- **角色管理**：维护角色、继承关系和成员，批量添加或移除成员，配置菜单权限、操作权限和数据范围。
+- **组织机构**：以树形列表管理部门层级，查看子部门和成员，维护部门负责人及成员岗位、工号、职级和入职信息。
+- **岗位管理**：维护岗位名称、编码、排序和启停状态，查看岗位详情并供部门成员配置使用。
+- **权限管理**：集中维护模块、资源和操作权限，配置权限编码、接口路径、请求方法、平台或租户作用域及审计要求。
+- **菜单管理**：以树形结构维护目录、菜单与按钮，配置组件路径、图标、排序、可见性、缓存、外链和关联权限。
+- **字段安全**：按实体字段与授权对象配置字段读取、写入和脱敏策略，控制敏感字段的展示与修改。
+- **授权申请与委托**：处理权限申请的批准、拒绝和撤回，支持限时委托角色或权限并随时撤销。
+- **审批中心**：查询审批事项、审批状态和处理记录，支持查看详情、批准、拒绝及撤回。
+- **审批约束**：维护职责分离、互斥、基数和条件约束，配置适用对象、规则参数及违规处理方式。
 
-**权限**
+### 租户与消息协作
 
-- 权限码三段式 `module:resource:action`，超级管理员通配符为 `*`
-- 角色层级继承（闭包表）、数据范围五档（本人 / 本部门 / 本部门及子级 / 全部 / 自定义）、字段级脱敏六策略
-- 角色互斥与基数约束（静态职责分离），按约束组判定
-- 权限申请审批、权限委托（临时授权、可撤销）与变更留痕
+- **租户管理**：维护租户状态、版本、到期与配额，分步初始化租户数据库和管理员，管理成员、运维支持成员及所有权转移。
+- **版本套餐**：配置套餐价格、计费周期、用户与存储配额以及权限白名单，控制租户可用功能。
+- **我的订阅**：查看当前租户的版本、订阅期限和用户、存储用量，了解配额与可用权益。
+- **通知公告**：维护并发布通知，按用户、角色或部门定向投递，配置展示与强制阅读方式，查看阅读统计和未读人员。
+- **我的消息**：查看站内通知详情，筛选待处理消息，支持单条或全部标为已读及确认阅读。
+- **消息模板**：集中维护邮件、短信、站内通知和机器人模板，使用模板变量组织内容并支持租户覆盖。
+- **邮件短信**：查询邮件和短信发送记录、接收对象及发送结果，查看内容详情并重发失败消息。
+- **在线聊天**：支持单聊、群聊、部门会话与 AI 助手会话，通过实时推送展示消息、未读状态及会话信息。
+- **聊天审计**：按会话与消息条件检索聊天记录，查看会话成员和消息详情，支持内容合规审查。
 
-**多租户**
+### 文件与系统管理
 
-- 默认字段级隔离，全局数据使用 `TenantId=0` 约定；另支持按租户独立数据库
-- 邮箱全局唯一登录，登录后按归属自动落点（控制台 / 工作台 / 租户选择），可随时切换租户
-- 超级管理员平台态运维，可切入任意租户代为管理
-- 租户版本（Edition）权限白名单运行时门控；开通一站式建管理员、角色与授权；降级自动回收越权授权
+- **文件管理**：查询、上传、下载和预览文件，维护元数据、归档与恢复状态，查看存储副本并管理主存储。
+- **存储配置**：配置本地、S3、OSS、COS 和 MinIO 等存储通道，支持启用禁用及默认存储设置。
+- **导出中心**：统一查看异步导出任务的状态与结果，支持 CSV、XLSX 文件下载、取消待执行任务和删除记录。
+- **字典管理**：联动维护字典分类与字典项，配置编码、值、默认项、排序和状态，为搜索与表单提供统一选项。
+- **参数配置**：维护平台与租户参数，按分组和状态查询配置，查看配置详情并管理参数值。
+- **业务编号**：配置编号前缀、日期、流水位数、重置周期和时区，预览格式，执行安全重置并查看永久发号记录。
+- **任务调度**：维护定时与间隔任务，支持 Cron 可视化配置、启用暂停、立即执行、重试策略及运行日志详情查看。
+- **缓存管理**：按键或匹配模式查询缓存，以树形分组查看键和内容，支持编辑缓存值、按键或批量清理。
+- **服务监控**：展示 CPU、内存、磁盘、网络、GPU、主板和运行时信息，辅助查看服务资源与运行状态。
+- **版本管理**：查看当前系统版本、版本说明与数据库迁移信息，集中核对升级状态。
+- **邮件配置**：维护邮件发送通道与服务器参数，管理启用状态及默认邮件配置。
+- **短信配置**：维护短信服务商与发送配置，管理启用状态及默认短信通道。
+- **机器人配置**：管理钉钉、飞书和企业微信 Webhook 机器人通道，配置状态及默认通知机器人。
+- **Telegram 机器人**：维护多个 Telegram Bot 实例的连接配置、启用状态和相关说明。
+- **应用管理**：注册与维护 OAuth2 / OIDC 应用，配置客户端类型、授权方式和回调地址，管理应用状态及密钥。
+- **开放接口凭证**：在个人中心自助管理 OpenAPI 调用凭证，申请、查看和轮换签名调用所需的密钥。
 
-**审计日志**
+### 日志与审计
 
-- 访问 / 接口 / 操作 / 异常 / 登录 / 实体变更 六类日志，各自独立写入
-- 落库前自动脱敏（密码、令牌、密钥、证件号等，带反例白名单避免误掩）；实体变更区分新增 / 修改 / 删除 / 恢复
-- 链路追踪时间线：支持按 TraceId、用户名、会话标识、IP、用户主键五个维度跨类型聚合
+- **访问日志**：查询请求路径、请求方法、状态码、耗时和客户端信息，查看详情并跳转关联链路。
+- **开放接口日志**：查询开放接口调用与签名鉴权结果，查看请求响应详情及关联链路。
+- **操作日志**：记录业务操作、执行结果和耗时，查看操作描述、客户端信息及关联链路。
+- **登录日志**：查询登录成功、失败、退出及模拟登录等事件，查看客户端、IP 与登录详情。
+- **异常日志**：检索异常类型、错误信息与发生位置，查看堆栈和关联请求以定位问题。
+- **数据变更日志**：记录实体新增、修改、删除与恢复，展示字段变更前后差异并关联操作链路。
+- **权限变更日志**：记录角色、用户和权限授权变更，查询操作对象、变更内容与关联链路。
+- **日志链路追踪**：按 TraceId、用户、会话或 IP 聚合多类日志，以时间线串联操作，并用流向图与时间分布分析定位异常。
+- **升级记录**：查询数据库升级脚本执行台账，查看版本、执行状态、耗时与错误详情。
 
-**代码生成**
+### 开发与扩展模块
 
-- 单表 / 树形 / 主从三种模式，从实体、DTO、API 到前端页面一键生成
-- 原生 Scriban 模板以嵌入资源打进程序集，各带手工变体；同时生成菜单权限、权限种子、页面描述符与种子器
-- Zip 下载或落盘；落盘默认关闭，需显式配置绝对路径白名单根目录，带路径穿越 fail-closed
+- **代码生成**：管理数据源、表结构、字段和模板，支持单表、树形、主从全栈生成、代码预览、下载与生成历史查看。
+- **AI 提供商**：配置模型服务商、连接地址和模型，安全托管密钥，测试连接并设置默认提供商。
+- **AI 提示词**：集中维护提示词编码、内容和状态，为 AI 对话及业务场景复用提示词模板。
+- **知识库**：导入知识文档并建立向量索引，支持重建索引、检索问答和来源引用，按租户隔离知识数据。
+- **AI 助手**：配置助手身份、模型与提示词，设置默认助手并接入在线聊天会话。
+- **流程定义**：可视化设计流程节点与连线，维护草稿、发布、停用和归档状态，支持版本管理及启动流程。
+- **流程实例**：查看流程运行状态、节点与详情，支持挂起、恢复、取消、终止、故障重试及发送流程信号。
+- **我的待办**：集中处理人工流程任务，支持批准、拒绝、转办和加签，跟踪任务办理状态。
+- **打印模板**：拖拽设计文本、表格、图片和条码，配置纸张、数据源与样例数据，支持缩放排版、JSON 查看、预览和打印。
 
-**AI 能力**
+### 通用使用体验
 
-- AI 提供商接入与密钥托管（DataProtection 可逆加密落库，Chat / Embedding 模型可配置）
-- 提示词库：数据库存储、可覆盖框架默认提示词
-- 知识库 RAG：文档摄取、向量检索（Qdrant），租户级隔离，保留原文供重建索引
-- 技能注册即自动暴露为对话工具与 MCP 工具；内置知识检索技能，业务技能实现 `IAiSkill` 即自动接入
-- 可配置多助手，聊天页 AI 助手桥接
-
-**平台能力**
-
-- 动态 API：应用服务经 `[DynamicApi]` 暴露，无 Controller 样板，Scalar 文档自动生成
-- 菜单单一事实源：后端 `PageRegistry` 统一注册菜单、路由、组件路径、权限码与国际化键
-- 全链路分布式缓存（授权快照、版本门控、菜单、配置、字典），写路径精准失效
-- 请求追踪；SignalR 双 Hub（实时通知 + 在线聊天）
-- 消息中心：邮件 / 短信 / 站内通知模板，租户可覆盖默认
-- 开放平台：内置 OAuth2 / OIDC 身份提供方（第三方应用注册、用户同意授权），个人级 OpenAPI 凭证（签名调用）
-- 服务器信息监控（主板 / CPU / 内存 / 磁盘 / GPU / 网络 / 运行时）、缓存键查询与按 pattern 清理
-- 文件多存储（本地 / 阿里云 OSS / 腾讯云 COS / MinIO）、定时任务（数据库持久化）、审核工作流、国际化（中 / 英）
-- 导出中心：异步任务 + CSV / XLSX 两种写出器 + 延迟队列
-
-**前端体验**
-
-- Schema 驱动列表页：搜索 / 表格 / 导出由配置生成，内置列设置、密度切换、高级搜索、个人视图保存、行悬停速览、树形模式与列宽拖拽
-- 权限 / 租户 / 偏好感知：页面、字段、操作三级按权限码过滤，字段级脱敏；列设置与搜索偏好同步到后端，多端一致
-- 灵动岛全局反馈、多标签页、收藏夹、命令面板式全局搜索
-- 消息中心：顶部横幅、登录弹窗、通知中心，支持强制阅读与按角色 / 部门定向
-- 偏好中心：亮 / 暗主题、主题色、布局风格与紧凑度，偏好云端同步
-- 富文本（Tiptap）与 Markdown 编辑器、Cron 可视化、JSON 编辑 / 查看、代码编辑器
-- 锁屏、水印、时区切换、导出中心
+- **偏好设置**：配置亮暗主题、主题色、布局、紧凑度、水印与交互偏好，支持个人偏好云端同步。
+- **高级列表**：统一提供组合搜索、个人视图、列设置、多列排序、密度切换、树形展示、速览与导出能力。
+- **内容编辑**：提供富文本、Markdown、代码与 JSON 编辑查看，以及 Cron 表达式可视化配置。
+- **全局导航**：提供多标签页、收藏夹、全局搜索、通知与任务反馈，支持多语言、时区切换和锁屏。
 
 ## 技术栈
 
-后端 .NET 10 + XiHan.Framework 4.0.0（SqlSugar / Redis / SignalR / Serilog / Scalar 均由框架带入）；前端 Vue 3 + TypeScript + Vite 8 + XiHan.UI + Pinia + Tailwind CSS 4。
+后端 .NET + XiHan.Framework（SqlSugar / Redis / SignalR / Serilog / Scalar 均由框架带入）；前端 Vue + TypeScript + Vite + XiHan.UI + Pinia + Tailwind CSS。
 
 逐项清单见[后端工程说明](./backend/README_cn.md#依赖构成)与[前端工程说明](./frontend/README_cn.md#技术栈)。
 
@@ -191,7 +320,7 @@ XiHan.BasicApp 采用前后端分离架构。后端遵循 DDD 分层，写路径
 | 项目 | 说明 | 可卸载 |
 | --- | --- | --- |
 | `XiHan.BasicApp.Core` | 应用基座，聚合框架的非 Web 模块与全应用共享约定 | 否 |
-| `XiHan.BasicApp.Web.Core` | Web 侧基座，聚合六个框架 Web 模块，提供维护模式中间件 | 否 |
+| `XiHan.BasicApp.Web.Core` | Web 侧基座，聚合框架 Web 模块，提供维护模式中间件 | 否 |
 | `XiHan.BasicApp.Saas` | 平台治理模块：用户 / 角色 / 权限 / 菜单 / 部门 / 租户 / 配置 / 字典 / 文件 / 通知 / 审批 / 日志 / 任务 | 否 |
 | `XiHan.BasicApp.CodeGeneration` | 代码生成：数据源管理 / 表结构导入 / 模板配置 / 全栈生成 | 是 |
 | `XiHan.BasicApp.AI` | AI 能力：提供商与密钥管理 / 提示词库 / 知识库 RAG / AI 技能（MCP 工具）/ 聊天 AI 助手 | 是（助手桥接依赖 Chat） |
@@ -202,18 +331,19 @@ XiHan.BasicApp 采用前后端分离架构。后端遵循 DDD 分层，写路径
 
 ```text
 XiHan.BasicApp/
-├── backend/                 # 后端（.NET 10）
+├── backend/                 # 后端（.NET）
 │   ├── src/
 │   │   ├── framework/       #   Core / Web.Core 基础能力
-│   │   ├── modules/         #   Saas + 五个可选模块（CodeGen/AI/Workflow/Printing/Chat）
+│   │   ├── modules/         #   Saas + 可选模块（CodeGen/AI/Workflow/Printing/Chat）
 │   │   └── main/            #   WebHost 启动入口
 │   ├── props/               #   共享 MSBuild 属性
 │   ├── scripts/             #   版本号与清理脚本
 │   └── test/                #   测试项目
-├── frontend/                # 前端（Vue 3 + XiHan.UI）
+├── frontend/                # 前端（Vue + XiHan.UI）
 │   ├── src/                 #   应用源码（src/modules/ 与后端可选模块一一对应）
 │   └── packages/            #   内部包
-└── assets/                  # README 资源
+└── assets/                  # 品牌与 README 资源
+    └── preview/             # 功能预览截图与索引
 ```
 
 ### 卸载可选模块
@@ -273,7 +403,9 @@ pnpm dev
 
 ### 默认账号
 
-初始超级管理员账号为 `superadmin`，密码 `SuperAdmin@123`。可通过 `Saas:Seed:SuperAdminPassword`（环境变量 `Saas__Seed__SuperAdminPassword`）覆盖。生产环境请务必覆盖，并在首次登录后立即修改。
+初始超级管理员账号为 `superadmin`，密码 `SuperAdmin@123`（写在种子里，账号标记为需要本人改密）。生产环境首次登录后请立即修改，并建议在参数「密码设置」里开启强制改密。
+
+开发环境默认开启演示数据（`Saas:Seed:EnableDemoData`）：覆盖各种套餐、租户状态、成员类型、数据范围与账号状态的演示租户和账号，密码都是 `Demo@123`，清单见[框架简介：种子数据](docs/backend/introduction.md#演示数据)。
 
 ## 项目生态
 

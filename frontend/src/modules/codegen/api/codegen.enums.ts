@@ -24,7 +24,8 @@ export enum GenStatus {
 /** 生成代码方式（预览走独立入口、不消费本枚举） */
 export enum GenType {
   Zip = 'Zip',
-  CustomPath = 'CustomPath',
+  /** 生成到项目：后端写进与命名空间同名的模块项目，前端写进前端工程（只在开发环境开启） */
+  Project = 'Project',
 }
 
 /** 模板引擎类型（Razor 已移除：需运行时编译能力、框架不支持） */
@@ -81,6 +82,10 @@ export enum DictSelectorType {
   DictSelector = 'DictSelector',
   EnumSelector = 'EnumSelector',
   ConstSelector = 'ConstSelector',
+  /** 关联表：外键指向另一张表配置，值为其主键 */
+  TableSelector = 'TableSelector',
+  /** 关联树：外键指向另一张树表配置，按上级组树 */
+  TreeSelector = 'TreeSelector',
 }
 
 /** 生成范围（裁剪前端/后端产物） */
@@ -113,7 +118,7 @@ export const GEN_STATUS_OPTIONS = [
 /** 生成方式选项（与行操作一一对应：配哪种，「更多」里就只出哪种） */
 export const GEN_TYPE_OPTIONS = [
   { label: '生成并下载', value: GenType.Zip },
-  { label: '生成到项目', value: GenType.CustomPath },
+  { label: '生成到项目', value: GenType.Project },
 ]
 
 /** 模板引擎选项 */
@@ -170,6 +175,8 @@ export const DICT_SELECTOR_TYPE_OPTIONS = [
   { label: '系统字典', value: DictSelectorType.DictSelector },
   { label: '枚举类型', value: DictSelectorType.EnumSelector },
   { label: '常量数组', value: DictSelectorType.ConstSelector },
+  { label: '关联表', value: DictSelectorType.TableSelector },
+  { label: '关联树', value: DictSelectorType.TreeSelector },
 ]
 
 /** 生成产物写入策略（生成器拥有 vs 开发者拥有） */
@@ -194,11 +201,16 @@ export const GENERATION_SCOPE_OPTIONS = [
 ]
 
 /**
- * 包含操作选项（写操作裁剪；列表/详情为读取基线，始终生成）。
- * value 为后端解析的操作键；不选或全选均等价于全开。
+ * 包含操作选项（可裁剪操作；列表/详情为读取基线，始终生成）。
+ * value 为后端解析的操作键；不选等价于缺省集（增删改与导入导出）。导入逐行调用新增接口，勾导入须同时勾新增；
+ * 状态切换要求表里有 EnableStatus 状态列，打印要求目标模块接入打印模块，二者须显式勾选。
  */
 export const ENABLED_ACTION_OPTIONS = [
   { label: '新增', value: 'create' },
   { label: '编辑', value: 'update' },
   { label: '删除', value: 'delete' },
+  { label: '导出', value: 'export' },
+  { label: '导入', value: 'import' },
+  { label: '状态切换', value: 'status' },
+  { label: '打印', value: 'print' },
 ]

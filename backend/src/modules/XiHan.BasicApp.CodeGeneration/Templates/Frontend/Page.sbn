@@ -5,10 +5,15 @@
 {{~ has_switch = false ~}}
 {{~ has_select = false ~}}
 {{~ has_enum_select = false ~}}
+{{~ has_dict_select = false ~}}
 {{~ has_dynamic_select = false ~}}
+{{~ has_upload = false ~}}
+{{~ has_relation_select = false ~}}
+{{~ has_relation_tree = false ~}}
 {{~ has_date_picker = false ~}}
+{{~ has_date_only = false ~}}
+{{~ has_date_time = false ~}}
 {{~ has_time_input = false ~}}
-{{~ has_datetime_input = false ~}}
 {{~ has_long_input = false ~}}
 {{~ # 控件由渲染器的 col.ControlKind 单点决定（switch/select/date/datetime/time/number/binary/textarea/text）。 ~}}
 {{~ # 这里只按它统计要引哪些组件——判定次序不再散落在模板里，也就不存在两处对不齐的问题。 ~}}
@@ -18,15 +23,31 @@
 {{~ if col.ControlKind == "switch" ~}}
 {{~ has_switch = true ~}}
 {{~ else if col.ControlKind == "select" ~}}
+{{~ # 关联表的候选随目标表增长，用可输入筛选的 XCombobox；其余下拉选项有限，仍用 XSelect ~}}
+{{~ if col.Relation ~}}
+{{~ has_relation_select = true ~}}
+{{~ else ~}}
 {{~ has_select = true ~}}
 {{~ if col.DictSelectorType != "ConstSelector" ~}}
 {{~ has_dynamic_select = true ~}}
 {{~ end ~}}
+{{~ end ~}}
 {{~ if col.EnumTypeShortName ~}}
 {{~ has_enum_select = true ~}}
 {{~ end ~}}
+{{~ if col.DictSelectorType == "DictSelector" ~}}
+{{~ has_dict_select = true ~}}
+{{~ end ~}}
+{{~ else if col.ControlKind == "treeselect" ~}}
+{{~ has_relation_tree = true ~}}
 {{~ else if col.ControlKind == "date" ~}}
 {{~ has_date_picker = true ~}}
+{{~ has_date_only = true ~}}
+{{~ else if col.ControlKind == "datetime" ~}}
+{{~ has_date_picker = true ~}}
+{{~ has_date_time = true ~}}
+{{~ else if col.ControlKind == "image" || col.ControlKind == "file" ~}}
+{{~ has_upload = true ~}}
 {{~ else if col.ControlKind == "number" ~}}
 {{~ has_number = true ~}}
 {{~ else ~}}
@@ -34,53 +55,41 @@
 {{~ if col.ControlKind == "time" ~}}
 {{~ has_time_input = true ~}}
 {{~ end ~}}
-{{~ if col.ControlKind == "datetime" ~}}
-{{~ has_datetime_input = true ~}}
-{{~ end ~}}
 {{~ if col.IsLongColumn ~}}
 {{~ has_long_input = true ~}}
 {{~ end ~}}
 {{~ end ~}}
 {{~ end ~}}
 {{~ end ~}}
-{{~ # 标量搜索取值转换需求（按列类型裁剪辅助函数，避免生成未被引用的函数） ~}}
-{{~ has_scalar_number = false ~}}
-{{~ has_scalar_boolean = false ~}}
+{{~ # 提交前校验覆盖两类列（都没有就不产出校验函数，避免未被引用）： ~}}
+{{~ # 一是必填列——判空表达式由渲染器按控件给出（FormEmptyCheck），非空且没有缺省值的列也按必填； ~}}
+{{~ # 二是 long 与时间列——前端用文本框承载，格式不对后端会静默落成 0 或默认值。 ~}}
+{{~ # 整数列不必再校验：数字框按 col.NumberPrecision 收值，整数列是 0 位小数。 ~}}
+{{~ has_required = false ~}}
 {{~ for col in Columns ~}}
-{{~ if col.IsScalarQuery ~}}
-{{~ if col.TsType == "number" ~}}
-{{~ has_scalar_number = true ~}}
-{{~ else if col.TsType == "boolean" ~}}
-{{~ has_scalar_boolean = true ~}}
+{{~ if col.InForm && col.FormEmptyCheck ~}}
+{{~ has_required = true ~}}
 {{~ end ~}}
 {{~ end ~}}
-{{~ end ~}}
-{{~ # 提交前校验覆盖四类列（都没有就不产出校验函数，避免未被引用）： ~}}
-{{~ # 一是必填文本输入框——下拉不算，它清空后是 null，.trim() 会直接抛； ~}}
-{{~ # 二是必填日期——控件的清除钮可以藏，段位却能被键盘清空，清空后提交会写成 1970-01-01； ~}}
-{{~ # 三是 long 列，前端按字符串承载，填进非数字后端会静默解析成 0； ~}}
-{{~ # 四是时间/日期时间列，脚手架用文本框承载，格式不对后端同样会静默落成默认值。 ~}}
-{{~ has_required_text = false ~}}
-{{~ has_required_date = false ~}}
-{{~ for col in Columns ~}}
-{{~ if col.InForm && col.IsRequired && !col.IsNullable && col.ControlKind == "text" ~}}
-{{~ has_required_text = true ~}}
-{{~ end ~}}
-{{~ if col.InForm && col.IsRequired && !col.IsNullable && (col.ControlKind == "textarea" || col.ControlKind == "time" || col.ControlKind == "datetime" || col.ControlKind == "binary") ~}}
-{{~ has_required_text = true ~}}
-{{~ end ~}}
-{{~ if col.InForm && col.IsRequired && !col.IsNullable && col.ControlKind == "date" ~}}
-{{~ has_required_date = true ~}}
-{{~ end ~}}
-{{~ end ~}}
-{{~ has_validation = has_required_text || has_required_date || has_long_input || has_time_input || has_datetime_input ~}}
+{{~ has_validation = has_required || has_long_input || has_time_input ~}}
 {{~ # 操作裁剪标志（EnabledActions 门控；读取基线 list/detail 始终生成） ~}}
 {{~ # 一列都不进表单时不产弹窗与增改按钮：空表单没有意义，且会留下未被引用的 import ~}}
 {{~ can_create = CanCreate && has_form_field ~}}
 {{~ can_update = CanUpdate && has_form_field ~}}
+{{~ # 导入逐行调新增接口（引擎保证勾了导入就一定勾了新增），与 schema 里的导入字段同一判据 ~}}
+{{~ can_import = CanImport && can_create ~}}
 {{~ has_modal = can_create || can_update ~}}
-{{~ has_row_action = can_update || CanDelete ~}}
-{{~ has_actions = can_create || can_update || CanDelete ~}}
+{{~ has_row_action = can_update || CanDelete || CanStatus || CanPrint ~}}
+{{~ has_actions = can_create || can_update || CanDelete || CanStatus || CanPrint ~}}
+{{~ # 保存、删除、启停后刷新列表；只开打印时不需要 ~}}
+{{~ has_reload = has_modal || CanDelete || CanStatus ~}}
+{{~ # 打印时图片列要换成可访问地址（字段存的是文件主键） ~}}
+{{~ has_print_image = false ~}}
+{{~ for col in Columns ~}}
+{{~ if CanPrint && col.InDetail && col.ControlKind == "image" ~}}
+{{~ has_print_image = true ~}}
+{{~ end ~}}
+{{~ end ~}}
 {{~ need_message = has_actions || HasDetailTables ~}}
 {{~ # 子表按 kebab 排序：页面里明细区的呈现顺序稳定，不随表配置的返回顺序漂移 ~}}
 {{~ detail_tables = DetailTables | array.sort "ClassNameKebab" ~}}
@@ -126,7 +135,7 @@ import type {
 {{~ end ~}}
 } from '@/api/modules/{{ ModuleName | string.downcase }}/{{ ClassNameKebab }}.types'
 {{~ end ~}}
-import type { PageSchema{{ if has_actions }}, SchemaActionPayload{{ end }} } from '~/components'
+import type { PageSchema{{ if has_actions }}, SchemaActionPayload, SchemaPageInstance{{ end }} } from '~/components'
 {{~ if has_modal && has_dynamic_select ~}}
 import type { SelectOption } from '~/types'
 {{~ end ~}}
@@ -138,7 +147,6 @@ import { computed, ref, useId } from 'vue'
 {{~ else if need_message ~}}
 import { ref } from 'vue'
 {{~ end ~}}
-import { createPageRequest, querySortsFromSchema } from '@/api'
 {{~ for api_path in api_paths ~}}
 {{~ if api_path == master_api_path ~}}
 import { {{ ClassNameCamel }}Api } from '@/api/modules/{{ api_path }}'
@@ -150,14 +158,36 @@ import { {{ detail.ClassNameCamel }}Api } from '@/api/modules/{{ api_path }}'
 {{~ end ~}}
 {{~ end ~}}
 {{~ end ~}}
-import { SchemaPage{{ if HasDetailTables }}, XDataTable{{ end }}{{ if has_modal && has_date_picker }}, XDatePicker{{ end }}{{ if has_modal }}, XEditModal{{ end }}{{ if has_modal && has_text_input }}, XInput{{ end }}{{ if has_modal && has_number }}, XNumberInput{{ end }}{{ if has_modal && has_select }}, XSelect{{ end }} } from '~/components'
+{{~ if has_modal && has_upload ~}}
+import XFileRefUpload from '@/components/FileRefUpload.vue'
+{{~ end ~}}
+import { SchemaPage{{ if has_modal && has_relation_select }}, XCombobox{{ end }}{{ if HasDetailTables }}, XDataTable{{ end }}{{ if has_modal && has_date_picker }}, XDatePicker{{ end }}{{ if has_modal }}, XEditModal{{ end }}{{ if has_modal && has_text_input }}, XInput{{ end }}{{ if has_modal && has_number }}, XNumberInput{{ end }}{{ if has_modal && has_select }}, XSelect{{ end }}{{ if has_modal && has_relation_tree }}, XTreeSelect{{ end }} } from '~/components'
+{{~ composable_imports = [] ~}}
+{{~ if has_print_image ~}}
+{{~ composable_imports = composable_imports | array.add "resolveAvatarUrl" ~}}
+{{~ end ~}}
 {{~ if need_message ~}}
-import { toast } from '~/composables'
+{{~ composable_imports = composable_imports | array.add "toast" ~}}
+{{~ end ~}}
+{{~ if has_modal && (has_relation_select || has_relation_tree) ~}}
+{{~ composable_imports = composable_imports | array.add "useAsyncOptions" ~}}
+{{~ end ~}}
+{{~ if has_modal && has_dict_select ~}}
+{{~ composable_imports = composable_imports | array.add "useDictOptions" ~}}
+{{~ end ~}}
+{{~ if (composable_imports | array.size) > 0 ~}}
+import { {{ composable_imports | array.join ", " }} } from '~/composables'
 {{~ end ~}}
 {{~ if has_modal && has_enum_select ~}}
 import { useEnumOptions } from '~/hooks'
 {{~ end ~}}
-import { {{ if has_actions }}actions, {{ end }}{{ if has_modal }}createDefaultForm, {{ end }}{{ if HasDetailTables }}detailTableColumns, {{ end }}fields, pageMeta } from './{{ ClassNameKebab }}.schema'
+{{~ if CanPrint ~}}
+import { previewPrintByCode } from '~/printing'
+{{~ end ~}}
+{{~ if has_modal && has_relation_tree ~}}
+import { relationOptionsToTree } from '~/utils'
+{{~ end ~}}
+import { {{ if has_actions }}actions, {{ end }}buildPageQuery, {{ if has_modal }}createDefaultForm, {{ end }}{{ if HasDetailTables }}detailTableColumns, {{ end }}fields, pageMeta{{ if can_import }}, toCreateInputFromImport{{ end }} } from './{{ ClassNameKebab }}.schema'
 
 defineOptions({ name: '{{ ClassName }}Page' })
 {{~ if has_modal ~}}
@@ -167,7 +197,9 @@ const editFormId = useId()
 {{~ end ~}}
 {{~ if has_actions ~}}
 
-const schemaPageRef = ref<{ reload: () => Promise<void> } | null>(null)
+const schemaPageRef = ref<SchemaPageInstance | null>(null)
+{{~ end ~}}
+{{~ if has_reload ~}}
 
 function reloadList() {
   void schemaPageRef.value?.reload()
@@ -211,7 +243,7 @@ async function loadDetails(masterId: string) {
     }
   }
   catch (error) {
-    toast.error((error as Error)?.message || '加载明细失败')
+    toast.danger((error as Error)?.message || '加载明细失败')
   }
   finally {
     detailLoading.value = { ...detailLoading.value, [masterId]: false }
@@ -229,12 +261,7 @@ const INTEGER_PATTERN = /^-?\d+$/
 const TIME_PATTERN = /^\d{1,2}:\d{2}(?::\d{2})?$/
 
 {{~ end ~}}
-{{~ if has_modal && has_datetime_input ~}}
-/** 日期时间列同理：组件库没有带时分秒的选择器包装，脚手架用文本框 + 格式校验兜住 */
-const DATE_TIME_PATTERN = /^\d{4}-\d{2}-\d{2}(?:[ T]\d{1,2}:\d{2}(?::\d{2})?)?$/
-
-{{~ end ~}}
-{{~ if has_modal && has_date_picker ~}}
+{{~ if has_modal && has_date_only ~}}
 /**
  * 纯日期列按本地年月日发送。
  *
@@ -252,32 +279,22 @@ function toDateOnly(value: number | null | undefined) {
 }
 
 {{~ end ~}}
-/** 搜索框取值转文本：空串不参与过滤 */
-function toQueryText(value: unknown) {
-  return typeof value === 'string' ? value.trim() || undefined : undefined
-}
-{{~ if has_scalar_number ~}}
-
-/** 搜索框取值转数字：空串与非法值不参与过滤（搜索控件给的是字符串，直传会被后端严格数字解析拒绝） */
-function toQueryNumber(value: unknown) {
-  if (value === undefined || value === null || value === '') {
-    return undefined
+{{~ if has_modal && has_date_time ~}}
+/**
+ * 日期时间列按本地时间文本发送（yyyy-MM-dd HH:mm:ss），与后端下发、导入的口径一致。
+ *
+ * 带时刻的日期控件给出本地时刻的时间戳；同样不走 toISOString，免得换算成 UTC 后差出时区。
+ */
+function toDateTime(value: number | null | undefined) {
+  if (value == null || Number.isNaN(value)) {
+    return ''
   }
-  const parsed = Number(value)
-  return Number.isNaN(parsed) ? undefined : parsed
+  const date = new Date(value)
+  const pad = (part: number) => String(part).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
 }
-{{~ end ~}}
-{{~ if has_scalar_boolean ~}}
 
-/** 搜索下拉取值转布尔：选项以 1/0 承载（schema 选项类型不接受布尔值） */
-function toQueryBoolean(value: unknown) {
-  if (value === undefined || value === null || value === '') {
-    return undefined
-  }
-  return value === true || value === 1 || value === '1'
-}
 {{~ end ~}}
-
 const schema: PageSchema = {
   ...pageMeta,
   fields,
@@ -285,25 +302,22 @@ const schema: PageSchema = {
   actions,
 {{~ end ~}}
   resource: {
-    page: (params) => {
-      // 不解构：列名可能就叫 keyword / params，解构成同名局部量是重复声明
-      const filters = params.filters
-      return {{ ClassNameCamel }}Api.page({
-        ...createPageRequest({
-          page: { pageIndex: params.page, pageSize: params.pageSize },
-          // 排序与区间/多选过滤统一走 conditions，由后端 ApplySorts / 通用过滤应用
-          conditions: { sorts: querySortsFromSchema(params.sorts), filters: params.conditionFilters ?? [] },
-        }),
-        keyword: toQueryText(filters.keyword),
-{{~ for col in Columns ~}}
-{{~ if col.IsScalarQuery ~}}
-        {{ col.TsProperty }}: {{ if col.TsType == "number" }}toQueryNumber(filters.{{ col.TsProperty }}){{ else if col.TsType == "boolean" }}toQueryBoolean(filters.{{ col.TsProperty }}){{ else }}toQueryText(filters.{{ col.TsProperty }}){{ end }},
-{{~ end ~}}
-{{~ end ~}}
-      }) as unknown as Promise<PageResult<Record<string, unknown>>>
-    },
+    // 查询入参在 schema 里随表结构生成，列表取数与导出中心共用
+    page: params => {{ ClassNameCamel }}Api.page(buildPageQuery(params)) as unknown as Promise<PageResult<Record<string, unknown>>>,
 {{~ if CanDelete ~}}
     remove: id => {{ ClassNameCamel }}Api.delete(id),
+{{~ end ~}}
+{{~ if CanStatus ~}}
+    // 批量启用/停用：框架按行调用
+    updateStatus: (id, enabled) => {{ ClassNameCamel }}Api.updateStatus({ basicId: id, {{ StatusColumn.TsProperty }}: enabled ? 'Enabled' : 'Disabled' }),
+{{~ end ~}}
+{{~ if can_import ~}}
+    // 导入：逐行调新增接口，记录到入参的换算在 schema 里随表结构更新
+    create: record => {{ ClassNameCamel }}Api.create(toCreateInputFromImport(record)),
+{{~ end ~}}
+{{~ if CanExport ~}}
+    // 导出中心：业务类型即页面码，后端生成的 {{ ClassName }}ExportProvider 按它接单
+    export: { businessType: pageMeta.pageCode, buildQuery: buildPageQuery },
 {{~ end ~}}
   },
 }
@@ -333,6 +347,20 @@ function onAction(payload: SchemaActionPayload) {
       }
       break
 {{~ end ~}}
+{{~ if CanStatus ~}}
+    case 'toggle':
+      if (row) {
+        void handleToggleStatus(row)
+      }
+      break
+{{~ end ~}}
+{{~ if CanPrint ~}}
+    case 'print':
+      if (row) {
+        void handlePrint(row)
+      }
+      break
+{{~ end ~}}
   }
 }
 {{~ end ~}}
@@ -341,20 +369,31 @@ function onAction(payload: SchemaActionPayload) {
 {{~ # 只有真正渲成下拉的列才产选项常量；布尔/日期等被 ControlKind 判成别的控件，不消费选项 ~}}
 {{~ for col in Columns ~}}
 {{~ if col.InForm && col.ControlKind == "select" && col.DictSelectorType == "ConstSelector" ~}}
-/** {{ col.ColumnComment | block_comment }}常量选项 */
-const {{ col.TsProperty }}ConstOptions = {{ col.ConstValues | select_options col.ColumnComment col.TsType }}
+/** {{ col.Label | block_comment }}常量选项 */
+const {{ col.TsProperty }}ConstOptions = {{ col.ConstValues | select_options col.Label col.TsType }}
 {{~ else if col.InForm && col.ControlKind == "select" && col.EnumTypeShortName ~}}
-/** {{ col.ColumnComment | block_comment }}枚举选项（后端枚举元数据按 X-Language 返回标签） */
+/** {{ col.Label | block_comment }}枚举选项（后端枚举元数据按 X-Language 返回标签） */
 const {{ col.TsProperty }}Options = useEnumOptions('{{ col.EnumTypeShortName }}')
+{{~ else if col.InForm && col.ControlKind == "select" && col.Relation ~}}
+/** {{ col.Label | block_comment }}选项（关联{{ col.Relation.Label | block_comment }}，选中值为其主键） */
+const {{ col.TsProperty }}Options = useAsyncOptions({{ ClassNameCamel }}Api.{{ col.Relation.OptionsMethodCamel }})
+{{~ else if col.InForm && col.ControlKind == "treeselect" ~}}
+/** {{ col.Label | block_comment }}树形选项（关联{{ col.Relation.Label | block_comment }}，按上级组树，选中值为其主键） */
+const {{ col.TsProperty }}Relation = useAsyncOptions({{ ClassNameCamel }}Api.{{ col.Relation.OptionsMethodCamel }})
+const {{ col.TsProperty }}TreeOptions = computed(() => relationOptionsToTree({{ col.TsProperty }}Relation.value))
+{{~ else if col.InForm && col.ControlKind == "select" && col.DictSelectorType == "DictSelector" ~}}
+/** {{ col.Label | block_comment }}字典选项（字典 {{ col.DictCode | block_comment }}，选中值为字典项编码；停用项只回显不能选） */
+const {{ col.TsProperty }}Options = useDictOptions('{{ col.DictCode | ts_string }}')
 {{~ else if col.InForm && col.ControlKind == "select" ~}}
-/** {{ col.ColumnComment | block_comment }}选项来源未接通（{{ if col.DictSelectorType == "DictSelector" }}字典 {{ col.DictCode | block_comment }}{{ else }}枚举 {{ col.EnumTypeName | block_comment }}{{ end }}），需业务层提供 */
+{{~ # 只剩枚举解析不出来这一种：引擎已告警，这里产出禁用占位项，重新同步表结构后即接通 ~}}
+/** {{ col.Label | block_comment }}选项来源未接通（枚举 {{ col.EnumTypeName | block_comment }} 未解析，对表执行重新同步后重新生成） */
 const {{ col.TsProperty }}Options = [{ label: '选项来源未接通', value: -1, disabled: true }]
 {{~ end ~}}
 {{~ end ~}}
 const modalVisible = ref(false)
 const submitLoading = ref(false)
 const form = ref<{{ ClassName }}FormModel>(createDefaultForm())
-const modalTitle = computed(() => (form.value.basicId ? '编辑{{ TableComment | ts_string }}' : '新增{{ TableComment | ts_string }}'))
+const modalTitle = computed(() => (form.value.basicId ? '编辑{{ DisplayName | ts_string }}' : '新增{{ DisplayName | ts_string }}'))
 {{~ end ~}}
 {{~ if can_create ~}}
 
@@ -372,20 +411,15 @@ async function handleEdit(row: {{ ClassName }}ListItemDto) {
     detail = await {{ ClassNameCamel }}Api.detail(row.basicId)
   }
   catch (error) {
-    toast.error((error as Error)?.message || '加载详情失败')
+    toast.danger((error as Error)?.message || '加载详情失败')
   }
   const src = (detail ?? row) as {{ ClassName }}DetailDto
   form.value = {
     basicId: row.basicId,
+{{~ # 回填表达式取渲染器的 FormFromSource（与表单模型同源）；$s 换成详情里的同名字段 ~}}
 {{~ for col in Columns ~}}
 {{~ if col.InForm ~}}
-{{~ if col.ControlKind == "date" ~}}
-    {{ col.TsProperty }}: src.{{ col.TsProperty }} ? new Date(src.{{ col.TsProperty }}).getTime() : null,
-{{~ else if col.IsNullable || !col.IsRequired ~}}
-    {{ col.TsProperty }}: src.{{ col.TsProperty }} ?? null,
-{{~ else ~}}
-    {{ col.TsProperty }}: src.{{ col.TsProperty }},
-{{~ end ~}}
+    {{ col.TsProperty }}: {{ col.FormFromSource | string.replace "$s" ("src." + col.TsProperty) }},
 {{~ end ~}}
 {{~ end ~}}
   }
@@ -401,7 +435,44 @@ async function handleDelete(row: {{ ClassName }}ListItemDto) {
     reloadList()
   }
   catch (error) {
-    toast.error((error as Error)?.message || '删除失败')
+    toast.danger((error as Error)?.message || '删除失败')
+  }
+}
+{{~ end ~}}
+{{~ if CanStatus ~}}
+
+async function handleToggleStatus(row: {{ ClassName }}ListItemDto) {
+  const enable = row.{{ StatusColumn.TsProperty }} !== 'Enabled'
+  try {
+    await {{ ClassNameCamel }}Api.updateStatus({ basicId: row.basicId, {{ StatusColumn.TsProperty }}: enable ? 'Enabled' : 'Disabled' })
+    toast.success(enable ? '已启用' : '已停用')
+    reloadList()
+  }
+  catch (error) {
+    toast.danger((error as Error)?.message || (enable ? '启用失败' : '停用失败'))
+  }
+}
+{{~ end ~}}
+{{~ if CanPrint ~}}
+
+/**
+ * 打印：取详情，选项列换成显示名称{{ if has_print_image }}、图片换成可访问地址{{ end }}，按页面码取打印模板预览。
+ * 模板在「打印模板」页新建，编码同为页面码、数据源选本页。
+ */
+async function handlePrint(row: {{ ClassName }}ListItemDto) {
+  try {
+    const detail = await {{ ClassNameCamel }}Api.detail(row.basicId)
+    const source = (detail ?? row) as unknown as Record<string, unknown>
+    const data: Record<string, unknown> = { ...source, ...schemaPageRef.value?.formatRow(source) }
+{{~ for col in Columns ~}}
+{{~ if col.InDetail && col.ControlKind == "image" ~}}
+    data.{{ col.TsProperty }} = await resolveAvatarUrl(source.{{ col.TsProperty }} as null | string)
+{{~ end ~}}
+{{~ end ~}}
+    await previewPrintByCode(pageMeta.pageCode, data)
+  }
+  catch (error) {
+    toast.danger((error as Error)?.message || '打印失败')
   }
 }
 {{~ end ~}}
@@ -419,33 +490,22 @@ function validateForm() {
 {{~ else if col.InUpdate && !col.InCreate ~}}
 {{~ side_guard = "form.value.basicId && " ~}}
 {{~ end ~}}
-{{~ if col.InForm && col.IsRequired && !col.IsNullable && (col.ControlKind == "text" || col.ControlKind == "textarea" || col.ControlKind == "time" || col.ControlKind == "datetime" || col.ControlKind == "binary") ~}}
-  if ({{ side_guard }}!form.value.{{ col.TsProperty }}?.trim()) {
-    toast.warning('请输入{{ col.ColumnComment | ts_string }}')
-    return false
-  }
-{{~ end ~}}
-{{~ if col.InForm && col.IsRequired && !col.IsNullable && col.ControlKind == "date" ~}}
-  if ({{ side_guard }}(form.value.{{ col.TsProperty }} == null || Number.isNaN(form.value.{{ col.TsProperty }}))) {
-    toast.warning('请选择{{ col.ColumnComment | ts_string }}')
+{{~ if col.InForm && col.FormEmptyCheck ~}}
+{{~ empty_check = col.FormEmptyCheck | string.replace "$v" ("form.value." + col.TsProperty) ~}}
+  if ({{ if side_guard == "" }}{{ empty_check }}{{ else }}{{ side_guard }}({{ empty_check }}){{ end }}) {
+    toast.warning('{{ col.FormRequiredVerb }}{{ col.Label | ts_string }}')
     return false
   }
 {{~ end ~}}
 {{~ if col.InForm && col.IsLongColumn && (col.ControlKind == "text" || col.ControlKind == "textarea") ~}}
   if ({{ side_guard }}form.value.{{ col.TsProperty }} && !INTEGER_PATTERN.test(String(form.value.{{ col.TsProperty }}))) {
-    toast.warning('{{ col.ColumnComment | ts_string }}只能填整数')
+    toast.warning('{{ col.Label | ts_string }}只能填整数')
     return false
   }
 {{~ end ~}}
 {{~ if col.InForm && col.ControlKind == "time" ~}}
   if ({{ side_guard }}form.value.{{ col.TsProperty }} && !TIME_PATTERN.test(String(form.value.{{ col.TsProperty }}))) {
-    toast.warning('{{ col.ColumnComment | ts_string }}格式应为 HH:mm 或 HH:mm:ss')
-    return false
-  }
-{{~ end ~}}
-{{~ if col.InForm && col.ControlKind == "datetime" ~}}
-  if ({{ side_guard }}form.value.{{ col.TsProperty }} && !DATE_TIME_PATTERN.test(String(form.value.{{ col.TsProperty }}))) {
-    toast.warning('{{ col.ColumnComment | ts_string }}格式应为 YYYY-MM-DD HH:mm:ss')
+    toast.warning('{{ col.Label | ts_string }}格式应为 HH:mm 或 HH:mm:ss')
     return false
   }
 {{~ end ~}}
@@ -478,7 +538,7 @@ async function handleSubmit() {
         basicId: form.value.basicId,
 {{~ for col in Columns ~}}
 {{~ if col.InUpdate ~}}
-        {{ col.TsProperty }}: {{ if col.ControlKind == "date" }}{{ if col.IsNullable || !col.IsRequired }}form.value.{{ col.TsProperty }} == null ? null : toDateOnly(form.value.{{ col.TsProperty }}){{ else }}toDateOnly(form.value.{{ col.TsProperty }}){{ end }}{{ else }}form.value.{{ col.TsProperty }}{{ end }},
+        {{ col.TsProperty }}: {{ col.FormToWire | string.replace "$v" ("form.value." + col.TsProperty) }},
 {{~ end ~}}
 {{~ end ~}}
       }
@@ -488,7 +548,7 @@ async function handleSubmit() {
       const createInput: {{ ClassName }}CreateDto = {
 {{~ for col in Columns ~}}
 {{~ if col.InCreate ~}}
-        {{ col.TsProperty }}: {{ if col.ControlKind == "date" }}{{ if col.IsNullable || !col.IsRequired }}form.value.{{ col.TsProperty }} == null ? null : toDateOnly(form.value.{{ col.TsProperty }}){{ else }}toDateOnly(form.value.{{ col.TsProperty }}){{ end }}{{ else }}form.value.{{ col.TsProperty }}{{ end }},
+        {{ col.TsProperty }}: {{ col.FormToWire | string.replace "$v" ("form.value." + col.TsProperty) }},
 {{~ end ~}}
 {{~ end ~}}
       }
@@ -499,7 +559,7 @@ async function handleSubmit() {
       basicId: editingId,
 {{~ for col in Columns ~}}
 {{~ if col.InUpdate ~}}
-      {{ col.TsProperty }}: {{ if col.ControlKind == "date" }}{{ if col.IsNullable || !col.IsRequired }}form.value.{{ col.TsProperty }} == null ? null : toDateOnly(form.value.{{ col.TsProperty }}){{ else }}toDateOnly(form.value.{{ col.TsProperty }}){{ end }}{{ else }}form.value.{{ col.TsProperty }}{{ end }},
+      {{ col.TsProperty }}: {{ col.FormToWire | string.replace "$v" ("form.value." + col.TsProperty) }},
 {{~ end ~}}
 {{~ end ~}}
     }
@@ -508,7 +568,7 @@ async function handleSubmit() {
     const createInput: {{ ClassName }}CreateDto = {
 {{~ for col in Columns ~}}
 {{~ if col.InCreate ~}}
-      {{ col.TsProperty }}: {{ if col.ControlKind == "date" }}{{ if col.IsNullable || !col.IsRequired }}form.value.{{ col.TsProperty }} == null ? null : toDateOnly(form.value.{{ col.TsProperty }}){{ else }}toDateOnly(form.value.{{ col.TsProperty }}){{ end }}{{ else }}form.value.{{ col.TsProperty }}{{ end }},
+      {{ col.TsProperty }}: {{ col.FormToWire | string.replace "$v" ("form.value." + col.TsProperty) }},
 {{~ end ~}}
 {{~ end ~}}
     }
@@ -519,7 +579,7 @@ async function handleSubmit() {
     reloadList()
   }
   catch (error) {
-    toast.error((error as Error)?.message || '保存失败')
+    toast.danger((error as Error)?.message || '保存失败')
   }
   finally {
     submitLoading.value = false
@@ -543,7 +603,6 @@ async function handleSubmit() {
             :columns="detailTableColumns.{{ detail.ClassNameCamel }}"
             :data="detailRows[String((row as { basicId: string }).basicId)]?.{{ detail.ClassNameCamel }} ?? []"
             :loading="detailLoading[String((row as { basicId: string }).basicId)] ?? false"
-            size="sm"
           />
         </div>
 {{~ end ~}}
@@ -568,32 +627,38 @@ async function handleSubmit() {
 {{~ if col.InForm ~}}
 {{~ # 控件按 col.ControlKind 分派，与表单模型、回填、提交同源 ~}}
 {{~ # 只勾了单侧新增/编辑的列按状态显隐，否则新增弹窗里会出现一个提交时必被丢弃的字段 ~}}
-        <XhFormFieldGroup{{ if col.InCreate && !col.InUpdate }} v-if="!form.basicId"{{ else if col.InUpdate && !col.InCreate }} v-if="form.basicId"{{ end }} value="{{ col.TsProperty }}"{{ if col.ControlKind == "textarea" }} class="xh-span-2"{{ end }}>
+        <XhFormFieldGroup{{ if col.InCreate && !col.InUpdate }} v-if="!form.basicId"{{ else if col.InUpdate && !col.InCreate }} v-if="form.basicId"{{ end }} name="{{ col.TsProperty }}"{{ if col.ControlKind == "textarea" }} class="xh-span-2"{{ end }}>
           <XhFieldRoot>
-            <XhFieldLabel>{{ col.ColumnComment | html_text }}</XhFieldLabel>
+            <XhFieldLabel>{{ col.Label | html_text }}</XhFieldLabel>
             <XhFieldControl>
 {{~ if col.ControlKind == "switch" ~}}
               <XhSwitch :checked="form.{{ col.TsProperty }} ?? false" @update:checked="(next: boolean) => form.{{ col.TsProperty }} = next" />
 {{~ else if col.ControlKind == "select" && col.DictSelectorType == "ConstSelector" ~}}
-              <XSelect v-model:value="form.{{ col.TsProperty }}"{{ if col.IsNullable || !col.IsRequired }} clearable{{ end }} :options="{{ col.TsProperty }}ConstOptions" placeholder="请选择{{ col.ColumnComment | html_attr }}" />
+              <XSelect v-model:value="form.{{ col.TsProperty }}"{{ if col.IsNullable || !col.IsRequired }} clearable{{ end }} :options="{{ col.TsProperty }}ConstOptions" placeholder="请选择{{ col.Label | html_attr }}" />
+{{~ else if col.ControlKind == "select" && col.Relation ~}}
+              <XCombobox v-model:value="form.{{ col.TsProperty }}"{{ if col.IsNullable || !col.IsRequired }} clearable{{ end }} :options="{{ col.TsProperty }}Options" placeholder="搜索并选择{{ col.Label | html_attr }}" />
 {{~ else if col.ControlKind == "select" ~}}
-              <XSelect v-model:value="form.{{ col.TsProperty }}"{{ if col.IsNullable || !col.IsRequired }} clearable{{ end }} :options="({{ col.TsProperty }}Options as SelectOption[])" placeholder="请选择{{ col.ColumnComment | html_attr }}" />
+              <XSelect v-model:value="form.{{ col.TsProperty }}"{{ if col.IsNullable || !col.IsRequired }} clearable{{ end }} :options="({{ col.TsProperty }}Options as SelectOption[])" placeholder="请选择{{ col.Label | html_attr }}" />
 {{~ else if col.ControlKind == "date" ~}}
-              <XDatePicker v-model:value="form.{{ col.TsProperty }}" clearable placeholder="请选择{{ col.ColumnComment | html_attr }}" />
+              <XDatePicker v-model:value="form.{{ col.TsProperty }}" clearable />
 {{~ else if col.ControlKind == "datetime" ~}}
-              <!-- 日期时间：组件库没有带时分秒的选择器包装，脚手架用文本框 + 提交前格式校验 -->
-              <XInput v-model:value="form.{{ col.TsProperty }}" clearable placeholder="YYYY-MM-DD HH:mm:ss" />
+              <XDatePicker v-model:value="form.{{ col.TsProperty }}" clearable show-time />
 {{~ else if col.ControlKind == "time" ~}}
               <XInput v-model:value="form.{{ col.TsProperty }}" clearable placeholder="HH:mm:ss" />
+{{~ else if col.ControlKind == "treeselect" ~}}
+              <XTreeSelect v-model:value="form.{{ col.TsProperty }}" clearable :options="{{ col.TsProperty }}TreeOptions" placeholder="请选择{{ col.Label | html_attr }}" />
+{{~ else if col.ControlKind == "image" || col.ControlKind == "file" ~}}
+              <!-- 上传到文件中心，字段只存文件主键；使用者需要文件的上传与查看权限 -->
+              <XFileRefUpload v-model:value="form.{{ col.TsProperty }}" kind="{{ col.ControlKind }}" />
 {{~ else if col.ControlKind == "number" ~}}
-              <XNumberInput v-model:value="form.{{ col.TsProperty }}" :min="0" />
+              <XNumberInput v-model:value="form.{{ col.TsProperty }}"{{ if col.NumberPrecision != null }} :precision="{{ col.NumberPrecision }}"{{ end }} placeholder="请输入{{ col.Label | html_attr }}" />
 {{~ else if col.ControlKind == "binary" ~}}
               <!-- 二进制列：脚手架用文本框承载 Base64，接真实上传请替换成上传组件 -->
-              <XInput v-model:value="form.{{ col.TsProperty }}" clearable placeholder="{{ col.ColumnComment | html_attr }}（Base64 内容）" />
+              <XInput v-model:value="form.{{ col.TsProperty }}" clearable placeholder="{{ col.Label | html_attr }}（Base64 内容）" />
 {{~ else if col.ControlKind == "textarea" ~}}
-              <XInput v-model:value="form.{{ col.TsProperty }}" clearable :rows="3" type="textarea" placeholder="请输入{{ col.ColumnComment | html_attr }}" />
+              <XInput v-model:value="form.{{ col.TsProperty }}" clearable :rows="3" type="textarea"{{ if col.InputMaxLength }} :max-length="{{ col.InputMaxLength }}" show-count{{ end }} placeholder="请输入{{ col.Label | html_attr }}" />
 {{~ else ~}}
-              <XInput v-model:value="form.{{ col.TsProperty }}" clearable placeholder="请输入{{ col.ColumnComment | html_attr }}" />
+              <XInput v-model:value="form.{{ col.TsProperty }}" clearable{{ if col.InputMaxLength }} :max-length="{{ col.InputMaxLength }}"{{ end }} placeholder="请输入{{ col.Label | html_attr }}" />
 {{~ end ~}}
             </XhFieldControl>
             <XhFieldErrorText />
@@ -612,11 +677,12 @@ async function handleSubmit() {
 {{~ if HasDetailTables ~}}
 
 <style scoped>
+/* 间距、字号与颜色一律取 XiHan.UI 语义令牌：生成页不在 px 登记表里，写裸 px 过不了前端门禁 */
 .xh-detail-area {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 4px 0;
+  gap: var(--xh-space-3);
+  padding: var(--xh-space-1) 0;
 }
 
 /* 明细块自身可收缩，长内容在表格内滚动而不是把整行撑宽 */
@@ -625,10 +691,10 @@ async function handleSubmit() {
 }
 
 .xh-detail-area__title {
-  margin-bottom: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
+  margin-bottom: var(--xh-space-2);
+  font-size: var(--xh-text-caption-size);
+  font-weight: var(--xh-font-weight-semibold);
+  color: var(--xh-fg-muted);
 }
 </style>
 {{~ end ~}}

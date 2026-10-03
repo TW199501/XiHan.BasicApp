@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { PageResult, VersionDetailDto, VersionListItemDto } from '@/api'
 import type { ListFieldSchema, PageSchema, SchemaActionPayload } from '~/components'
-import { XhDescriptionsItem, XhDescriptionsLabel, XhDescriptionsRoot, XhDescriptionsValue, XhDrawerCloseTrigger, XhDrawerContent, XhDrawerRoot, XhDrawerTitle, XhEmptyStateDescription, XhEmptyStateIcon, XhEmptyStateRoot, XhEmptyStateTitle, XhSpinner, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
+import { XhDescriptionsItem, XhDescriptionsLabel, XhDescriptionsRoot, XhDescriptionsValue, XhDrawerCloseTrigger, XhDrawerContent, XhDrawerRoot, XhDrawerTitle, XhEmptyStateDescription, XhEmptyStateIndicator, XhEmptyStateRoot, XhEmptyStateTitle, XhSpinner, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
 import { computed, h, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { createPageRequest, querySortsFromSchema, versionApi } from '@/api'
@@ -51,7 +51,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 4,
     render: (row) => {
       const upgrading = (row as unknown as VersionListItemDto).isUpgrading
-      return h(XhTagRoot, { variant: 'outline', tone: upgrading ? 'warning' : 'success' }, () => h(XhTagLabel, () => (upgrading ? t('setting.version.upgrading') : t('setting.version.normal'))))
+      return h(XhTagRoot, { variant: 'subtle', tone: upgrading ? 'warning' : 'success' }, () => h(XhTagLabel, () => (upgrading ? t('setting.version.upgrading') : t('setting.version.normal'))))
     },
   },
   { key: 'upgradeNode', title: t('setting.version.upgrade_node'), dataType: 'string', sortable: true, minWidth: 140, order: 5 },
@@ -106,7 +106,7 @@ async function handleDetail(row: VersionListItemDto) {
     detailData.value = await versionApi.detail(row.basicId) ?? null
   }
   catch (e) {
-    toast.error((e as Error).message || t('setting.version.load_detail_failed'))
+    toast.danger((e as Error).message || t('setting.version.load_detail_failed'))
   }
   finally {
     detailLoading.value = false
@@ -134,14 +134,14 @@ async function handleDetail(row: VersionListItemDto) {
             <XhSpinner />
           </div>
           <XhEmptyStateRoot v-if="!detailLoading && !detailData" class="xh-detail-empty">
-            <XhEmptyStateIcon>
+            <XhEmptyStateIndicator>
               <Icon icon="lucide:inbox" width="28" />
-            </XhEmptyStateIcon>
+            </XhEmptyStateIndicator>
             <XhEmptyStateTitle>{{ t('common.no_data') }}</XhEmptyStateTitle>
             <XhEmptyStateDescription>{{ t('setting.version.detail_empty') }}</XhEmptyStateDescription>
           </XhEmptyStateRoot>
           <div v-else-if="detailData" class="xh-scroll-area" style="max-height: calc(100vh - 120px)">
-            <XhDescriptionsRoot :columns="2" bordered placement="left" size="sm">
+            <XhDescriptionsRoot :columns="2" variant="outline" placement="left" size="sm">
               <XhDescriptionsItem>
                 <XhDescriptionsLabel>{{ t('setting.version.app_version') }}</XhDescriptionsLabel>
                 <XhDescriptionsValue>

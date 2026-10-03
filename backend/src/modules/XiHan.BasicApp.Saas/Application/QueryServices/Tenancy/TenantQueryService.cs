@@ -19,6 +19,7 @@ using XiHan.Framework.Authorization.AspNetCore;
 using XiHan.Framework.Domain.Shared.Paging.Dtos;
 using XiHan.Framework.Domain.Shared.Paging.Enums;
 using XiHan.Framework.Domain.Shared.Paging.Models;
+using XiHan.Framework.MultiTenancy.Abstractions;
 using XiHan.Framework.Security.Users;
 
 namespace XiHan.BasicApp.Saas.Application.QueryServices;
@@ -56,10 +57,17 @@ public sealed class TenantQueryService
     /// </summary>
     private readonly ITenantQuotaDomainService _tenantQuotaDomainService;
 
+    private readonly IAuthContextQueryService _authContextQueryService;
+
     /// <summary>
-    /// 超级管理员角色编码（与种子/授权快照/SwitchTenant 约定一致，运行时特判可进入任意租户）
+    /// 租户版本仓储（订阅里的版本名称与说明）
     /// </summary>
-    private const string SuperAdminRoleCode = "super_admin";
+    private readonly ITenantEditionRepository _tenantEditionRepository;
+
+    /// <summary>
+    /// 当前租户上下文
+    /// </summary>
+    private readonly ICurrentTenant _currentTenant;
 
     /// <summary>
     /// 每 MB 字节数：套餐存储上限以 MB 表达，已用量以字节统计
@@ -74,13 +82,19 @@ public sealed class TenantQueryService
         ITenantRepository tenantRepository,
         ICurrentUser currentUser,
         IFieldSecurityService fieldSecurityService,
-        ITenantQuotaDomainService tenantQuotaDomainService)
+        ITenantQuotaDomainService tenantQuotaDomainService,
+        IAuthContextQueryService authContextQueryService,
+        ITenantEditionRepository tenantEditionRepository,
+        ICurrentTenant currentTenant)
     {
         _tenantUserRepository = tenantUserRepository;
         _tenantRepository = tenantRepository;
         _currentUser = currentUser;
         _fieldSecurity = fieldSecurityService;
         _tenantQuotaDomainService = tenantQuotaDomainService;
+        _authContextQueryService = authContextQueryService;
+        _tenantEditionRepository = tenantEditionRepository;
+        _currentTenant = currentTenant;
     }
 
     /// <summary>
@@ -98,10 +112,8 @@ public sealed class TenantQueryService
 
         var request = BuildTenantPageRequest(input);
 
-        // 排序：前端选择优先，FLS 门控剔除不可读/已脱敏字段；无有效排序回退默认排序
-        await _fieldSecurity.GuardSortsAsync(request.Conditions, "SysTenant", cancellationToken);
-        // 过滤：FLS 门控剔除不可读/已脱敏字段（时间区间 Between / 枚举多选 In）
-        await _fieldSecurity.GuardFiltersAsync(request.Conditions, "SysTenant", cancellationToken);
+        // 字段安全：剔除读受保护字段上的排序、过滤与关键字搜索（防按结果反推原值）
+        await _fieldSecurity.GuardQueryAsync(request.Conditions, typeof(SysTenant), cancellationToken);
         if (request.Conditions.Sorts.Count == 0)
         {
             ApplyTenantSorts(request);
@@ -138,6 +150,7 @@ public sealed class TenantQueryService
         }
 
         var detail = TenantApplicationMapper.ToDetailDto(tenant, DateTimeOffset.UtcNow);
+        detail.HasOwner = (await _tenantUserRepository.GetTenantIdsWithOwnerAsync([detail.BasicId], cancellationToken)).Contains(detail.BasicId);
         var snapshots = await _tenantQuotaDomainService.GetQuotaSnapshotsAsync([detail.BasicId], cancellationToken);
         if (snapshots.TryGetValue(detail.BasicId, out var snapshot))
         {
@@ -160,7 +173,7 @@ public sealed class TenantQueryService
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        // 平台态可见全部租户，租户态自然收敛到自身，无需额外分支
+        // 租户查看是平台侧权限，只在平台执行：租户注册表全量
         var tenants = await _tenantRepository.GetAllAsync(cancellationToken);
         if (tenants.Count == 0)
         {
@@ -205,11 +218,59 @@ public sealed class TenantQueryService
     }
 
     /// <summary>
+    /// 获取当前租户的订阅：版本套餐、到期时间、席位与存储用量
+    /// </summary>
+    /// <remarks>
+    /// 租户侧只读接口：只看得到自己，租户注册表与版本是平台数据，这里按当前租户取出本租户那一行。
+    /// 用量与平台租户列表同一口径（<see cref="ITenantQuotaDomainService.GetQuotaSnapshotsAsync"/>）。
+    /// </remarks>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>当前租户的订阅</returns>
+    [PermissionAuthorize(SaasPermissionCodes.TenantSubscription.Read)]
+    public async Task<TenantSubscriptionDto> GetMySubscriptionAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (_currentTenant.IsPlatformOperation())
+        {
+            throw new InvalidOperationException("订阅属于租户，平台没有订阅。");
+        }
+
+        var tenantId = _currentTenant.Id!.Value;
+        var tenant = await _tenantRepository.GetByIdAsync(tenantId, cancellationToken)
+            ?? throw new InvalidOperationException("当前租户不存在。");
+        var edition = tenant.EditionId is { } editionId
+            ? await _tenantEditionRepository.GetByIdAsync(editionId, cancellationToken)
+            : null;
+        var snapshots = await _tenantQuotaDomainService.GetQuotaSnapshotsAsync([tenantId], cancellationToken);
+        var snapshot = snapshots[tenantId];
+        var now = DateTimeOffset.UtcNow;
+
+        return new TenantSubscriptionDto
+        {
+            TenantId = tenant.BasicId,
+            TenantCode = tenant.TenantCode,
+            TenantName = tenant.TenantName,
+            TenantStatus = tenant.TenantStatus,
+            ExpirationTime = tenant.ExpirationTime,
+            IsExpired = tenant.ExpirationTime.HasValue && tenant.ExpirationTime.Value <= now,
+            EditionCode = edition?.EditionCode,
+            EditionName = edition?.EditionName,
+            EditionDescription = edition?.Description,
+            IsFreeEdition = edition?.IsFree ?? false,
+            EffectiveUserLimit = snapshot.UserLimit,
+            UsedUserCount = snapshot.UsedUserCount,
+            EffectiveStorageLimit = snapshot.StorageLimit,
+            UsedStorageBytes = snapshot.UsedStorageBytes
+        };
+    }
+
+    /// <summary>
     /// 获取当前用户可进入的租户列表
     /// </summary>
     /// <remarks>
-    /// 仅要求登录（不挂权限码）：数据自限定于当前用户自身的有效成员关系；
-    /// 登录后控制中心选租户阶段用户尚未进入任何租户、不持有任何权限码，挂权限码会直接阻断选择流程。
+    /// 仅要求登录（不挂权限码）：数据自限定于当前用户自身的有效成员关系。与登录落点、切换租户同一口径
+    /// （有效成员关系 ∩ 可进入的租户），超管也不例外——平台账号进租户同样要有成员关系。
     /// </remarks>
     /// <param name="cancellationToken">取消令牌</param>
     /// <returns>当前用户可进入的租户列表</returns>
@@ -218,49 +279,8 @@ public sealed class TenantQueryService
         var userId = _currentUser.UserId
             ?? throw new UnauthorizedAccessException("当前用户未登录，无法获取可进入租户。");
 
-        cancellationToken.ThrowIfCancellationRequested();
-
-        var now = DateTimeOffset.UtcNow;
-
-        // 超级管理员是平台账号、无 SysTenantUser 成员关系，但设计上可进入任意租户（SwitchTenant 同样对其放行）。
-        // 故此处不按成员关系、而是返回全部可用租户（正常态、未过期）作为可切换项，避免切换器对超管为空。
-        if (_currentUser.IsInRole(SuperAdminRoleCode))
-        {
-            // 仅以状态下推 SQL；可用规约含"可空过期时间 OR"判断，直接下推会触发 SqlSugar 表达式翻译异常
-            // （丢失 OR 运算符 + 把 DateTimeOffset 渲染成 PostgreSQL 不识别的 N'' 字面量），
-            // 故先拉取正常态租户，再在内存套用规约过滤过期（软删由全局过滤自动附加）。
-            var isAvailable = new AvailableTenantSpecification(now).ToExpression().Compile();
-            var normalTenants = await _tenantRepository.GetListAsync(
-                tenant => tenant.TenantStatus == TenantStatus.Normal,
-                cancellationToken);
-            return [.. normalTenants
-                .Where(isAvailable)
-                .OrderBy(tenant => tenant.Sort)
-                .ThenBy(tenant => tenant.TenantName)
-                .Select(tenant => TenantApplicationMapper.ToSwitcherDto(tenant, _currentUser.TenantId))];
-        }
-
-        var memberships = await _tenantUserRepository.GetActiveByUserIdAsync(userId, now, cancellationToken);
-        if (memberships.Count == 0)
-        {
-            return [];
-        }
-
-        var accessibleKeys = memberships
-            .Select(membership => membership.TenantId)
-            .Distinct()
-            .ToArray();
-
-        var tenants = await _tenantRepository.GetByIdsAsync(accessibleKeys, cancellationToken);
-        var tenantMap = tenants
-            .Where(tenant => tenant.TenantStatus == TenantStatus.Normal)
-            .ToDictionary(tenant => tenant.BasicId);
-
-        return [.. memberships
-            .Where(membership => tenantMap.ContainsKey(membership.TenantId))
-            .OrderBy(membership => tenantMap[membership.TenantId].Sort)
-            .ThenBy(membership => tenantMap[membership.TenantId].TenantName)
-            .Select(membership => TenantApplicationMapper.ToSwitcherDto(membership, tenantMap[membership.TenantId], _currentUser.TenantId))];
+        var accessible = await _authContextQueryService.GetAccessibleTenantsAsync(userId, DateTimeOffset.UtcNow, cancellationToken);
+        return [.. accessible.Select(item => TenantApplicationMapper.ToSwitcherDto(item.Membership, item.Tenant, _currentUser.TenantId))];
     }
 
     /// <summary>
@@ -335,7 +355,7 @@ public sealed class TenantQueryService
     }
 
     /// <summary>
-    /// 批量填充租户配额用量
+    /// 批量填充租户配额用量与是否已开通管理员
     /// </summary>
     /// <remarks>
     /// 一次分组查询拿回本页全部租户的席位与存储用量，不按行逐个统计，避免 N+1。
@@ -347,11 +367,13 @@ public sealed class TenantQueryService
             return;
         }
 
-        var snapshots = await _tenantQuotaDomainService.GetQuotaSnapshotsAsync(
-            [.. items.Select(item => item.BasicId)], cancellationToken);
+        var tenantIds = items.Select(item => item.BasicId).ToList();
+        var snapshots = await _tenantQuotaDomainService.GetQuotaSnapshotsAsync(tenantIds, cancellationToken);
+        var withOwner = await _tenantUserRepository.GetTenantIdsWithOwnerAsync(tenantIds, cancellationToken);
 
         foreach (var item in items)
         {
+            item.HasOwner = withOwner.Contains(item.BasicId);
             if (!snapshots.TryGetValue(item.BasicId, out var snapshot))
             {
                 continue;

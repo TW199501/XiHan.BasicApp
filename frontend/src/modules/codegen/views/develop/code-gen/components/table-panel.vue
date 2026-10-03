@@ -112,7 +112,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 7,
     render: (row) => {
       const r = row as unknown as CodeGenTableListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: genStatusTagType(r.genStatus) }, () => h(XhTagLabel, () => getOptionLabel(GEN_STATUS_OPTIONS, r.genStatus)))
+      return h(XhTagRoot, { variant: 'subtle', tone: genStatusTagType(r.genStatus) }, () => h(XhTagLabel, () => getOptionLabel(GEN_STATUS_OPTIONS, r.genStatus)))
     },
   },
   {
@@ -129,14 +129,14 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 8,
     render: (row) => {
       const r = row as unknown as CodeGenTableListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: r.status === EnableStatus.Enabled ? 'success' : 'danger' }, () => h(XhTagLabel, () => getOptionLabel(statusEnumOptions.value, r.status)))
+      return h(XhTagRoot, { variant: 'subtle', tone: r.status === EnableStatus.Enabled ? 'success' : 'danger' }, () => h(XhTagLabel, () => getOptionLabel(statusEnumOptions.value, r.status)))
     },
   },
   { key: 'lastGenTime', title: t('develop.code_gen.table.col_last_gen'), dataType: 'datetime', minWidth: 170, sortable: true, order: 9 },
 ])
 
 const schema = computed<PageSchema>(() => ({
-  pageCode: 'develop.codegen.table',
+  pageCode: 'code_gen.table',
   pageName: t('develop.code_gen.tabs.table'),
   rowKey: 'basicId',
   batchRemovable: true,
@@ -156,7 +156,9 @@ const schema = computed<PageSchema>(() => ({
     remove: id => codeGenTableApi.delete(id),
   },
   actions: [
-    { key: 'import', title: t('develop.code_gen.table.import'), scope: 'page', type: 'primary', icon: 'lucide:database' },
+    { key: 'import', title: t('develop.code_gen.table.import'), scope: 'page', type: 'primary', icon: 'lucide:database', permission: 'code_gen.import' },
+    { key: 'edit', title: t('common.actions.edit'), scope: 'row', icon: 'lucide:pencil', permission: 'code_gen.update' },
+    { key: 'columns', title: t('develop.code_gen.table.action_columns'), scope: 'row', icon: 'lucide:table-2', permission: 'code_gen.update' },
     { key: 'preview', title: t('develop.code_gen.table.action_preview'), scope: 'row', icon: 'lucide:eye' },
     // 两个生成动作按表配置的生成方式二选一呈现，避免同时给出两个入口让人猜该点哪个
     {
@@ -166,6 +168,7 @@ const schema = computed<PageSchema>(() => ({
       type: 'primary',
       icon: 'lucide:download',
       visible: row => (row as unknown as CodeGenTableListItemDto).genType === GenType.Zip,
+      permission: 'code_gen.execute',
     },
     {
       key: 'generateToDisk',
@@ -176,13 +179,12 @@ const schema = computed<PageSchema>(() => ({
       // 直接写服务端代码目录，且手动文件已存在时会被跳过，属不可撤销操作
       confirm: true,
       confirmText: t('develop.code_gen.table.generate_to_disk_confirm'),
-      visible: row => (row as unknown as CodeGenTableListItemDto).genType === GenType.CustomPath,
+      visible: row => (row as unknown as CodeGenTableListItemDto).genType === GenType.Project,
+      permission: 'code_gen.execute',
     },
-    { key: 'columns', title: t('develop.code_gen.table.action_columns'), scope: 'row', icon: 'lucide:table-2' },
-    { key: 'sync', title: t('develop.code_gen.table.action_sync'), scope: 'row', icon: 'lucide:refresh-cw' },
-    { key: 'edit', title: t('common.actions.edit'), scope: 'row', icon: 'lucide:pencil' },
+    { key: 'sync', title: t('develop.code_gen.table.action_sync'), scope: 'row', icon: 'lucide:refresh-cw', permission: 'code_gen.import' },
     { key: 'runtime', title: t('develop.code_gen.table.action_runtime'), scope: 'row', icon: 'lucide:database' },
-    { key: 'delete', title: t('common.actions.delete'), scope: 'row', type: 'error', icon: 'lucide:trash-2' },
+    { key: 'delete', title: t('common.actions.delete'), scope: 'row', type: 'error', icon: 'lucide:trash-2', permission: 'code_gen.delete' },
   ],
 }))
 
@@ -263,7 +265,7 @@ async function handleGenerate(row: CodeGenTableListItemDto) {
       genType: GenType.Zip,
     })
     if (!result.success) {
-      toast.error(result.message || t('develop.code_gen.generate.generate_failed'))
+      toast.danger(result.message || t('develop.code_gen.generate.generate_failed'))
       return
     }
     if (result.packageBase64) {
@@ -276,14 +278,14 @@ async function handleGenerate(row: CodeGenTableListItemDto) {
     reload()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('develop.code_gen.generate.generate_failed'))
+    toast.danger((error as Error)?.message || t('develop.code_gen.generate.generate_failed'))
   }
   finally {
     generating.value = false
   }
 }
 
-/** 生成到现有代码结构：按表配置的生成路径落盘（后端受白名单与开关门控） */
+/** 生成到项目：后端写进与命名空间同名的模块项目，前端写进前端工程（只在开发环境开启） */
 async function handleGenerateToDisk(row: CodeGenTableListItemDto) {
   if (generating.value) {
     return
@@ -292,20 +294,21 @@ async function handleGenerateToDisk(row: CodeGenTableListItemDto) {
   try {
     const result = await codeGenerationApi.generate({
       tableId: row.basicId,
-      genType: GenType.CustomPath,
+      genType: GenType.Project,
     })
     if (!result.success) {
-      toast.error(result.message || t('develop.code_gen.generate.write_failed'))
+      toast.danger(result.message || t('develop.code_gen.generate.write_failed'))
       return
     }
     toast.success(t('develop.code_gen.generate.write_success', {
       written: result.writtenCount,
       skipped: result.skippedPaths?.length ?? 0,
+      location: result.targetRoots.join('、'),
     }))
     reload()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('develop.code_gen.generate.write_failed'))
+    toast.danger((error as Error)?.message || t('develop.code_gen.generate.write_failed'))
   }
   finally {
     generating.value = false
@@ -331,7 +334,7 @@ function handleSync(row: CodeGenTableListItemDto) {
         reload()
       }
       catch (error) {
-        toast.error((error as Error)?.message || t('develop.code_gen.table.sync_failed'))
+        toast.danger((error as Error)?.message || t('develop.code_gen.table.sync_failed'))
       }
     },
   })
@@ -352,7 +355,7 @@ function handleDelete(row: CodeGenTableListItemDto) {
         reload()
       }
       catch (error) {
-        toast.error((error as Error)?.message || t('common.messages.delete_failed'))
+        toast.danger((error as Error)?.message || t('common.messages.delete_failed'))
       }
     },
   })

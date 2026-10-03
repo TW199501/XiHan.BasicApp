@@ -45,9 +45,8 @@ export interface CodeGenTableDetailDto extends CodeGenTableListItemDto {
   author?: string | null
   /** 生成范围（全部/仅后端/仅前端） */
   generationScope: GenerationScope
-  /** 包含操作（逗号分隔的 create/update/delete 子集；null/空=全开） */
+  /** 包含操作（逗号分隔的操作子集；null/空=缺省集） */
   enabledActions?: string | null
-  genPath?: string | null
   parentMenuId?: ApiId | null
   primaryKeyColumn?: string | null
   treeParentColumn?: string | null
@@ -83,9 +82,8 @@ export interface CodeGenTableUpdateDto extends BasicDto {
   genType: GenType
   /** 生成范围（全部/仅后端/仅前端） */
   generationScope: GenerationScope
-  /** 包含操作（逗号分隔的 create/update/delete 子集；null/空=全开） */
+  /** 包含操作（逗号分隔的操作子集；null/空=缺省集） */
   enabledActions?: string | null
-  genPath?: string | null
   parentMenuId?: ApiId | null
   primaryKeyColumn?: string | null
   treeParentColumn?: string | null
@@ -106,4 +104,16 @@ export interface CodeGenTableUpdateDto extends BasicDto {
 export interface CodeGenTableStatusUpdateDto extends BasicDto {
   status: EnableStatus
   remark?: string | null
+}
+
+/**
+ * 父菜单候选（平台菜单树的一个节点，后端 CodeGenParentMenuOptionDto）。
+ * 目录和菜单都列出来表明位置，只有目录可选（selectable）。
+ */
+export interface CodeGenParentMenuOptionDto {
+  value: ApiId
+  label: string
+  parentValue?: ApiId | null
+  /** 是否可选：目录且有菜单码 */
+  selectable: boolean
 }

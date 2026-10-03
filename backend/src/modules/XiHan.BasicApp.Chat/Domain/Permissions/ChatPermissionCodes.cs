@@ -13,6 +13,11 @@ public static class ChatPermissionCodes
     /// </summary>
     public const string Module = "chat";
 
+    /// <summary>
+    /// 资源编码
+    /// </summary>
+    public const string Resource = "chat";
+
     /// <summary>查看聊天（会话列表/消息历史）。</summary>
     public const string Read = "chat:read";
 
@@ -29,14 +34,6 @@ public static class ChatPermissionCodes
     /// 全部权限码
     /// </summary>
     public static readonly IReadOnlyList<string> All =
-    [
-        Read, Send, Manage, Audit
-    ];
-
-    /// <summary>
-    /// 可授予租户的权限码（聊天无平台专属码，与全集一致）
-    /// </summary>
-    public static readonly IReadOnlyList<string> TenantGrantable =
     [
         Read, Send, Manage, Audit
     ];

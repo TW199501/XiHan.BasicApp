@@ -4,7 +4,7 @@
 -->
 <script setup lang="ts">
 import type { PrintSampleFormField, PrintTableColumn } from '~/printing'
-import { XhButton, XhEmptyStateDescription, XhEmptyStateIcon, XhEmptyStateRoot, XhEmptyStateTitle } from '@xihan-ui/vue'
+import { XhButton, XhEmptyStateDescription, XhEmptyStateIndicator, XhEmptyStateRoot, XhEmptyStateTitle } from '@xihan-ui/vue'
 import { computed, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Icon } from '~/iconify'
@@ -171,19 +171,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
             <td class="sample-row-actions">
               <XhButton
                 variant="ghost"
-                data-circle
+                icon-only
                 size="sm"
                 :title="t('setting.print_template.sample_duplicate_row')"
+                :aria-label="t('setting.print_template.sample_duplicate_row')"
                 @click="duplicateRow(rowIndex)"
               >
                 <span><Icon icon="tabler:copy" /></span>
               </XhButton>
               <XhButton
                 variant="ghost"
-                data-circle
+                icon-only
                 size="sm"
                 tone="danger"
                 :title="t('setting.print_template.sample_delete_row')"
+                :aria-label="t('setting.print_template.sample_delete_row')"
                 @click="removeRow(rowIndex)"
               >
                 <span><Icon icon="tabler:trash" /></span>
@@ -194,9 +196,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
       </table>
     </div>
     <XhEmptyStateRoot v-else size="sm">
-      <XhEmptyStateIcon>
+      <XhEmptyStateIndicator>
         <Icon icon="lucide:inbox" width="28" height="28" />
-      </XhEmptyStateIcon>
+      </XhEmptyStateIndicator>
       <XhEmptyStateTitle>{{ t('common.no_data') }}</XhEmptyStateTitle>
       <XhEmptyStateDescription>{{ t('setting.print_template.sample_table_empty') }}</XhEmptyStateDescription>
     </XhEmptyStateRoot>

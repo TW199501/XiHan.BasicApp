@@ -2,24 +2,25 @@
 import type {
   ApiId,
   DateTimeString,
+  NumericString,
   PageResult,
+  TenantAdminInitializeDto,
   TenantCreateDto,
   TenantDetailDto,
   TenantEditionListItemDto,
   TenantListItemDto,
   TenantMemberListItemDto,
-  TenantMemberStatusUpdateDto,
-  TenantMemberUpdateDto,
   TenantOverQuotaDto,
   TenantUpdateDto,
 } from '@/api'
 import type { ListFieldSchema, PageSchema, SchemaActionPayload } from '~/components'
-import { XhButton, XhDescriptionsItem, XhDescriptionsLabel, XhDescriptionsRoot, XhDescriptionsValue, XhDrawerCloseTrigger, XhDrawerContent, XhDrawerRoot, XhDrawerTitle, XhEmptyStateAction, XhEmptyStateDescription, XhEmptyStateIcon, XhEmptyStateRoot, XhEmptyStateTitle, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFlex, XhFormFieldGroup, XhFormRoot, XhSpinner, XhTabsContent, XhTabsList, XhTabsRoot, XhTabsTrigger, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
+import { XhButton, XhDescriptionsItem, XhDescriptionsLabel, XhDescriptionsRoot, XhDescriptionsValue, XhDrawerCloseTrigger, XhDrawerContent, XhDrawerRoot, XhDrawerTitle, XhEmptyStateAction, XhEmptyStateDescription, XhEmptyStateIndicator, XhEmptyStateRoot, XhEmptyStateTitle, XhFieldControl, XhFieldDescription, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFlex, XhFormFieldGroup, XhFormRoot, XhSpinner, XhTabsContent, XhTabsIndicator, XhTabsList, XhTabsRoot, XhTabsTrigger, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
 import { computed, h, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   createPageRequest,
   querySortsFromSchema,
+  TenantConfigStatus,
   tenantEditionApi,
   TenantIsolationMode,
   tenantManagementApi,
@@ -31,29 +32,23 @@ import {
 } from '@/api'
 import XLogoUpload from '@/components/LogoUpload.vue'
 import { MEMBER_INVITE_STATUS_OPTIONS, MEMBER_TYPE_OPTIONS, TENANT_CONFIG_STATUS_OPTIONS, TENANT_DATABASE_TYPE_OPTIONS, TENANT_ISOLATION_MODE_OPTIONS, TENANT_STATUS_OPTIONS, VALIDITY_STATUS_OPTIONS } from '@/constants'
-import { Icon, resolveStatusTagTone, SchemaPage, SchemaPagination, XDatePicker, XEditModal, XInput, XNumberInput, XSelect, XUserAvatar } from '~/components'
-import { toast } from '~/composables'
-import { useEnumOptions } from '~/hooks'
+import { Icon, resolveStatusTagTone, SchemaPage, SchemaPagination, XCombobox, XDatePicker, XEditModal, XInput, XNumberInput, XSelect, XUserAvatar } from '~/components'
+import { dialog, toast } from '~/composables'
+import { useEnumOptions, usePermission } from '~/hooks'
+import { useAccessStore } from '~/stores'
 import { formatDate, formatFileSize, getOptionLabel } from '~/utils'
 
 defineOptions({ name: 'PlatformTenantPage' })
 
-interface TenantFormModel extends Omit<TenantCreateDto, 'adminUserName' | 'adminEmail' | 'adminPassword'> {
-  // 表单里三个管理员字段恒为字符串（空串代表未填），编辑态不展示但保留占位，避免到处判空
-  adminUserName: string
-  adminEmail: string
-  adminPassword: string
+interface TenantFormModel extends TenantCreateDto {
   basicId?: ApiId
   tenantStatus?: TenantStatus
 }
 
-/** 成员添加/邀请表单 */
-interface TenantMemberFormModel {
-  displayName: string
+/** 支持人员入驻表单 */
+interface SupportMemberFormModel {
   effectiveTime: DateTimeString | null
   expirationTime: DateTimeString | null
-  inviteRemark: string
-  memberType: TenantMemberType
   remark: string
   userId: ApiId | null
 }
@@ -64,16 +59,16 @@ const ADMIN_USER_NAME_MAX_LENGTH = 50
 /** 前端最低密码长度；真正的密码策略以后端校验为准 */
 const ADMIN_PASSWORD_MIN_LENGTH = 8
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@][^\s.@]*\.[^\s@]+$/
-/** 成员选择器每次拉取的用户数 */
+/** 平台账号选择器每次拉取的用户数 */
 const MEMBER_USER_PAGE_SIZE = 20
 
 const { t } = useI18n()
+const { hasPermission } = usePermission()
 
 /** 编辑弹窗的保存钮靠这个 id 关联到表单，点它才会走整表校验 */
 const editFormId = useId()
-const memberStatusFormId = useId()
-const memberEditFormId = useId()
-const memberAddFormId = useId()
+const supportMemberFormId = useId()
+const initAdminFormId = useId()
 
 const tenantStatusOptions = useEnumOptions('TenantStatus', TENANT_STATUS_OPTIONS)
 const configStatusOptions = useEnumOptions('TenantConfigStatus', TENANT_CONFIG_STATUS_OPTIONS)
@@ -130,6 +125,17 @@ const submitLoading = ref(false)
 const editingStatus = ref<TenantStatus | null>(null)
 const tenantForm = ref<TenantFormModel>(createDefaultForm())
 const modalTitle = computed(() => (tenantForm.value.basicId ? t('tenant.list.edit_title') : t('tenant.list.add_title')))
+/** 库隔离租户建好之后先初始化数据库，再初始化管理员 */
+const isDatabaseIsolation = computed(() => tenantForm.value.isolationMode === TenantIsolationMode.Database)
+/** 表单里的隔离模式：Schema 隔离尚未实装、创建即被拒绝，新建时不提供；编辑时只读展示原值 */
+const formIsolationModeOptions = computed(() => tenantForm.value.basicId
+  ? isolationModeOptions.value
+  : isolationModeOptions.value.filter(option => option.value !== TenantIsolationMode.Schema))
+
+// ── 库隔离租户初始化管理员 ───────────────────────────────
+const initAdminVisible = ref(false)
+const initAdminLoading = ref(false)
+const initAdminForm = ref<TenantAdminInitializeDto>(createDefaultInitAdminForm(''))
 
 /** 表单当前生效版本：选中的版本；留空时为默认版本 */
 const selectedEdition = computed(() => {
@@ -140,7 +146,8 @@ const selectedEdition = computed(() => {
   return editions.value.find(e => e.isDefault) ?? null
 })
 
-function limitPlaceholder(value?: number | null) {
+/** 套餐上限只做展示：席位是 int，存储是 long（按字符串传输），原样拼进文案即可 */
+function limitPlaceholder(value?: number | NumericString | null) {
   if (!selectedEdition.value) {
     return undefined
   }
@@ -160,10 +167,6 @@ const members = ref<TenantMemberListItemDto[]>([])
 const MEMBER_PAGE_SIZE = 10
 const memberPage = ref(1)
 const memberTotal = ref(0)
-const memberEditVisible = ref(false)
-const memberEditLoading = ref(false)
-const editingMember = ref<TenantMemberUpdateDto | null>(null)
-const editingMemberId = ref<ApiId | null>(null)
 
 /**
  * 日期选择收发的是毫秒时间戳，而这几个表单字段存的是后端的时间串：在此两向换算。
@@ -183,46 +186,27 @@ function timestampModel(
     },
   })
 }
-const memberAddVisible = ref(false)
-const memberAddLoading = ref(false)
-const memberAddMode = ref<'add' | 'invite'>('add')
-const memberAddForm = ref<TenantMemberFormModel>(createDefaultMemberForm())
+const accessStore = useAccessStore()
+const canManageSupportMember = computed(() => accessStore.hasCode('tenant.list.support-member'))
+const canTransferOwner = computed(() => accessStore.hasCode('tenant.list.transfer-owner'))
+const supportMemberVisible = ref(false)
+const supportMemberLoading = ref(false)
+const supportMemberForm = ref<SupportMemberFormModel>(createDefaultSupportMemberForm())
 
 const tenantExpirationTs = timestampModel(
   () => tenantForm.value.expirationTime,
   (value) => { tenantForm.value.expirationTime = value },
 )
-const memberAddEffectiveTs = timestampModel(
-  () => memberAddForm.value.effectiveTime,
-  (value) => { memberAddForm.value.effectiveTime = value },
+const supportMemberEffectiveTs = timestampModel(
+  () => supportMemberForm.value.effectiveTime,
+  (value) => { supportMemberForm.value.effectiveTime = value },
 )
-const memberAddExpirationTs = timestampModel(
-  () => memberAddForm.value.expirationTime,
-  (value) => { memberAddForm.value.expirationTime = value },
+const supportMemberExpirationTs = timestampModel(
+  () => supportMemberForm.value.expirationTime,
+  (value) => { supportMemberForm.value.expirationTime = value },
 )
-const editingMemberEffectiveTs = timestampModel(
-  () => editingMember.value?.effectiveTime,
-  (value) => {
-    if (editingMember.value) {
-      editingMember.value.effectiveTime = value
-    }
-  },
-)
-const editingMemberExpirationTs = timestampModel(
-  () => editingMember.value?.expirationTime,
-  (value) => {
-    if (editingMember.value) {
-      editingMember.value.expirationTime = value
-    }
-  },
-)
-
 const memberUserOptions = ref<{ label: string, value: string | number }[]>([])
 const memberUserLoading = ref(false)
-const memberStatusVisible = ref(false)
-const memberStatusLoading = ref(false)
-const editingMemberStatusId = ref<ApiId | null>(null)
-const editingMemberStatus = ref<ValidityStatus>(ValidityStatus.Valid)
 
 function getTenantStatusTagType(status: TenantStatus) {
   if (status === TenantStatus.Normal) {
@@ -259,22 +243,27 @@ function renderQuotaUsage(used: number, limit: number | null | undefined, format
 
   const ratio = limit <= 0 ? 1 : used / limit
   if (ratio >= 1) {
-    return h(XhTagRoot, { variant: 'outline', tone: 'danger' }, () => h(XhTagLabel, () => text))
+    return h(XhTagRoot, { variant: 'subtle', tone: 'danger' }, () => h(XhTagLabel, () => text))
   }
   if (ratio >= QUOTA_WARNING_RATIO) {
-    return h(XhTagRoot, { variant: 'outline', tone: 'warning' }, () => h(XhTagLabel, () => text))
+    return h(XhTagRoot, { variant: 'subtle', tone: 'warning' }, () => h(XhTagLabel, () => text))
   }
   return h('span', {}, text)
 }
 
-/** 席位用量文本（详情抽屉用） */
-function seatUsageText(used: number, limit?: number | null) {
-  return quotaUsageText(used, limit, value => String(value))
+/** 存储上限（MB，后端 long 按字符串传输）换算成字节；空表示不限 */
+function storageLimitBytes(limitMb?: NumericString | null) {
+  return limitMb == null ? null : Number(limitMb) * BYTES_PER_MB
+}
+
+/** 席位用量文本（详情抽屉用；已用席位是 long，按字符串传输） */
+function seatUsageText(used: NumericString, limit?: number | null) {
+  return quotaUsageText(Number(used), limit, value => String(value))
 }
 
 /** 存储用量文本（详情抽屉用；上限来自套餐、单位 MB） */
-function storageUsageText(usedBytes: number, limitMb?: number | null) {
-  return quotaUsageText(usedBytes, limitMb == null ? null : limitMb * BYTES_PER_MB, formatFileSize)
+function storageUsageText(usedBytes: NumericString, limitMb?: NumericString | null) {
+  return quotaUsageText(Number(usedBytes), storageLimitBytes(limitMb), formatFileSize)
 }
 
 // ── 字段单一事实源:列 + 常用搜索 + 高级搜索 ─────────────────────
@@ -327,7 +316,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 7,
     render: (row) => {
       const r = row as unknown as TenantListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: getTenantStatusTagType(r.tenantStatus) }, () => h(XhTagLabel, () => getOptionLabel(tenantStatusOptions.value, r.tenantStatus)))
+      return h(XhTagRoot, { variant: 'subtle', tone: getTenantStatusTagType(r.tenantStatus) }, () => h(XhTagLabel, () => getOptionLabel(tenantStatusOptions.value, r.tenantStatus)))
     },
   },
   {
@@ -352,7 +341,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 9,
     render: (row) => {
       const r = row as unknown as TenantListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: r.isExpired ? 'danger' : 'success' }, () => h(XhTagLabel, () => (r.isExpired ? t('tenant.list.yes') : t('tenant.list.no'))))
+      return h(XhTagRoot, { variant: 'subtle', tone: r.isExpired ? 'danger' : 'success' }, () => h(XhTagLabel, () => (r.isExpired ? t('tenant.list.yes') : t('tenant.list.no'))))
     },
   },
   {
@@ -364,7 +353,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 10,
     render: (row) => {
       const r = row as unknown as TenantListItemDto
-      return renderQuotaUsage(r.usedUserCount, r.effectiveUserLimit, value => String(value))
+      return renderQuotaUsage(Number(r.usedUserCount), r.effectiveUserLimit, value => String(value))
     },
   },
   {
@@ -376,11 +365,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 11,
     render: (row) => {
       const r = row as unknown as TenantListItemDto
-      return renderQuotaUsage(
-        r.usedStorageBytes,
-        r.effectiveStorageLimit == null ? null : r.effectiveStorageLimit * BYTES_PER_MB,
-        formatFileSize,
-      )
+      return renderQuotaUsage(Number(r.usedStorageBytes), storageLimitBytes(r.effectiveStorageLimit), formatFileSize)
     },
   },
   { key: 'sort', title: t('tenant.list.sort'), dataType: 'number', sortable: true, minWidth: 80, order: 12 },
@@ -396,7 +381,7 @@ function toStr(v: unknown): string | undefined {
 }
 
 const schema = computed<PageSchema>(() => ({
-  pageCode: 'platform.tenant',
+  pageCode: 'tenant.list',
   exportPermission: 'tenant.list.export',
   pageName: t('tenant.list.page_name'),
   rowKey: 'basicId',
@@ -416,10 +401,10 @@ const schema = computed<PageSchema>(() => ({
     },
   },
   actions: [
-    { key: 'create', title: t('tenant.list.add'), scope: 'page', type: 'primary', icon: 'lucide:plus' },
+    { key: 'create', title: t('tenant.list.add'), scope: 'page', type: 'primary', icon: 'lucide:plus', permission: 'tenant.list.create' },
     { key: 'quota-audit', title: t('tenant.list.quota_audit'), scope: 'page', icon: 'lucide:gauge' },
     { key: 'view', title: t('tenant.list.view'), scope: 'row', icon: 'lucide:eye' },
-    { key: 'edit', title: t('tenant.list.edit'), scope: 'row' },
+    { key: 'edit', title: t('tenant.list.edit'), scope: 'row', icon: 'lucide:pencil', permission: 'tenant.list.update' },
     {
       key: 'initdb',
       title: t('tenant.list.init_db'),
@@ -432,6 +417,51 @@ const schema = computed<PageSchema>(() => ({
       visible: row => (row as unknown as TenantListItemDto).isolationMode === TenantIsolationMode.Database,
     },
     {
+      key: 'init-admin',
+      title: t('tenant.list.init_admin'),
+      scope: 'row',
+      icon: 'lucide:user-plus',
+      permission: 'tenant.list.init-admin',
+      // 任何模式都是建好之后再开通管理员：已配置（库隔离租户已建库）且还没有所有者
+      visible: (row) => {
+        const tenant = row as unknown as TenantListItemDto
+        return tenant.configStatus === TenantConfigStatus.Configured && !tenant.hasOwner
+      },
+    },
+    {
+      key: 'status-enable',
+      title: t('tenant.list.status_enable'),
+      scope: 'row',
+      type: 'success',
+      icon: 'lucide:play',
+      permission: 'tenant.list.status',
+      confirm: true,
+      confirmText: t('tenant.list.status_enable_confirm'),
+      visible: row => (row as unknown as TenantListItemDto).tenantStatus !== TenantStatus.Normal,
+    },
+    {
+      key: 'status-suspend',
+      title: t('tenant.list.status_suspend'),
+      scope: 'row',
+      type: 'warning',
+      icon: 'lucide:pause',
+      permission: 'tenant.list.status',
+      confirm: true,
+      confirmText: t('tenant.list.status_suspend_confirm'),
+      visible: row => (row as unknown as TenantListItemDto).tenantStatus !== TenantStatus.Suspended,
+    },
+    {
+      key: 'status-disable',
+      title: t('tenant.list.status_disable'),
+      scope: 'row',
+      type: 'error',
+      icon: 'lucide:power',
+      permission: 'tenant.list.status',
+      confirm: true,
+      confirmText: t('tenant.list.status_disable_confirm'),
+      visible: row => (row as unknown as TenantListItemDto).tenantStatus !== TenantStatus.Disabled,
+    },
+    {
       key: 'delete',
       title: t('tenant.list.delete'),
       scope: 'row',
@@ -440,8 +470,9 @@ const schema = computed<PageSchema>(() => ({
       permission: 'tenant.list.delete',
       confirm: true,
       confirmText: t('tenant.list.delete_confirm'),
-      // 后端要求先停用：正常状态下不给入口，避免点了才报错
-      visible: row => isTenantDeletable((row as unknown as TenantListItemDto).tenantStatus),
+      // 后端要求先停用或暂停。入口常显但置灰：整条消失会让人以为没有删除功能，
+      // 而上面几条启停就摆在同一个菜单里，置灰即指明了先做哪一步
+      disabled: row => !isTenantDeletable((row as unknown as TenantListItemDto).tenantStatus),
     },
   ],
 }))
@@ -471,7 +502,7 @@ async function handleQuotaAudit() {
   }
   catch (error) {
     quotaAlerts.value = []
-    toast.error((error as Error)?.message || t('tenant.list.quota_audit_failed'))
+    toast.danger((error as Error)?.message || t('tenant.list.quota_audit_failed'))
   }
   finally {
     quotaAuditLoading.value = false
@@ -502,11 +533,52 @@ function onAction(payload: SchemaActionPayload) {
         void handleInitDb(row)
       }
       break
+    case 'init-admin':
+      if (row) {
+        handleInitAdmin(row)
+      }
+      break
+    case 'status-enable':
+      if (row) {
+        void handleStatusChange(row, TenantStatus.Normal)
+      }
+      break
+    case 'status-suspend':
+      if (row) {
+        void handleStatusChange(row, TenantStatus.Suspended)
+      }
+      break
+    case 'status-disable':
+      if (row) {
+        void handleStatusChange(row, TenantStatus.Disabled)
+      }
+      break
     case 'delete':
       if (row) {
         void handleDelete(row)
       }
       break
+  }
+}
+
+/**
+ * 行级启停
+ *
+ * 状态本来只能在编辑弹窗的下拉里改，而删除又要求先停用或暂停，
+ * 于是「停用后删除」这条最常走的路在列表上是断的。这里把三个目标状态直接摆到行操作里。
+ */
+async function handleStatusChange(row: TenantListItemDto, tenantStatus: TenantStatus) {
+  try {
+    await tenantManagementApi.updateStatus({
+      basicId: row.basicId,
+      reason: t('tenant.list.status_change_reason'),
+      tenantStatus,
+    })
+    toast.success(t('tenant.list.status_update_success'))
+    reloadTenant()
+  }
+  catch (error) {
+    toast.danger((error as Error)?.message || t('tenant.list.status_update_failed'))
   }
 }
 
@@ -517,7 +589,7 @@ async function handleDelete(row: TenantListItemDto) {
     reloadTenant()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('tenant.list.delete_failed'))
+    toast.danger((error as Error)?.message || t('tenant.list.delete_failed'))
   }
 }
 
@@ -528,15 +600,56 @@ async function handleInitDb(row: TenantListItemDto) {
     reloadTenant()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('tenant.list.init_db_failed'))
+    toast.danger((error as Error)?.message || t('tenant.list.init_db_failed'))
   }
 }
 
-function createDefaultForm(): TenantFormModel {
+function createDefaultInitAdminForm(tenantId: ApiId): TenantAdminInitializeDto {
   return {
     adminEmail: '',
     adminPassword: '',
     adminUserName: '',
+    tenantId,
+  }
+}
+
+function handleInitAdmin(row: TenantListItemDto) {
+  initAdminForm.value = createDefaultInitAdminForm(row.basicId)
+  initAdminVisible.value = true
+}
+
+async function handleSaveInitAdmin() {
+  if (!validateAdmin(initAdminForm.value)) {
+    return
+  }
+
+  initAdminLoading.value = true
+  try {
+    await tenantManagementApi.initializeTenantAdmin({
+      adminEmail: initAdminForm.value.adminEmail.trim(),
+      adminPassword: initAdminForm.value.adminPassword.trim(),
+      adminUserName: initAdminForm.value.adminUserName.trim(),
+      tenantId: initAdminForm.value.tenantId,
+    })
+    toast.success(t('tenant.list.init_admin_success'))
+    initAdminVisible.value = false
+    reloadTenant()
+  }
+  catch (error) {
+    toast.danger((error as Error)?.message || t('tenant.list.init_admin_failed'))
+  }
+  finally {
+    initAdminLoading.value = false
+  }
+}
+
+/** 回填表单：后端 long 按字符串传输，数字输入框要数字 */
+function toNullableNumber(value?: NumericString | null) {
+  return value == null ? null : Number(value)
+}
+
+function createDefaultForm(): TenantFormModel {
+  return {
     connectionString: null,
     databaseType: null,
     domain: null,
@@ -593,10 +706,6 @@ async function handleEdit(row: TenantListItemDto) {
   }
   tenantForm.value = {
     basicId: row.basicId,
-    // 管理员只在创建时开通，编辑态不展示这三项
-    adminEmail: '',
-    adminPassword: '',
-    adminUserName: '',
     // 连接串敏感、绝不回显：编辑时留空表示保持不变
     connectionString: null,
     databaseType: detail?.databaseType ?? row.databaseType ?? null,
@@ -607,7 +716,7 @@ async function handleEdit(row: TenantListItemDto) {
     logo: detail?.logo ?? row.logo ?? null,
     remark: detail?.remark ?? null,
     sort: detail?.sort ?? row.sort,
-    storageLimit: detail?.storageLimit ?? row.storageLimit ?? null,
+    storageLimit: toNullableNumber(detail?.storageLimit ?? row.storageLimit),
     tenantCode: detail?.tenantCode ?? row.tenantCode,
     tenantName: detail?.tenantName ?? row.tenantName,
     tenantShortName: detail?.tenantShortName ?? row.tenantShortName ?? null,
@@ -631,7 +740,7 @@ async function handleView(row: TenantListItemDto) {
     }
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('tenant.list.detail_load_failed'))
+    toast.danger((error as Error)?.message || t('tenant.list.detail_load_failed'))
   }
   finally {
     detailLoading.value = false
@@ -659,8 +768,7 @@ async function loadMembers() {
       ...createPageRequest({
         page: { pageIndex: memberPage.value, pageSize: MEMBER_PAGE_SIZE },
       }),
-      // 必须按当前查看的租户过滤：平台管理员无租户上下文，后端全局租户过滤器在平台态放行全部，
-      // 不传这个就会把所有租户的成员关系都拉回来。
+      // 平台查看某个租户的成员：后端切入该租户只读
       tenantId: currentDetail.value.basicId,
     })
     members.value = result.items
@@ -670,7 +778,7 @@ async function loadMembers() {
     memberError.value = true
     members.value = []
     memberTotal.value = 0
-    toast.error((error as Error)?.message || t('tenant.list.member_list_load_failed'))
+    toast.danger((error as Error)?.message || t('tenant.list.member_list_load_failed'))
   }
   finally {
     memberLoading.value = false
@@ -682,86 +790,20 @@ function handleMemberPageChange(page: number) {
   void loadMembers()
 }
 
-function handleEditMember(row: TenantMemberListItemDto) {
-  editingMemberId.value = row.basicId
-  editingMember.value = {
-    basicId: row.basicId,
-    displayName: row.displayName ?? null,
-    effectiveTime: row.effectiveTime ?? null,
-    expirationTime: row.expirationTime ?? null,
-    inviteRemark: null,
-    memberType: row.memberType,
-    remark: null,
-  }
-  memberEditVisible.value = true
-}
-
-async function handleSaveMember() {
-  if (!editingMember.value || !editingMemberId.value) {
-    return
-  }
-  memberEditLoading.value = true
-  try {
-    await tenantManagementApi.members.update(editingMember.value)
-    toast.success(t('tenant.list.member_update_success'))
-    memberEditVisible.value = false
-    await loadMembers()
-  }
-  catch (error) {
-    toast.error((error as Error)?.message || t('tenant.list.member_update_failed'))
-  }
-  finally {
-    memberEditLoading.value = false
-  }
-}
-
-function handleChangeMemberStatus(row: TenantMemberListItemDto) {
-  editingMemberStatusId.value = row.basicId
-  editingMemberStatus.value = row.status
-  memberStatusVisible.value = true
-}
-
-async function handleSaveMemberStatus() {
-  if (!editingMemberStatusId.value) {
-    return
-  }
-  memberStatusLoading.value = true
-  try {
-    const input: TenantMemberStatusUpdateDto = {
-      basicId: editingMemberStatusId.value,
-      status: editingMemberStatus.value,
-    }
-    await tenantManagementApi.members.updateStatus(input)
-    toast.success(t('tenant.list.member_status_update_success'))
-    memberStatusVisible.value = false
-    await loadMembers()
-  }
-  catch (error) {
-    toast.error((error as Error)?.message || t('tenant.list.member_status_update_failed'))
-  }
-  finally {
-    memberStatusLoading.value = false
-  }
-}
-
-function createDefaultMemberForm(): TenantMemberFormModel {
+function createDefaultSupportMemberForm(): SupportMemberFormModel {
   return {
-    displayName: '',
     effectiveTime: null,
     expirationTime: null,
-    inviteRemark: '',
-    memberType: TenantMemberType.Member,
     remark: '',
     userId: null,
   }
 }
 
-/** 打开成员添加/邀请弹窗；两者共用同一张表单，只有邀请备注和落库后的邀请状态不同 */
-function handleAddMember(mode: 'add' | 'invite') {
-  memberAddMode.value = mode
-  memberAddForm.value = createDefaultMemberForm()
+/** 支持人员入驻：只能选平台账号，后端同样校验；支持人员不占席位 */
+function handleAddSupportMember() {
+  supportMemberForm.value = createDefaultSupportMemberForm()
   memberUserOptions.value = []
-  memberAddVisible.value = true
+  supportMemberVisible.value = true
   void searchMemberUsers('')
 }
 
@@ -782,50 +824,103 @@ async function searchMemberUsers(keyword: string) {
   }
 }
 
-async function handleSaveNewMember() {
+async function handleSaveSupportMember() {
   const tenant = currentDetail.value
   if (!tenant) {
     return
   }
-  if (!memberAddForm.value.userId) {
+  if (!supportMemberForm.value.userId) {
     toast.warning(t('tenant.list.validate_member_user'))
     return
   }
 
-  memberAddLoading.value = true
+  supportMemberLoading.value = true
   try {
-    const payload = {
-      displayName: normalizeNullable(memberAddForm.value.displayName),
-      effectiveTime: memberAddForm.value.effectiveTime,
-      expirationTime: memberAddForm.value.expirationTime,
-      memberType: memberAddForm.value.memberType,
-      remark: normalizeNullable(memberAddForm.value.remark),
+    await tenantManagementApi.members.addSupport({
+      effectiveTime: supportMemberForm.value.effectiveTime,
+      expirationTime: supportMemberForm.value.expirationTime,
+      remark: normalizeNullable(supportMemberForm.value.remark),
       tenantId: tenant.basicId,
-      userId: memberAddForm.value.userId,
-    }
-
-    if (memberAddMode.value === 'invite') {
-      await tenantManagementApi.members.invite({
-        ...payload,
-        inviteRemark: normalizeNullable(memberAddForm.value.inviteRemark),
-      })
-      toast.success(t('tenant.list.member_invite_success'))
-    }
-    else {
-      await tenantManagementApi.members.add(payload)
-      toast.success(t('tenant.list.member_add_success'))
-    }
-
-    memberAddVisible.value = false
+      userId: supportMemberForm.value.userId,
+    })
+    toast.success(t('tenant.list.support_member_add_success'))
+    supportMemberVisible.value = false
     memberPage.value = 1
     await loadMembers()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('tenant.list.member_add_failed'))
+    toast.danger((error as Error)?.message || t('tenant.list.support_member_add_failed'))
   }
   finally {
-    memberAddLoading.value = false
+    supportMemberLoading.value = false
   }
+}
+
+/** 已生效或待生效的支持人员可以移除；已撤销的不再出操作 */
+function isRemovableSupportMember(item: TenantMemberListItemDto) {
+  return item.memberType === TenantMemberType.PlatformAdmin && item.status === ValidityStatus.Valid
+}
+
+/**
+ * 能接任所有者的成员：租户已有所有者（还没有的走初始化管理员），成员已接受邀请、有效、在生效期内，
+ * 且不是支持人员、不是现任所有者（与后端校验同口径）
+ */
+function isOwnerCandidate(item: TenantMemberListItemDto) {
+  return currentDetail.value?.hasOwner === true
+    && item.memberType !== TenantMemberType.Owner
+    && item.memberType !== TenantMemberType.PlatformAdmin
+    && item.inviteStatus === TenantMemberInviteStatus.Accepted
+    && item.status === ValidityStatus.Valid
+    && !item.isExpired
+    && (item.effectiveTime == null || new Date(item.effectiveTime).getTime() <= Date.now())
+}
+
+function handleTransferOwner(item: TenantMemberListItemDto) {
+  const tenant = currentDetail.value
+  if (!tenant) {
+    return
+  }
+  void dialog.confirm({
+    badge: 'warning',
+    title: t('tenant.list.transfer_owner_title'),
+    content: t('tenant.list.transfer_owner_content', { name: resolveMemberName(item) ?? item.userId, tenant: tenant.tenantName }),
+    okText: t('tenant.list.transfer_owner'),
+    cancelText: t('common.actions.cancel'),
+    onOk: async () => {
+      try {
+        await tenantManagementApi.members.transferOwner({ tenantId: tenant.basicId, memberId: item.basicId })
+        toast.success(t('tenant.list.transfer_owner_success'))
+        await loadMembers()
+      }
+      catch (error) {
+        toast.danger((error as Error)?.message || t('tenant.list.transfer_owner_failed'))
+      }
+    },
+  })
+}
+
+function handleRemoveSupportMember(item: TenantMemberListItemDto) {
+  const tenant = currentDetail.value
+  if (!tenant) {
+    return
+  }
+  void dialog.confirm({
+    badge: 'warning',
+    title: t('tenant.list.support_member_remove_title'),
+    content: t('tenant.list.support_member_remove_content', { name: resolveMemberName(item) ?? item.userId }),
+    okText: t('tenant.list.support_member_remove'),
+    cancelText: t('common.actions.cancel'),
+    onOk: async () => {
+      try {
+        await tenantManagementApi.members.removeSupport(tenant.basicId, item.basicId)
+        toast.success(t('tenant.list.support_member_remove_success'))
+        await loadMembers()
+      }
+      catch (error) {
+        toast.danger((error as Error)?.message || t('tenant.list.support_member_remove_failed'))
+      }
+    },
+  })
 }
 
 function getInviteStatusTagType(status: TenantMemberInviteStatus) {
@@ -858,17 +953,20 @@ function validateForm() {
     return false
   }
 
-  // 管理员是新建租户的必要组成：没有管理员的租户没有任何账号能登录
-  const adminUserName = tenantForm.value.adminUserName.trim()
+  return true
+}
+
+function validateAdmin(admin: Pick<TenantAdminInitializeDto, 'adminEmail' | 'adminPassword' | 'adminUserName'>) {
+  const adminUserName = admin.adminUserName.trim()
   if (adminUserName.length < ADMIN_USER_NAME_MIN_LENGTH || adminUserName.length > ADMIN_USER_NAME_MAX_LENGTH) {
     toast.warning(t('tenant.list.validate_admin_user_name', { max: ADMIN_USER_NAME_MAX_LENGTH, min: ADMIN_USER_NAME_MIN_LENGTH }))
     return false
   }
-  if (!EMAIL_PATTERN.test(tenantForm.value.adminEmail.trim())) {
+  if (!EMAIL_PATTERN.test(admin.adminEmail.trim())) {
     toast.warning(t('tenant.list.validate_admin_email'))
     return false
   }
-  if (tenantForm.value.adminPassword.trim().length < ADMIN_PASSWORD_MIN_LENGTH) {
+  if (admin.adminPassword.trim().length < ADMIN_PASSWORD_MIN_LENGTH) {
     toast.warning(t('tenant.list.validate_admin_password', { min: ADMIN_PASSWORD_MIN_LENGTH }))
     return false
   }
@@ -882,6 +980,7 @@ async function handleSubmit() {
   }
 
   submitLoading.value = true
+  let created: TenantDetailDto | null = null
   try {
     if (tenantForm.value.basicId) {
       const updateInput: TenantUpdateDto = {
@@ -891,7 +990,6 @@ async function handleSubmit() {
         domain: normalizeNullable(tenantForm.value.domain),
         editionId: tenantForm.value.editionId ?? null,
         expirationTime: tenantForm.value.expirationTime,
-        isolationMode: tenantForm.value.isolationMode,
         logo: normalizeNullable(tenantForm.value.logo),
         remark: normalizeNullable(tenantForm.value.remark),
         sort: tenantForm.value.sort,
@@ -913,9 +1011,6 @@ async function handleSubmit() {
     }
     else {
       const createInput: TenantCreateDto = {
-        adminEmail: tenantForm.value.adminEmail.trim(),
-        adminPassword: tenantForm.value.adminPassword.trim(),
-        adminUserName: tenantForm.value.adminUserName.trim(),
         connectionString: normalizeNullable(tenantForm.value.connectionString),
         databaseType: tenantForm.value.databaseType ?? null,
         domain: normalizeNullable(tenantForm.value.domain),
@@ -932,15 +1027,19 @@ async function handleSubmit() {
         userLimit: tenantForm.value.userLimit ?? null,
       }
 
-      await tenantManagementApi.create(createInput)
+      created = await tenantManagementApi.create(createInput)
     }
 
     toast.success(t('tenant.list.save_success'))
     modalVisible.value = false
     reloadTenant()
+    // 建好就能用的租户（字段隔离）接着开通管理员；库隔离租户要先初始化数据库
+    if (created?.configStatus === TenantConfigStatus.Configured) {
+      handleInitAdmin(created)
+    }
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('tenant.list.save_failed'))
+    toast.danger((error as Error)?.message || t('tenant.list.save_failed'))
   }
   finally {
     submitLoading.value = false
@@ -963,9 +1062,9 @@ async function handleSubmit() {
             <XhSpinner />
           </div>
           <XhEmptyStateRoot v-if="!detailLoading && !currentDetail" class="xh-detail-empty">
-            <XhEmptyStateIcon>
+            <XhEmptyStateIndicator>
               <Icon icon="lucide:inbox" />
-            </XhEmptyStateIcon>
+            </XhEmptyStateIndicator>
             <XhEmptyStateTitle>{{ t('common.empty') }}</XhEmptyStateTitle>
             <XhEmptyStateDescription>{{ t('tenant.list.detail_empty') }}</XhEmptyStateDescription>
           </XhEmptyStateRoot>
@@ -982,9 +1081,10 @@ async function handleSubmit() {
                 <XhTabsTrigger value="config">
                   {{ t('tenant.list.tab_config') }}
                 </XhTabsTrigger>
+                <XhTabsIndicator />
               </XhTabsList>
               <XhTabsContent value="overview">
-                <XhDescriptionsRoot :columns="2" bordered size="sm">
+                <XhDescriptionsRoot :columns="2" variant="outline" size="sm">
                   <XhDescriptionsItem>
                     <XhDescriptionsLabel>{{ t('tenant.list.tenant_name') }}</XhDescriptionsLabel>
                     <XhDescriptionsValue>
@@ -1092,12 +1192,10 @@ async function handleSubmit() {
                 </XhDescriptionsRoot>
               </XhTabsContent>
               <XhTabsContent value="members">
-                <XhFlex class="xh-member-toolbar" gap="sm">
-                  <XhButton size="sm" tone="brand" @click="handleAddMember('add')">
-                    {{ t('tenant.list.member_add') }}
-                  </XhButton>
-                  <XhButton size="sm" @click="handleAddMember('invite')">
-                    {{ t('tenant.list.member_invite') }}
+                <XhFlex class="xh-member-toolbar" gap="sm" align="center" justify="between">
+                  <span class="xh-member-hint">{{ t('tenant.list.member_readonly_hint') }}</span>
+                  <XhButton v-if="canManageSupportMember" variant="subtle" size="sm" tone="brand" @click="handleAddSupportMember">
+                    {{ t('tenant.list.support_member_add') }}
                   </XhButton>
                 </XhFlex>
                 <div class="xh-loading-stage" :class="{ 'is-loading': memberLoading }">
@@ -1106,22 +1204,22 @@ async function handleSubmit() {
                   </div>
                   <div v-if="memberError" class="xh-detail-empty">
                     <XhEmptyStateRoot>
-                      <XhEmptyStateIcon>
+                      <XhEmptyStateIndicator>
                         <Icon icon="lucide:alert-circle" />
-                      </XhEmptyStateIcon>
+                      </XhEmptyStateIndicator>
                       <XhEmptyStateTitle>{{ t('common.messages.load_failed') }}</XhEmptyStateTitle>
                       <XhEmptyStateDescription>{{ t('tenant.list.member_load_failed') }}</XhEmptyStateDescription>
                       <XhEmptyStateAction>
-                        <XhButton size="sm" @click="loadMembers">
+                        <XhButton variant="subtle" size="sm" @click="loadMembers">
                           {{ t('tenant.list.member_retry') }}
                         </XhButton>
                       </XhEmptyStateAction>
                     </XhEmptyStateRoot>
                   </div>
                   <XhEmptyStateRoot v-else-if="!memberLoading && members.length === 0" class="xh-detail-empty">
-                    <XhEmptyStateIcon>
+                    <XhEmptyStateIndicator>
                       <Icon icon="lucide:inbox" />
-                    </XhEmptyStateIcon>
+                    </XhEmptyStateIndicator>
                     <XhEmptyStateTitle>{{ t('common.empty') }}</XhEmptyStateTitle>
                     <XhEmptyStateDescription>{{ t('tenant.list.member_empty') }}</XhEmptyStateDescription>
                   </XhEmptyStateRoot>
@@ -1143,21 +1241,21 @@ async function handleSubmit() {
                           <td>{{ item.userId }}</td>
                           <td>{{ formatNullable(resolveMemberName(item)) }}</td>
                           <td>
-                            <XhTagRoot variant="subtle" :tone="item.memberType === TenantMemberType.Owner ? 'warning' : item.memberType === TenantMemberType.Admin ? 'brand' : 'neutral'" size="sm">
+                            <XhTagRoot variant="subtle" :tone="item.memberType === TenantMemberType.Owner ? 'warning' : item.memberType === TenantMemberType.Admin ? 'brand' : 'neutral'">
                               <XhTagLabel>
                                 {{ getOptionLabel(memberTypeOptions, item.memberType) }}
                               </XhTagLabel>
                             </XhTagRoot>
                           </td>
                           <td>
-                            <XhTagRoot variant="subtle" :tone="getInviteStatusTagType(item.inviteStatus)" size="sm">
+                            <XhTagRoot variant="subtle" :tone="getInviteStatusTagType(item.inviteStatus)">
                               <XhTagLabel>
                                 {{ getOptionLabel(inviteStatusOptions, item.inviteStatus) }}
                               </XhTagLabel>
                             </XhTagRoot>
                           </td>
                           <td>
-                            <XhTagRoot variant="subtle" :tone="item.status === ValidityStatus.Valid ? 'success' : 'danger'" size="sm">
+                            <XhTagRoot variant="subtle" :tone="item.status === ValidityStatus.Valid ? 'success' : 'danger'">
                               <XhTagLabel>
                                 {{ getOptionLabel(validityStatusOptions, item.status) }}
                               </XhTagLabel>
@@ -1165,14 +1263,23 @@ async function handleSubmit() {
                           </td>
                           <td>{{ formatNullableDate(item.createdTime) }}</td>
                           <td>
-                            <XhFlex gap="sm">
-                              <XhButton size="sm" @click="handleEditMember(item)">
-                                {{ t('tenant.list.member_edit') }}
-                              </XhButton>
-                              <XhButton size="sm" tone="warning" @click="handleChangeMemberStatus(item)">
-                                {{ t('tenant.list.member_change_status') }}
-                              </XhButton>
-                            </XhFlex>
+                            <XhButton
+                              v-if="canTransferOwner && isOwnerCandidate(item)"
+                              variant="subtle"
+                              size="sm"
+                              @click="handleTransferOwner(item)"
+                            >
+                              {{ t('tenant.list.transfer_owner') }}
+                            </XhButton>
+                            <XhButton
+                              v-if="canManageSupportMember && isRemovableSupportMember(item)"
+                              variant="subtle"
+                              size="sm"
+                              tone="danger"
+                              @click="handleRemoveSupportMember(item)"
+                            >
+                              {{ t('tenant.list.support_member_remove') }}
+                            </XhButton>
                           </td>
                         </tr>
                       </tbody>
@@ -1189,7 +1296,7 @@ async function handleSubmit() {
                 </div>
               </XhTabsContent>
               <XhTabsContent value="config">
-                <XhDescriptionsRoot :columns="1" bordered size="sm">
+                <XhDescriptionsRoot :columns="1" variant="outline" size="sm">
                   <XhDescriptionsItem>
                     <XhDescriptionsLabel>{{ t('tenant.list.logo') }}</XhDescriptionsLabel>
                     <XhDescriptionsValue>
@@ -1236,9 +1343,9 @@ async function handleSubmit() {
             <XhSpinner />
           </div>
           <XhEmptyStateRoot v-if="!quotaAuditLoading && quotaAlerts.length === 0" class="xh-detail-empty">
-            <XhEmptyStateIcon>
+            <XhEmptyStateIndicator>
               <Icon icon="lucide:shield-check" />
-            </XhEmptyStateIcon>
+            </XhEmptyStateIndicator>
             <XhEmptyStateTitle>{{ t('tenant.list.quota_audit_clear') }}</XhEmptyStateTitle>
             <XhEmptyStateDescription>{{ t('tenant.list.quota_audit_clear_desc') }}</XhEmptyStateDescription>
           </XhEmptyStateRoot>
@@ -1282,7 +1389,7 @@ async function handleSubmit() {
         class="xh-edit-form-grid"
         @submit="handleSubmit"
       >
-        <XhFormFieldGroup value="tenantName">
+        <XhFormFieldGroup name="tenantName">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('tenant.list.tenant_name') }}</XhFieldLabel>
             <XhFieldControl>
@@ -1291,7 +1398,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="tenantCode">
+        <XhFormFieldGroup name="tenantCode">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('tenant.list.tenant_code') }}</XhFieldLabel>
             <XhFieldControl>
@@ -1305,7 +1412,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="tenantShortName">
+        <XhFormFieldGroup name="tenantShortName">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('tenant.list.tenant_short_name') }}</XhFieldLabel>
             <XhFieldControl>
@@ -1314,7 +1421,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="domain">
+        <XhFormFieldGroup name="domain">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('tenant.list.domain') }}</XhFieldLabel>
             <XhFieldControl>
@@ -1323,17 +1430,24 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="isolationMode">
+        <XhFormFieldGroup name="isolationMode">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('tenant.list.isolation_mode') }}</XhFieldLabel>
             <XhFieldControl>
-              <XSelect v-model:value="tenantForm.isolationMode" :options="isolationModeOptions" />
+              <XSelect
+                v-model:value="tenantForm.isolationMode"
+                :disabled="Boolean(tenantForm.basicId)"
+                :options="formIsolationModeOptions"
+              />
             </XhFieldControl>
+            <XhFieldDescription v-if="tenantForm.basicId">
+              {{ t('tenant.list.isolation_mode_locked') }}
+            </XhFieldDescription>
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <template v-if="tenantForm.isolationMode === TenantIsolationMode.Database">
-          <XhFormFieldGroup value="databaseType">
+        <template v-if="isDatabaseIsolation">
+          <XhFormFieldGroup name="databaseType">
             <XhFieldRoot>
               <XhFieldLabel>{{ t('tenant.list.database_type') }}</XhFieldLabel>
               <XhFieldControl>
@@ -1347,7 +1461,7 @@ async function handleSubmit() {
               <XhFieldErrorText />
             </XhFieldRoot>
           </XhFormFieldGroup>
-          <XhFormFieldGroup value="connectionString" class="xh-span-2">
+          <XhFormFieldGroup name="connectionString" class="xh-span-2">
             <XhFieldRoot>
               <XhFieldLabel>{{ t('tenant.list.connection_string') }}</XhFieldLabel>
               <XhFieldControl>
@@ -1363,7 +1477,7 @@ async function handleSubmit() {
             </XhFieldRoot>
           </XhFormFieldGroup>
         </template>
-        <XhFormFieldGroup value="editionId">
+        <XhFormFieldGroup name="editionId">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('tenant.list.edition') }}</XhFieldLabel>
             <XhFieldControl>
@@ -1377,74 +1491,33 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup v-if="!tenantForm.basicId" value="adminUserName">
-          <XhFieldRoot>
-            <XhFieldLabel>{{ t('tenant.list.admin_user_name') }}</XhFieldLabel>
-            <XhFieldControl>
-              <XInput v-model:value="tenantForm.adminUserName" clearable :placeholder="t('tenant.list.admin_user_name_placeholder')" autocomplete="off" />
-            </XhFieldControl>
-            <XhFieldErrorText />
-          </XhFieldRoot>
-        </XhFormFieldGroup>
-        <XhFormFieldGroup v-if="!tenantForm.basicId" value="adminEmail">
-          <XhFieldRoot>
-            <XhFieldLabel>{{ t('tenant.list.admin_email') }}</XhFieldLabel>
-            <XhFieldControl>
-              <XInput
-                v-model:value="tenantForm.adminEmail"
-                clearable
-                :placeholder="t('tenant.list.admin_email_placeholder')"
-                inputmode="email"
-                autocomplete="off"
-              />
-            </XhFieldControl>
-            <XhFieldErrorText />
-          </XhFieldRoot>
-        </XhFormFieldGroup>
-        <XhFormFieldGroup v-if="!tenantForm.basicId" value="adminPassword">
-          <XhFieldRoot>
-            <XhFieldLabel>{{ t('tenant.list.admin_password') }}</XhFieldLabel>
-            <XhFieldControl>
-              <XInput
-                v-model:value="tenantForm.adminPassword"
-                clearable
-                :placeholder="t('tenant.list.admin_password_placeholder')"
-                type="password"
-                autocomplete="new-password"
-              />
-            </XhFieldControl>
-            <XhFieldErrorText />
-          </XhFieldRoot>
-        </XhFormFieldGroup>
-        <XhFormFieldGroup value="userLimit">
+        <XhFormFieldGroup name="userLimit">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('tenant.list.user_limit') }}</XhFieldLabel>
             <XhFieldControl>
               <XNumberInput
                 v-model:value="tenantForm.userLimit"
                 :min="0"
-                clearable
                 :placeholder="userLimitPlaceholder"
               />
             </XhFieldControl>
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="storageLimit">
+        <XhFormFieldGroup name="storageLimit">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('tenant.list.storage_limit') }}</XhFieldLabel>
             <XhFieldControl>
               <XNumberInput
                 v-model:value="tenantForm.storageLimit"
                 :min="0"
-                clearable
                 :placeholder="storageLimitPlaceholder"
               />
             </XhFieldControl>
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="sort">
+        <XhFormFieldGroup name="sort">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('tenant.list.sort') }}</XhFieldLabel>
             <XhFieldControl>
@@ -1453,29 +1526,30 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup v-if="tenantForm.basicId" value="tenantStatus">
+        <XhFormFieldGroup v-if="tenantForm.basicId" name="tenantStatus">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('tenant.list.tenant_status') }}</XhFieldLabel>
             <XhFieldControl>
-              <XSelect v-model:value="tenantForm.tenantStatus" :options="tenantStatusOptions" />
+              <!-- 改状态走启停接口：没有启停按钮就不让改，免得资料存了一半再被拒 -->
+              <XSelect v-model:value="tenantForm.tenantStatus" :options="tenantStatusOptions" :disabled="!hasPermission('tenant.list.status')" />
             </XhFieldControl>
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="expirationTime">
+        <XhFormFieldGroup name="expirationTime">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('tenant.list.expiration_time') }}</XhFieldLabel>
             <XhFieldControl>
               <XDatePicker
                 v-model:value="tenantExpirationTs"
                 clearable
-                type="datetime"
+                show-time
               />
             </XhFieldControl>
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="logo">
+        <XhFormFieldGroup name="logo">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('tenant.list.logo') }}</XhFieldLabel>
             <XhFieldControl :as-child="false">
@@ -1484,7 +1558,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="remark" class="xh-span-2">
+        <XhFormFieldGroup name="remark" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('tenant.list.remark') }}</XhFieldLabel>
             <XhFieldControl>
@@ -1499,103 +1573,76 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
+        <p v-if="!tenantForm.basicId" class="xh-span-2 xh-form-note">
+          {{ isDatabaseIsolation ? t('tenant.list.database_admin_hint') : t('tenant.list.create_admin_hint') }}
+        </p>
       </XhFormRoot>
     </XEditModal>
 
     <XEditModal
-      v-model:show="memberAddVisible"
-      :title="memberAddMode === 'invite' ? t('tenant.list.member_invite_title') : t('tenant.list.member_add_title')"
-      :loading="memberAddLoading"
-      :form-id="memberAddFormId"
+      v-model:show="supportMemberVisible"
+      :title="t('tenant.list.support_member_add_title')"
+      :loading="supportMemberLoading"
+      :form-id="supportMemberFormId"
     >
       <XhFormRoot
-        v-model:values="memberAddForm"
+        :id="supportMemberFormId"
+        v-model:values="supportMemberForm"
         validate-on="blur"
         class="xh-edit-form-grid"
-        @submit="handleSaveNewMember"
+        @submit="handleSaveSupportMember"
       >
-        <XhFormFieldGroup value="userId" class="xh-span-2">
+        <XhFormFieldGroup name="userId" class="xh-span-2">
           <XhFieldRoot>
-            <XhFieldLabel>{{ t('tenant.list.member_user') }}</XhFieldLabel>
+            <XhFieldLabel>{{ t('tenant.list.support_member_user') }}</XhFieldLabel>
             <XhFieldControl>
-              <XSelect
-                v-model:value="memberAddForm.userId"
+              <XCombobox
+                v-model:value="supportMemberForm.userId"
+                remote
                 clearable
+                :loading="memberUserLoading"
                 :options="memberUserOptions"
-                :placeholder="t('tenant.list.member_user_placeholder')"
+                :placeholder="t('tenant.list.support_member_user_placeholder')"
                 @search="searchMemberUsers"
               />
             </XhFieldControl>
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="memberType">
-          <XhFieldRoot>
-            <XhFieldLabel>{{ t('tenant.list.member_type') }}</XhFieldLabel>
-            <XhFieldControl>
-              <XSelect v-model:value="memberAddForm.memberType" :options="memberTypeOptions" />
-            </XhFieldControl>
-            <XhFieldErrorText />
-          </XhFieldRoot>
-        </XhFormFieldGroup>
-        <XhFormFieldGroup value="displayName">
-          <XhFieldRoot>
-            <XhFieldLabel>{{ t('tenant.list.member_display_name') }}</XhFieldLabel>
-            <XhFieldControl>
-              <XInput v-model:value="memberAddForm.displayName" clearable :placeholder="t('tenant.list.member_display_name_placeholder')" />
-            </XhFieldControl>
-            <XhFieldErrorText />
-          </XhFieldRoot>
-        </XhFormFieldGroup>
-        <XhFormFieldGroup value="effectiveTime">
+        <XhFormFieldGroup name="effectiveTime">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('tenant.list.member_effective_time') }}</XhFieldLabel>
             <XhFieldControl>
               <XDatePicker
-                v-model:value="memberAddEffectiveTs"
+                v-model:value="supportMemberEffectiveTs"
                 clearable
-                type="datetime"
+                show-time
               />
             </XhFieldControl>
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="expirationTime">
+        <XhFormFieldGroup name="expirationTime">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('tenant.list.member_expiration_time') }}</XhFieldLabel>
             <XhFieldControl>
               <XDatePicker
-                v-model:value="memberAddExpirationTs"
+                v-model:value="supportMemberExpirationTs"
                 clearable
-                type="datetime"
+                show-time
               />
             </XhFieldControl>
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup v-if="memberAddMode === 'invite'" value="inviteRemark" class="xh-span-2">
+        <XhFormFieldGroup name="remark" class="xh-span-2">
           <XhFieldRoot>
-            <XhFieldLabel>{{ t('tenant.list.member_invite_remark') }}</XhFieldLabel>
+            <XhFieldLabel>{{ t('tenant.list.support_member_reason') }}</XhFieldLabel>
             <XhFieldControl>
               <XInput
-                v-model:value="memberAddForm.inviteRemark"
+                v-model:value="supportMemberForm.remark"
                 clearable
-                :placeholder="t('tenant.list.member_invite_remark_placeholder')"
-                :rows="2"
-                type="textarea"
-              />
-            </XhFieldControl>
-            <XhFieldErrorText />
-          </XhFieldRoot>
-        </XhFormFieldGroup>
-        <XhFormFieldGroup value="remark" class="xh-span-2">
-          <XhFieldRoot>
-            <XhFieldLabel>{{ t('tenant.list.remark') }}</XhFieldLabel>
-            <XhFieldControl>
-              <XInput
-                v-model:value="memberAddForm.remark"
-                clearable
-                :placeholder="t('tenant.list.remark_placeholder')"
+                :placeholder="t('tenant.list.support_member_reason_placeholder')"
                 :rows="2"
                 type="textarea"
               />
@@ -1607,113 +1654,57 @@ async function handleSubmit() {
     </XEditModal>
 
     <XEditModal
-      v-model:show="memberEditVisible"
-      :title="t('tenant.list.member_edit_title')"
-      :loading="memberEditLoading"
-      :form-id="memberEditFormId"
+      v-model:show="initAdminVisible"
+      :title="t('tenant.list.init_admin_title')"
+      :loading="initAdminLoading"
+      :form-id="initAdminFormId"
     >
       <XhFormRoot
-        v-if="editingMember"
-        v-model:values="editingMember"
+        :id="initAdminFormId"
+        v-model:values="initAdminForm"
         validate-on="blur"
         class="xh-edit-form-grid"
-        @submit="handleSaveMember"
+        @submit="handleSaveInitAdmin"
       >
-        <XhFormFieldGroup value="displayName">
+        <XhFormFieldGroup name="adminUserName">
           <XhFieldRoot>
-            <XhFieldLabel>{{ t('tenant.list.member_display_name') }}</XhFieldLabel>
+            <XhFieldLabel>{{ t('tenant.list.admin_user_name') }}</XhFieldLabel>
             <XhFieldControl>
-              <XInput v-model:value="editingMember.displayName" clearable :placeholder="t('tenant.list.member_display_name_placeholder')" />
+              <XInput v-model:value="initAdminForm.adminUserName" clearable :placeholder="t('tenant.list.admin_user_name_placeholder')" autocomplete="off" />
             </XhFieldControl>
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="memberType">
+        <XhFormFieldGroup name="adminEmail">
           <XhFieldRoot>
-            <XhFieldLabel>{{ t('tenant.list.member_type') }}</XhFieldLabel>
-            <XhFieldControl>
-              <XSelect v-model:value="editingMember.memberType" :options="memberTypeOptions" />
-            </XhFieldControl>
-            <XhFieldErrorText />
-          </XhFieldRoot>
-        </XhFormFieldGroup>
-        <XhFormFieldGroup value="effectiveTime">
-          <XhFieldRoot>
-            <XhFieldLabel>{{ t('tenant.list.member_effective_time') }}</XhFieldLabel>
-            <XhFieldControl>
-              <XDatePicker
-                v-model:value="editingMemberEffectiveTs"
-                clearable
-                type="datetime"
-              />
-            </XhFieldControl>
-            <XhFieldErrorText />
-          </XhFieldRoot>
-        </XhFormFieldGroup>
-        <XhFormFieldGroup value="expirationTime">
-          <XhFieldRoot>
-            <XhFieldLabel>{{ t('tenant.list.member_expiration_time') }}</XhFieldLabel>
-            <XhFieldControl>
-              <XDatePicker
-                v-model:value="editingMemberExpirationTs"
-                clearable
-                type="datetime"
-              />
-            </XhFieldControl>
-            <XhFieldErrorText />
-          </XhFieldRoot>
-        </XhFormFieldGroup>
-        <XhFormFieldGroup value="inviteRemark" class="xh-span-2">
-          <XhFieldRoot>
-            <XhFieldLabel>{{ t('tenant.list.member_invite_remark') }}</XhFieldLabel>
+            <XhFieldLabel>{{ t('tenant.list.admin_email') }}</XhFieldLabel>
             <XhFieldControl>
               <XInput
-                v-model:value="editingMember.inviteRemark"
+                v-model:value="initAdminForm.adminEmail"
                 clearable
-                :placeholder="t('tenant.list.member_invite_remark_placeholder')"
-                :rows="2"
-                type="textarea"
+                :placeholder="t('tenant.list.admin_email_placeholder')"
+                type="email"
+                autocomplete="off"
               />
             </XhFieldControl>
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="remark" class="xh-span-2">
+        <XhFormFieldGroup name="adminPassword" class="xh-span-2">
           <XhFieldRoot>
-            <XhFieldLabel>{{ t('tenant.list.member_remark') }}</XhFieldLabel>
+            <XhFieldLabel>{{ t('tenant.list.admin_password') }}</XhFieldLabel>
             <XhFieldControl>
               <XInput
-                v-model:value="editingMember.remark"
+                v-model:value="initAdminForm.adminPassword"
                 clearable
-                :placeholder="t('tenant.list.member_remark_placeholder')"
-                :rows="2"
-                type="textarea"
+                :placeholder="t('tenant.list.admin_password_placeholder')"
+                type="password"
+                autocomplete="new-password"
               />
             </XhFieldControl>
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-      </XhFormRoot>
-    </XEditModal>
-
-    <XEditModal
-      v-model:show="memberStatusVisible"
-      :title="t('tenant.list.member_status_title')"
-      :loading="memberStatusLoading"
-      :form-id="memberStatusFormId"
-    >
-      <XhFormRoot
-        validate-on="blur"
-        class="xh-edit-form-grid"
-        @submit="handleSaveMemberStatus"
-      >
-        <XhFieldRoot class="xh-span-2">
-          <XhFieldLabel>{{ t('tenant.list.member_status') }}</XhFieldLabel>
-          <XhFieldControl>
-            <XSelect v-model:value="editingMemberStatus" :options="validityStatusOptions" />
-          </XhFieldControl>
-          <XhFieldErrorText />
-        </XhFieldRoot>
       </XhFormRoot>
     </XEditModal>
   </SchemaPage>
@@ -1724,12 +1715,6 @@ async function handleSubmit() {
   padding: 48px 0;
 }
 
-.xh-detail-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-
 .xh-member-pager {
   display: flex;
   justify-content: flex-end;
@@ -1738,6 +1723,18 @@ async function handleSubmit() {
 
 .xh-member-toolbar {
   margin-bottom: 12px;
+}
+
+.xh-member-hint {
+  font-size: var(--xh-text-caption-size);
+  color: hsl(var(--muted-foreground));
+}
+
+.xh-form-note {
+  margin: 0;
+  font-size: var(--xh-text-caption-size);
+  line-height: 1.5;
+  color: hsl(var(--muted-foreground));
 }
 
 .xh-quota-audit__hint {
@@ -1768,18 +1765,5 @@ async function handleSubmit() {
   font-size: 12px;
   font-weight: 400;
   color: hsl(var(--muted-foreground));
-}
-
-.xh-detail-table th,
-.xh-detail-table td {
-  padding: 9px 10px;
-  border: 1px solid hsl(var(--border));
-  text-align: left;
-  vertical-align: top;
-}
-
-.xh-detail-table th {
-  background: hsl(var(--muted));
-  font-weight: 500;
 }
 </style>

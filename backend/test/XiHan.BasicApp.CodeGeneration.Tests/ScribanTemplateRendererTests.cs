@@ -195,22 +195,23 @@ public sealed class ScribanTemplateRendererTests
     }
 
     /// <summary>
-    /// 已启用操作同时透出列表与三个便捷布尔，三者内容必须一致（模板两种写法结果不能打架）。
+    /// 已启用操作同时透出列表与逐项便捷布尔，二者内容必须一致（模板两种写法结果不能打架）。
     /// </summary>
     /// <param name="actionsJoined">已启用操作（逗号分隔；空串表示空集）</param>
     /// <param name="expected">期望渲染结果</param>
     [Theory]
-    [InlineData("create,update,delete", "create,update,delete|true|true|true")]
-    [InlineData("create", "create|true|false|false")]
-    [InlineData("update,delete", "update,delete|false|true|true")]
-    [InlineData("", "|false|false|false")]
+    [InlineData("create,update,delete,export,import", "create,update,delete,export,import|true|true|true|true|true")]
+    [InlineData("create", "create|true|false|false|false|false")]
+    [InlineData("update,delete", "update,delete|false|true|true|false|false")]
+    [InlineData("export", "export|false|false|false|true|false")]
+    [InlineData("", "|false|false|false|false|false")]
     public async Task RenderAsync_EnabledActionsListAndBooleansShouldAgree(string actionsJoined, string expected)
     {
         string[] actions = actionsJoined.Length == 0 ? [] : actionsJoined.Split(',');
         var context = CodeGenerationTestHelper.CreateContext(enabledActions: actions);
 
         var result = await _renderer.RenderAsync(
-            "{{ EnabledActions | array.join \",\" }}|{{ CanCreate }}|{{ CanUpdate }}|{{ CanDelete }}",
+            "{{ EnabledActions | array.join \",\" }}|{{ CanCreate }}|{{ CanUpdate }}|{{ CanDelete }}|{{ CanExport }}|{{ CanImport }}",
             context);
 
         Assert.Equal(expected, result, StringComparer.Ordinal);
@@ -507,5 +508,199 @@ public sealed class ScribanTemplateRendererTests
         Assert.False(validation.IsValid);
         Assert.NotEmpty(validation.Errors);
         Assert.All(validation.Errors, error => Assert.False(string.IsNullOrWhiteSpace(error)));
+    }
+
+    /// <summary>
+    /// 表单取值口径：报文可空性跟列本身走，「必填」只管校验。
+    /// 非空列留空时文本发空串、数字发 0；下拉、日期、时间、long 没有说得通的缺省值，非空即按必填；
+    /// 可空的文本类控件清空后是空串，按 null 发。
+    /// </summary>
+    /// <param name="csharpType">C# 类型</param>
+    /// <param name="tsType">TS 类型</param>
+    /// <param name="htmlType">表单控件配置</param>
+    /// <param name="isNullable">列是否可空</param>
+    /// <param name="isRequired">列配置是否勾了必填</param>
+    /// <param name="expected">IsFormRequired|FormDefault|FormToWire|FormEmptyCheck</param>
+    [Theory]
+    [InlineData("string", "string", HtmlType.Input, false, false, "false|''|$v ?? ''|")]
+    [InlineData("string", "string", HtmlType.Input, false, true, "true|''|$v ?? ''|!$v?.trim()")]
+    [InlineData("string?", "string", HtmlType.Textarea, true, false, "false|null|$v || null|")]
+    [InlineData("string?", "string", HtmlType.Input, true, true, "true|null|$v || null|!$v?.trim()")]
+    [InlineData("int", "number", HtmlType.InputNumber, false, false, "false|0|$v ?? 0|")]
+    [InlineData("int", "number", HtmlType.InputNumber, false, true, "true|0|$v ?? 0|$v == null")]
+    [InlineData("decimal?", "number", HtmlType.InputNumber, true, false, "false|null|$v ?? null|")]
+    [InlineData("long", "string", HtmlType.Input, false, false, "true|''|$v ?? ''|!$v?.trim()")]
+    [InlineData("long?", "string", HtmlType.Input, true, false, "false|null|$v || null|")]
+    [InlineData("bool", "boolean", HtmlType.Switch, false, true, "false|false|$v|")]
+    [InlineData("DateTimeOffset", "string", HtmlType.DatePicker, false, false, "true|null|toDateOnly($v)|$v == null || Number.isNaN($v)")]
+    [InlineData("DateTimeOffset?", "string", HtmlType.DatePicker, true, false, "false|null|$v == null ? null : toDateOnly($v)|")]
+    // 日期时间与日期同口径：按时间戳承载、不预填，提交时换成本地日期时间文本
+    [InlineData("DateTimeOffset", "string", HtmlType.DateTimePicker, false, false, "true|null|toDateTime($v)|$v == null || Number.isNaN($v)")]
+    [InlineData("DateTimeOffset?", "string", HtmlType.DateTimePicker, true, false, "false|null|$v == null ? null : toDateTime($v)|")]
+    [InlineData("TimeSpan?", "string", HtmlType.TimePicker, true, false, "false|null|$v || null|")]
+    // 上传与文本同理：非空文本列没传文件发空串，long 标识列没有缺省值即必填
+    [InlineData("string", "string", HtmlType.ImageUpload, false, false, "false|''|$v ?? ''|")]
+    [InlineData("string?", "string", HtmlType.FileUpload, true, false, "false|null|$v || null|")]
+    [InlineData("long", "string", HtmlType.FileUpload, false, false, "true|''|$v ?? ''|!$v?.trim()")]
+    public async Task RenderAsync_FormFactsShouldFollowNullabilityThenRequired(
+        string csharpType, string tsType, HtmlType htmlType, bool isNullable, bool isRequired, string expected)
+    {
+        var column = CodeGenerationTestHelper.CreateColumn("Amount", csharpType, tsType, htmlType: htmlType);
+        column.IsNullable = isNullable;
+        column.IsRequired = isRequired;
+        var context = CodeGenerationTestHelper.CreateContext(columns: [column]);
+
+        var result = await _renderer.RenderAsync(
+            "{{ for col in Columns }}{{ col.IsFormRequired }}|{{ col.FormDefault }}|{{ col.FormToWire }}|{{ col.FormEmptyCheck }}{{ end }}",
+            context);
+
+        Assert.Equal(expected, result, StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// 上传控件的必填提示是「请上传」。
+    /// </summary>
+    [Fact]
+    public async Task RenderAsync_UploadRequiredVerbShouldAskForUpload()
+    {
+        var column = CodeGenerationTestHelper.CreateColumn("Avatar", "string", "string", htmlType: HtmlType.ImageUpload);
+        column.IsRequired = true;
+        var context = CodeGenerationTestHelper.CreateContext(columns: [column]);
+
+        var result = await _renderer.RenderAsync("{{ for col in Columns }}{{ col.FormRequiredVerb }}{{ end }}", context);
+
+        Assert.Equal("请上传", result, StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// 列表字段 dataType：接通了选项来源的下拉（枚举、系统字典、常量）按 enum，上传列按 image / file，
+    /// 未解析出的枚举仍按原类型。
+    /// </summary>
+    /// <param name="csharpType">C# 类型</param>
+    /// <param name="tsType">TS 类型</param>
+    /// <param name="htmlType">表单控件配置</param>
+    /// <param name="dictSelector">选项来源</param>
+    /// <param name="expected">期望的 dataType</param>
+    [Theory]
+    [InlineData("string", "string", HtmlType.Select, DictSelectorType.DictSelector, "enum")]
+    [InlineData("int", "number", HtmlType.Select, DictSelectorType.ConstSelector, "enum")]
+    [InlineData("int", "number", HtmlType.Select, DictSelectorType.EnumSelector, "number")]
+    [InlineData("string", "string", HtmlType.ImageUpload, null, "image")]
+    [InlineData("string", "string", HtmlType.FileUpload, null, "file")]
+    [InlineData("string", "string", HtmlType.Input, null, "string")]
+    public async Task RenderAsync_FieldDataTypeShouldFollowControlAndOptionSource(
+        string csharpType, string tsType, HtmlType htmlType, DictSelectorType? dictSelector, string expected)
+    {
+        var column = CodeGenerationTestHelper.CreateColumn("Level", csharpType, tsType, htmlType: htmlType);
+        column.DictSelectorType = dictSelector;
+        var context = CodeGenerationTestHelper.CreateContext(columns: [column]);
+
+        var result = await _renderer.RenderAsync("{{ for col in Columns }}{{ col.FieldDataType }}{{ end }}", context);
+
+        Assert.Equal(expected, result, StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// 下拉没有说得通的缺省项：非空即必填、不预填；枚举例外，预填首个成员并以它作兜底。
+    /// 判空按值类型取：数字选项判 null，字符串与枚举选项判假值。
+    /// </summary>
+    [Fact]
+    public async Task RenderAsync_SelectFormFactsShouldRequireAChoiceWhenColumnIsNotNull()
+    {
+        var level = CodeGenerationTestHelper.CreateColumn("Level", "int", "number", htmlType: HtmlType.Select);
+        level.DictSelectorType = DictSelectorType.ConstSelector;
+        level.ConstValues = """[{"label":"低","value":1}]""";
+        var status = CodeGenerationTestHelper.CreateColumn("Status", "EnableStatus", "string", htmlType: HtmlType.Select);
+        status.DictSelectorType = DictSelectorType.EnumSelector;
+        status.EnumTypeShortName = "EnableStatus";
+        status.EnumNamespace = "XiHan.BasicApp.Saas.Domain.Enums";
+        status.EnumDefaultMember = "Disabled";
+        var context = CodeGenerationTestHelper.CreateContext(columns: [level, status]);
+
+        var result = await _renderer.RenderAsync(
+            "{{ for col in Columns }}{{ col.IsFormRequired }}|{{ col.FormDefault }}|{{ col.FormToWire }}|{{ col.FormEmptyCheck }}|{{ col.FormRequiredVerb }};{{ end }}",
+            context);
+
+        Assert.Equal(
+            "true|null|$v ?? 0|$v == null|请选择;true|'Disabled'|$v ?? 'Disabled'|!$v|请选择;",
+            result,
+            StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// 数字框的小数位：整数列 0 位（否则 1.5 会让整单 400），decimal 按列定义的小数位，
+    /// 浮点列与未定义小数位的 decimal 不限；超出组件上限 20 位的不限；long 标识不是数字框。
+    /// </summary>
+    [Fact]
+    public async Task RenderAsync_NumberPrecisionShouldFollowColumnType()
+    {
+        var price = CodeGenerationTestHelper.CreateColumn("Price", "decimal", "number", htmlType: HtmlType.InputNumber);
+        price.DecimalDigits = 2;
+        var ratio = CodeGenerationTestHelper.CreateColumn("Ratio", "double", "number", htmlType: HtmlType.InputNumber);
+        ratio.DecimalDigits = 0;
+        var huge = CodeGenerationTestHelper.CreateColumn("Huge", "decimal?", "number", htmlType: HtmlType.InputNumber);
+        huge.DecimalDigits = 28;
+        var context = CodeGenerationTestHelper.CreateContext(columns:
+        [
+            CodeGenerationTestHelper.CreateColumn("Stock", "int", "number", htmlType: HtmlType.InputNumber),
+            price,
+            ratio,
+            CodeGenerationTestHelper.CreateColumn("Amount", "decimal", "number", htmlType: HtmlType.InputNumber),
+            huge,
+            CodeGenerationTestHelper.CreateColumn("OwnerId", "long", "string")
+        ]);
+
+        var result = await _renderer.RenderAsync("{{ for col in Columns }}{{ col.NumberPrecision }};{{ end }}", context);
+
+        Assert.Equal("0;2;;;;;", result, StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// 文本框字数上限取字符串列的定义长度；long 标识、非文本控件、未定义长度与不限长的哨兵值都不限。
+    /// </summary>
+    [Fact]
+    public async Task RenderAsync_InputMaxLengthShouldOnlyApplyToSizedTextColumns()
+    {
+        var name = CodeGenerationTestHelper.CreateColumn("Name");
+        name.Length = 64;
+        var remark = CodeGenerationTestHelper.CreateColumn("Remark", "string?", htmlType: HtmlType.Textarea);
+        remark.Length = 500;
+        var content = CodeGenerationTestHelper.CreateColumn("Content", htmlType: HtmlType.Textarea);
+        content.Length = int.MaxValue;
+        var ownerId = CodeGenerationTestHelper.CreateColumn("OwnerId", "long", "string");
+        ownerId.Length = 20;
+        var level = CodeGenerationTestHelper.CreateColumn("Level", htmlType: HtmlType.Select);
+        level.Length = 16;
+        level.DictSelectorType = DictSelectorType.ConstSelector;
+        var context = CodeGenerationTestHelper.CreateContext(columns:
+        [
+            name,
+            remark,
+            content,
+            ownerId,
+            level,
+            CodeGenerationTestHelper.CreateColumn("Code")
+        ]);
+
+        var result = await _renderer.RenderAsync("{{ for col in Columns }}{{ col.InputMaxLength }};{{ end }}", context);
+
+        Assert.Equal("64;500;;;;;", result, StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// 界面文案优先取列注释（去首尾空白），DbFirst 导入的表缺注释时按属性名推导，字段不会没有名字。
+    /// </summary>
+    [Fact]
+    public async Task RenderAsync_LabelShouldFallBackToHumanizedPropertyName()
+    {
+        var withComment = CodeGenerationTestHelper.CreateColumn("ProductName");
+        withComment.ColumnComment = "  产品名称 ";
+        var withoutComment = CodeGenerationTestHelper.CreateColumn("ProductCode");
+        withoutComment.ColumnComment = null;
+        var context = CodeGenerationTestHelper.CreateContext(columns: [withComment, withoutComment]);
+
+        var result = await _renderer.RenderAsync("{{ for col in Columns }}{{ col.Label }};{{ end }}", context);
+
+        Assert.Equal("产品名称;Product Code;", result, StringComparer.Ordinal);
     }
 }

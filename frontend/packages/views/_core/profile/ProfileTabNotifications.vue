@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import type { NotificationPreference } from '~/types'
-import { XhButton, XhSpinner, XhSwitch, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
+import { XhButton, XhButtonIndicator, XhButtonLabel, XhSpinner, XhSwitch, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { toast } from '~/composables'
@@ -57,7 +57,7 @@ async function loadPreference() {
     pref.value = await apis.getNotificationPreferenceApi()
   }
   catch (e: unknown) {
-    toast.error((e as Error)?.message || t('component.profile.notifications.err_load_failed'))
+    toast.danger((e as Error)?.message || t('component.profile.notifications.err_load_failed'))
   }
   finally {
     loading.value = false
@@ -71,7 +71,7 @@ async function savePreference() {
     toast.success(t('component.profile.notifications.msg_saved'))
   }
   catch (e: unknown) {
-    toast.error((e as Error)?.message || t('component.profile.notifications.err_save_failed'))
+    toast.danger((e as Error)?.message || t('component.profile.notifications.err_save_failed'))
   }
   finally {
     saving.value = false
@@ -112,7 +112,7 @@ onMounted(loadPreference)
                   {{ ch.desc }}
                 </div>
               </div>
-              <XhSwitch v-model:checked="pref[ch.key]" />
+              <XhSwitch v-model:checked="pref[ch.key]" :aria-label="ch.label" />
             </div>
           </div>
         </div>
@@ -148,17 +148,18 @@ onMounted(loadPreference)
                   {{ item.desc }}
                 </div>
               </div>
-              <XhSwitch v-model:checked="pref[item.key]" />
+              <XhSwitch v-model:checked="pref[item.key]" :aria-label="item.label" />
             </div>
           </div>
         </div>
         <div class="pf-section__actions">
-          <XhButton @click="loadPreference">
+          <XhButton variant="subtle" @click="loadPreference">
             {{ t('common.actions.reset') }}
           </XhButton>
-          <XhButton tone="brand" :loading="saving" @click="savePreference">
+          <XhButton variant="subtle" tone="brand" :loading="saving" @click="savePreference">
+            <XhButtonIndicator />
             <Icon icon="lucide:save" width="16" />
-            {{ t('component.profile.notifications.btn_save_preference') }}
+            <XhButtonLabel>{{ t('component.profile.notifications.btn_save_preference') }}</XhButtonLabel>
           </XhButton>
         </div>
       </section>

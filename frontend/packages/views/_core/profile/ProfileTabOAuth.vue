@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import type { MyOAuthAppItem, MyOAuthAppSecret } from '~/types'
-import { XhAlertDescription, XhAlertIcon, XhAlertRoot, XhAlertTitle, XhButton, XhEmptyStateDescription, XhEmptyStateIcon, XhEmptyStateRoot, XhEmptyStateTitle, XhSpinner, XhSwitch, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
+import { XhAlertContent, XhAlertDescription, XhAlertIndicator, XhAlertRoot, XhAlertTitle, XhButton, XhEmptyStateDescription, XhEmptyStateIndicator, XhEmptyStateRoot, XhEmptyStateTitle, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhInputGroupRoot, XhSpinner, XhSwitch, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
 import { onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { XEditModal, XInput, XSelect, XTooltip } from '~/components'
@@ -42,7 +42,7 @@ async function loadApps() {
     apps.value = await apis.getMyOAuthAppsApi()
   }
   catch (e) {
-    toast.error((e as Error).message || t('component.profile.oauth.err_load_failed'))
+    toast.danger((e as Error).message || t('component.profile.oauth.err_load_failed'))
   }
   finally {
     loading.value = false
@@ -73,11 +73,11 @@ function openEdit(app: MyOAuthAppItem) {
 
 async function handleSubmit() {
   if (!form.appName.trim()) {
-    toast.error(t('component.profile.oauth.err_name_required'))
+    toast.danger(t('component.profile.oauth.err_name_required'))
     return false
   }
   if (!form.redirectUris.trim()) {
-    toast.error(t('component.profile.oauth.err_callback_required'))
+    toast.danger(t('component.profile.oauth.err_callback_required'))
     return false
   }
 
@@ -110,7 +110,7 @@ async function handleSubmit() {
     return true
   }
   catch (e) {
-    toast.error((e as Error).message || t('component.profile.oauth.err_save_failed'))
+    toast.danger((e as Error).message || t('component.profile.oauth.err_save_failed'))
     return false
   }
   finally {
@@ -132,7 +132,7 @@ function handleRegenerate(app: MyOAuthAppItem) {
         await loadApps()
       }
       catch (e) {
-        toast.error((e as Error).message || t('component.profile.oauth.err_save_failed'))
+        toast.danger((e as Error).message || t('component.profile.oauth.err_save_failed'))
       }
     },
   })
@@ -145,7 +145,7 @@ async function handleToggleStatus(app: MyOAuthAppItem, enabled: boolean) {
     await loadApps()
   }
   catch (e) {
-    toast.error((e as Error).message || t('component.profile.oauth.err_save_failed'))
+    toast.danger((e as Error).message || t('component.profile.oauth.err_save_failed'))
     await loadApps()
   }
 }
@@ -168,7 +168,7 @@ function handleDelete(app: MyOAuthAppItem) {
         await loadApps()
       }
       catch (e) {
-        toast.error((e as Error).message || t('component.profile.oauth.err_delete_failed'))
+        toast.danger((e as Error).message || t('component.profile.oauth.err_delete_failed'))
       }
     },
   })
@@ -197,7 +197,7 @@ onMounted(() => {
           </div>
         </div>
         <div class="pf-section__extra">
-          <XhButton size="sm" tone="brand" @click="openCreate">
+          <XhButton variant="subtle" size="sm" tone="brand" @click="openCreate">
             <span><Icon icon="lucide:plus" /></span>
             {{ t('component.profile.oauth.btn_create') }}
           </XhButton>
@@ -205,33 +205,35 @@ onMounted(() => {
       </div>
       <div class="pf-section__body">
         <XhAlertRoot v-if="newSecret" tone="warning" class="pf-secret-alert">
-          <XhAlertIcon>
+          <XhAlertIndicator>
             <Icon icon="lucide:triangle-alert" width="16" height="16" />
-          </XhAlertIcon>
-          <XhAlertTitle>{{ t('component.profile.oauth.secret_alert_title') }}</XhAlertTitle>
-          <XhAlertDescription>
-            <div class="pf-secret-row">
-              <span class="pf-secret-label">Client ID</span>
-              <div class="xh-input-group">
-                <XInput :value="newSecret.clientId" readonly size="sm" />
-                <XhButton size="sm" @click="copyText(newSecret.clientId)">
-                  <span><Icon icon="lucide:copy" /></span>
-                </XhButton>
+          </XhAlertIndicator>
+          <XhAlertContent>
+            <XhAlertTitle>{{ t('component.profile.oauth.secret_alert_title') }}</XhAlertTitle>
+            <XhAlertDescription>
+              <div class="pf-secret-row">
+                <span class="pf-secret-label">Client ID</span>
+                <XhInputGroupRoot class="pf-secret-group">
+                  <XInput :value="newSecret.clientId" read-only size="sm" aria-label="Client ID" />
+                  <XhButton variant="subtle" size="sm" icon-only :aria-label="t('common.actions.copy')" @click="copyText(newSecret.clientId)">
+                    <span><Icon icon="lucide:copy" /></span>
+                  </XhButton>
+                </XhInputGroupRoot>
               </div>
-            </div>
-            <div v-if="newSecret.clientType === 'Confidential' && newSecret.clientSecret" class="pf-secret-row">
-              <span class="pf-secret-label">Secret</span>
-              <div class="xh-input-group">
-                <XInput :value="newSecret.clientSecret" readonly size="sm" type="password" />
-                <XhButton size="sm" @click="copyText(newSecret.clientSecret)">
-                  <span><Icon icon="lucide:copy" /></span>
-                </XhButton>
+              <div v-if="newSecret.clientType === 'Confidential' && newSecret.clientSecret" class="pf-secret-row">
+                <span class="pf-secret-label">Secret</span>
+                <XhInputGroupRoot class="pf-secret-group">
+                  <XInput :value="newSecret.clientSecret" read-only size="sm" type="password" aria-label="Secret" />
+                  <XhButton variant="subtle" size="sm" icon-only :aria-label="t('common.actions.copy')" @click="copyText(newSecret.clientSecret)">
+                    <span><Icon icon="lucide:copy" /></span>
+                  </XhButton>
+                </XhInputGroupRoot>
               </div>
-            </div>
-            <div v-else class="pf-secret-public-hint">
-              {{ t('component.profile.oauth.secret_alert_public') }}
-            </div>
-          </XhAlertDescription>
+              <div v-else class="pf-secret-public-hint">
+                {{ t('component.profile.oauth.secret_alert_public') }}
+              </div>
+            </XhAlertDescription>
+          </XhAlertContent>
         </XhAlertRoot>
 
         <div class="xh-loading-stage" :class="{ 'is-loading': loading }">
@@ -239,9 +241,9 @@ onMounted(() => {
             <XhSpinner />
           </div>
           <XhEmptyStateRoot v-if="apps.length === 0 && !loading" class="pf-empty">
-            <XhEmptyStateIcon>
+            <XhEmptyStateIndicator>
               <Icon icon="lucide:inbox" width="28" height="28" />
-            </XhEmptyStateIcon>
+            </XhEmptyStateIndicator>
             <XhEmptyStateTitle>{{ t('common.no_data') }}</XhEmptyStateTitle>
             <XhEmptyStateDescription>{{ t('component.profile.oauth.empty') }}</XhEmptyStateDescription>
           </XhEmptyStateRoot>
@@ -263,7 +265,7 @@ onMounted(() => {
                 </div>
                 <div class="pf-credential__key">
                   <code>{{ app.clientId }}</code>
-                  <XhButton size="sm" variant="ghost" @click="copyText(app.clientId)">
+                  <XhButton size="sm" variant="ghost" icon-only :aria-label="t('common.actions.copy')" @click="copyText(app.clientId)">
                     <span><Icon icon="lucide:copy" /></span>
                   </XhButton>
                 </div>
@@ -277,22 +279,23 @@ onMounted(() => {
               <div class="pf-credential__actions">
                 <XhSwitch
                   :title="t('component.profile.oauth.tooltip_toggle')"
+                  :aria-label="t('component.profile.oauth.tooltip_toggle')"
                   size="sm"
                   :checked="app.status === 'Enabled'"
                   @update:checked="(v: boolean) => handleToggleStatus(app, v)"
                 />
                 <XTooltip :content="t('component.profile.oauth.tooltip_edit')">
-                  <XhButton size="sm" variant="ghost" @click="openEdit(app)">
+                  <XhButton size="sm" variant="ghost" icon-only :aria-label="t('component.profile.oauth.tooltip_edit')" @click="openEdit(app)">
                     <span><Icon icon="lucide:pencil" /></span>
                   </XhButton>
                 </XTooltip>
                 <XTooltip :content="t('component.profile.oauth.tooltip_regenerate')">
-                  <XhButton size="sm" variant="ghost" @click="handleRegenerate(app)">
+                  <XhButton size="sm" variant="ghost" icon-only :aria-label="t('component.profile.oauth.tooltip_regenerate')" @click="handleRegenerate(app)">
                     <span><Icon icon="lucide:rotate-ccw" /></span>
                   </XhButton>
                 </XTooltip>
                 <XTooltip :content="t('component.profile.oauth.tooltip_delete')">
-                  <XhButton size="sm" variant="ghost" tone="danger" @click="handleDelete(app)">
+                  <XhButton size="sm" variant="ghost" tone="danger" icon-only :aria-label="t('component.profile.oauth.tooltip_delete')" @click="handleDelete(app)">
                     <span><Icon icon="lucide:trash-2" /></span>
                   </XhButton>
                 </XTooltip>
@@ -311,43 +314,61 @@ onMounted(() => {
       :loading="submitting"
       @save="handleSubmit"
     >
-      <div class="pf-oauth-form">
-        <div class="pf-oauth-field">
-          <label class="pf-oauth-field__label">{{ t('component.profile.oauth.field_name') }}</label>
-          <XInput v-model:value="form.appName" :placeholder="t('component.profile.oauth.field_name_ph')" :max-length="100" />
-        </div>
-        <div class="pf-oauth-field">
-          <label class="pf-oauth-field__label">{{ t('component.profile.oauth.field_type') }}</label>
-          <XSelect v-model:value="form.clientType" :options="clientTypeOptions" :disabled="editingId != null" />
-        </div>
-        <div class="pf-oauth-field">
-          <label class="pf-oauth-field__label">{{ t('component.profile.oauth.field_callback') }}</label>
-          <XInput
-            v-model:value="form.redirectUris"
-            type="textarea"
-            :placeholder="t('component.profile.oauth.field_callback_ph')"
-            :autosize="{ minRows: 2, maxRows: 4 }"
-            :max-length="2000"
-          />
-        </div>
-        <div class="pf-oauth-field">
-          <label class="pf-oauth-field__label">{{ t('component.profile.oauth.field_homepage') }}</label>
-          <XInput v-model:value="form.homepage" placeholder="https://example.com" :max-length="200" />
-        </div>
-        <div class="pf-oauth-field">
-          <label class="pf-oauth-field__label">{{ t('component.profile.oauth.field_desc') }}</label>
-          <XInput
-            v-model:value="form.appDescription"
-            type="textarea"
-            :placeholder="t('component.profile.oauth.field_desc_ph')"
-            :autosize="{ minRows: 2, maxRows: 3 }"
-            :max-length="500"
-          />
-        </div>
-        <div class="pf-oauth-field">
-          <label class="pf-oauth-field__label">{{ t('component.profile.oauth.field_logo') }}</label>
-          <XInput v-model:value="form.logo" placeholder="https://example.com/logo.png" :max-length="500" />
-        </div>
+      <div class="xh-edit-form-grid">
+        <XhFieldRoot>
+          <XhFieldLabel>{{ t('component.profile.oauth.field_name') }}</XhFieldLabel>
+          <XhFieldControl>
+            <XInput v-model:value="form.appName" :placeholder="t('component.profile.oauth.field_name_ph')" :max-length="100" />
+          </XhFieldControl>
+          <XhFieldErrorText />
+        </XhFieldRoot>
+        <XhFieldRoot>
+          <XhFieldLabel>{{ t('component.profile.oauth.field_type') }}</XhFieldLabel>
+          <XhFieldControl>
+            <XSelect v-model:value="form.clientType" :options="clientTypeOptions" :disabled="editingId != null" />
+          </XhFieldControl>
+          <XhFieldErrorText />
+        </XhFieldRoot>
+        <XhFieldRoot class="xh-span-2">
+          <XhFieldLabel>{{ t('component.profile.oauth.field_callback') }}</XhFieldLabel>
+          <XhFieldControl>
+            <XInput
+              v-model:value="form.redirectUris"
+              type="textarea"
+              :placeholder="t('component.profile.oauth.field_callback_ph')"
+              :autosize="{ minRows: 2, maxRows: 4 }"
+              :max-length="2000"
+            />
+          </XhFieldControl>
+          <XhFieldErrorText />
+        </XhFieldRoot>
+        <XhFieldRoot>
+          <XhFieldLabel>{{ t('component.profile.oauth.field_homepage') }}</XhFieldLabel>
+          <XhFieldControl>
+            <XInput v-model:value="form.homepage" placeholder="https://example.com" :max-length="200" />
+          </XhFieldControl>
+          <XhFieldErrorText />
+        </XhFieldRoot>
+        <XhFieldRoot>
+          <XhFieldLabel>{{ t('component.profile.oauth.field_logo') }}</XhFieldLabel>
+          <XhFieldControl>
+            <XInput v-model:value="form.logo" placeholder="https://example.com/logo.png" :max-length="500" />
+          </XhFieldControl>
+          <XhFieldErrorText />
+        </XhFieldRoot>
+        <XhFieldRoot class="xh-span-2">
+          <XhFieldLabel>{{ t('component.profile.oauth.field_desc') }}</XhFieldLabel>
+          <XhFieldControl>
+            <XInput
+              v-model:value="form.appDescription"
+              type="textarea"
+              :placeholder="t('component.profile.oauth.field_desc_ph')"
+              :autosize="{ minRows: 2, maxRows: 3 }"
+              :max-length="500"
+            />
+          </XhFieldControl>
+          <XhFieldErrorText />
+        </XhFieldRoot>
       </div>
     </XEditModal>
   </div>
@@ -413,23 +434,5 @@ onMounted(() => {
 
 .pf-oauth__callback {
   word-break: break-all;
-}
-
-.pf-oauth-form {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.pf-oauth-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.pf-oauth-field__label {
-  font-size: 13px;
-  font-weight: 500;
-  opacity: 0.85;
 }
 </style>

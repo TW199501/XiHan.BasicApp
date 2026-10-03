@@ -93,7 +93,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 2,
     render: (row) => {
       const r = row as unknown as CodeGenHistoryListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: genStatusTagType(r.genStatus) }, () => h(XhTagLabel, () => getOptionLabel(GEN_STATUS_OPTIONS, r.genStatus)))
+      return h(XhTagRoot, { variant: 'subtle', tone: genStatusTagType(r.genStatus) }, () => h(XhTagLabel, () => getOptionLabel(GEN_STATUS_OPTIONS, r.genStatus)))
     },
   },
   {
@@ -153,7 +153,7 @@ const fields = computed<ListFieldSchema[]>(() => [
 ])
 
 const schema = computed<PageSchema>(() => ({
-  pageCode: 'develop.codegen.history',
+  pageCode: 'code_gen.history',
   pageName: t('develop.code_gen.tabs.history'),
   rowKey: 'basicId',
   fields: fields.value,
@@ -213,11 +213,11 @@ async function handleDetail(row: CodeGenHistoryListItemDto) {
   try {
     detail.value = await codeGenHistoryApi.detail(row.basicId)
     if (!detail.value) {
-      toast.error(t('develop.code_gen.history.not_found'))
+      toast.danger(t('develop.code_gen.history.not_found'))
     }
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('develop.code_gen.history.load_detail_failed'))
+    toast.danger((error as Error)?.message || t('develop.code_gen.history.load_detail_failed'))
   }
   finally {
     detailLoading.value = false
@@ -338,7 +338,7 @@ async function handleDetail(row: CodeGenHistoryListItemDto) {
 
         <div class="xh-dialog-footer">
           <XhFlex justify="end">
-            <XhButton @click="detailVisible = false">
+            <XhButton variant="subtle" @click="detailVisible = false">
               {{ t('common.actions.close') }}
             </XhButton>
           </XhFlex>

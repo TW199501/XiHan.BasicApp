@@ -48,6 +48,8 @@ public sealed class NotificationAppService
 
     private readonly ILogger<NotificationAppService> _logger;
 
+    private readonly IFieldSecurityService _fieldSecurity;
+
     /// <summary>
     /// 构造函数
     /// </summary>
@@ -60,7 +62,8 @@ public sealed class NotificationAppService
         ICurrentUser currentUser,
         INotificationRepository notificationRepository,
         IUserNotificationRepository userNotificationRepository,
-        ILogger<NotificationAppService> logger)
+        ILogger<NotificationAppService> logger,
+        IFieldSecurityService fieldSecurity)
     {
         _notificationDomainService = notificationDomainService;
         _notificationFanoutService = notificationFanoutService;
@@ -71,17 +74,21 @@ public sealed class NotificationAppService
         _notificationRepository = notificationRepository;
         _userNotificationRepository = userNotificationRepository;
         _logger = logger;
+        _fieldSecurity = fieldSecurity;
     }
 
     /// <summary>
     /// 创建系统通知
     /// </summary>
     [UnitOfWork(true)]
-    [PermissionAuthorize(SaasPermissionCodes.Message.Create)]
+    [PermissionAuthorize(SaasPermissionCodes.Notification.Create)]
     public async Task<NotificationDetailDto> CreateNotificationAsync(NotificationCreateDto input, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(input);
         cancellationToken.ThrowIfCancellationRequested();
+
+        // 字段安全：只读字段不能填写
+        await _fieldSecurity.EnsureCreatableAsync(typeof(SysNotification), input, cancellationToken);
 
         // 渲染前置：提供模板编码时按 站内通知 渠道渲染（租户模板优先回退全局），
         // 标题取模板 Subject、内容取模板 Content；模板缺失/停用/损坏回退调用方传入值
@@ -113,7 +120,7 @@ public sealed class NotificationAppService
     /// 删除系统通知
     /// </summary>
     [UnitOfWork(true)]
-    [PermissionAuthorize(SaasPermissionCodes.Message.Delete)]
+    [PermissionAuthorize(SaasPermissionCodes.Notification.Delete)]
     public async Task DeleteNotificationAsync(long id, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -128,7 +135,7 @@ public sealed class NotificationAppService
     /// ② 给发布者经 TaskProgress 推送任务进度（灵动岛呈现）。推送失败均不影响发布结果。
     /// </remarks>
     [UnitOfWork(true)]
-    [PermissionAuthorize(SaasPermissionCodes.Message.Publish)]
+    [PermissionAuthorize(SaasPermissionCodes.Notification.Publish)]
     public async Task<NotificationPublishResultDto> PublishNotificationAsync(NotificationPublishDto input, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(input);
@@ -168,11 +175,14 @@ public sealed class NotificationAppService
     /// 更新系统通知
     /// </summary>
     [UnitOfWork(true)]
-    [PermissionAuthorize(SaasPermissionCodes.Message.Update)]
+    [PermissionAuthorize(SaasPermissionCodes.Notification.Update)]
     public async Task<NotificationDetailDto> UpdateNotificationAsync(NotificationUpdateDto input, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(input);
         cancellationToken.ThrowIfCancellationRequested();
+
+        // 字段安全：只读字段不能改，表单交回的脱敏值还原为原值
+        await _fieldSecurity.EnsureUpdatableAsync(typeof(SysNotification), input.BasicId, input, cancellationToken);
 
         var result = await _notificationDomainService.UpdateNotificationAsync(NotificationApplicationMapper.ToUpdateCommand(input), cancellationToken);
         return NotificationApplicationMapper.ToDetailDto(result.Notification);
@@ -181,7 +191,7 @@ public sealed class NotificationAppService
     /// <summary>
     /// 催办：对未读人员重新实时推送（不改库；在线者即时再提醒）
     /// </summary>
-    [PermissionAuthorize(SaasPermissionCodes.Message.Publish)]
+    [PermissionAuthorize(SaasPermissionCodes.Notification.Publish)]
     public async Task<NotificationPublishResultDto> RemindAsync(long id, CancellationToken cancellationToken = default)
     {
         if (id <= 0)

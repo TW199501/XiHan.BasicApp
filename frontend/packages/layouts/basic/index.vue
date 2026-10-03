@@ -19,6 +19,8 @@ import { useRefresh, useTheme } from '~/hooks'
 import { Icon } from '~/iconify'
 import { useShellExtensions, useSplitViewStore, useTabbarStore } from '~/stores'
 import AppFavorites from './components/AppFavorites.vue'
+import AppFloatToolbar from './components/AppFloatToolbar.vue'
+import AppGlobalSearch from './components/AppGlobalSearch.vue'
 import AppHeader from './components/AppHeader.vue'
 import AppPreferenceDrawer from './components/AppPreferenceDrawer.vue'
 import AppSidebar from './components/AppSidebar.vue'
@@ -155,6 +157,19 @@ function onSideOpen(side: 'left' | 'right'): void {
   openTabInNewWindow(sidePath(side))
 }
 
+/**
+ * 工具组不在分隔条里，按下冒泡不到它：手柄、标签与留白处按下时把这一下原样转交给分隔条，照旧能拖。
+ * 按钮自己拦了 pointerdown，点按钮不会顺带拖动
+ */
+function forwardSplitDrag(event: PointerEvent): void {
+  const divider = splitRowRef.value?.querySelector<HTMLElement>('[data-scope="splitter"][data-part="resize-trigger"]')
+  if (!divider || event.button !== 0) {
+    return
+  }
+  event.preventDefault()
+  divider.dispatchEvent(new PointerEvent('pointerdown', event))
+}
+
 // ── 左右互换（收缩成页面大图标 → 图标交叉飞行 → 展开为交换后内容）──
 // 互换 = 翻转视觉顺序（CSS order），两侧组件实例原地保留——不导航、不重挂载、不刷新。
 // shrink：两屏向中心收缩淡出、各自中央弹出页面大图标 → fly：两枚图标互飞对方位置
@@ -223,7 +238,7 @@ async function swapSplitPanes(): Promise<void> {
 
 const appVersion = __APP_VERSION__
 const appBuildTime = __APP_BUILD_TIME__
-const appHomepage = __APP_HOMEPAGE__
+const appRepository = __APP_REPOSITORY__
 const appName = __APP_NAME__
 
 const sidebarForceDark = computed(() => shell.appStore.sidebarDark && !isDark.value)
@@ -282,10 +297,7 @@ const sidebarEnableState = computed(
     <!-- ==================== Main Content ==================== -->
     <div class="flex flex-1 flex-col overflow-hidden transition-all duration-300 ease-in">
       <!-- Header + Tabbar wrapper -->
-      <div
-        :style="shell.headerWrapperStyle.value"
-        class="overflow-hidden"
-      >
+      <div :style="shell.headerWrapperStyle.value">
         <!-- Header -->
         <header
           v-if="shell.appStore.headerShow"
@@ -300,7 +312,7 @@ const sidebarEnableState = computed(
           <!-- Logo in header (for header-nav / mixed-nav / mobile) -->
           <div
             v-if="shell.showHeaderLogo.value"
-            :style="{ minWidth: `${shell.isMobile.value ? 40 : shell.appStore.sidebarWidth}px` }"
+            :style="{ minWidth: `${shell.headerLogoMinWidth.value}px` }"
           >
             <div
               :class="{ dark: headerForceDark }"
@@ -431,13 +443,16 @@ const sidebarEnableState = computed(
                 class="split-divider"
                 :aria-label="t('tabbar.split_divider')"
                 :style="{ order: 2 }"
-              >
-                <!-- 分割线悬浮工具组：左/右页面各自的替换、刷新、新窗口 + 中部共享操作。
-                     按键不外泄，免得工具组里的方向键被分隔条当成推动 -->
-                <div class="split-tools" @keydown.stop>
+              />
+
+              <!-- 分割线悬浮工具组：左/右页面各自的替换、刷新、新窗口 + 中部共享操作。
+                   放在分隔条外面：分隔条是 role=separator，子孙对读屏一律按展示处理，按钮放进去就没人念得到。
+                   这里是排在分隔条后面的一个零宽锚点，工具组从它那儿居中压在分隔条上 -->
+              <div class="split-tools-anchor" :style="{ order: 2 }">
+                <div class="split-tools" @pointerdown="forwardSplitDrag">
                   <span class="split-tools__label">{{ t('tabbar.split_left_label') }}</span>
                   <XDropdown :options="splitTabOptions" placement="bottom-start" @select="(key: string) => onSideSelect('left', key)">
-                    <button type="button" class="split-tools__btn" :title="t('tabbar.split_switch_left')" @pointerdown.stop>
+                    <button type="button" class="split-tools__btn" :title="t('tabbar.split_switch_left')" :aria-label="t('tabbar.split_switch_left')" @pointerdown.stop>
                       <Icon icon="lucide:replace" width="16" height="16" />
                     </button>
                   </XDropdown>
@@ -462,7 +477,7 @@ const sidebarEnableState = computed(
 
                   <span class="split-tools__label">{{ t('tabbar.split_right_label') }}</span>
                   <XDropdown :options="splitTabOptions" placement="bottom-start" @select="(key: string) => onSideSelect('right', key)">
-                    <button type="button" class="split-tools__btn" :title="t('tabbar.split_switch_right')" @pointerdown.stop>
+                    <button type="button" class="split-tools__btn" :title="t('tabbar.split_switch_right')" :aria-label="t('tabbar.split_switch_right')" @pointerdown.stop>
                       <Icon icon="lucide:replace" width="16" height="16" />
                     </button>
                   </XDropdown>
@@ -473,7 +488,7 @@ const sidebarEnableState = computed(
                     <Icon icon="lucide:external-link" width="16" height="16" />
                   </button>
                 </div>
-              </XhSplitterResizeTrigger>
+              </div>
 
               <XhSplitterPanel
                 :index="1"
@@ -523,7 +538,7 @@ const sidebarEnableState = computed(
       >
         <!-- Left: Dev version info -->
         <div v-if="shell.appStore.footerShowDevInfo" class="footer-section-left" :class="{ 'text-center': shell.isMobile.value }">
-          <a :href="appHomepage" target="_blank" class="hover:underline">{{ appName }}</a>
+          <a :href="appRepository" target="_blank" class="hover:underline">{{ appName }}</a>
           v{{ appVersion }}({{ appBuildTime }})
           · Powered by
           <template v-for="(p, i) in FOUNDATION_PROJECTS" :key="p.name">
@@ -563,6 +578,8 @@ const sidebarEnableState = computed(
 
     <!-- ==================== Extra ==================== -->
     <AppPreferenceDrawer />
+    <AppGlobalSearch />
+    <AppFloatToolbar />
     <!-- 壳层扩展浮层（可选模块注册的抽屉/全局对话框） -->
     <component :is="overlay" v-for="(overlay, index) in shellOverlays" :key="index" />
     <AppTabOverview />
@@ -582,27 +599,34 @@ const sidebarEnableState = computed(
 </template>
 
 <style scoped>
-/* 分屏容器：与内容区齐平，四角不圆 */
+/* 分屏容器：与内容区齐平，四角不圆。分隔条粗细放在这一层，工具组的锚点也要读它 */
 .split-row {
   --xh-splitter-radius: 0;
+  --xh-splitter-trigger-thickness: 6px;
 }
 
-/* 分屏分隔条：粗细与配色经组件库皮肤的自定义属性接入本站主题色；position 供工具组定位 */
+/* 分屏分隔条：配色经组件库皮肤的自定义属性接入本站主题色 */
 .split-divider {
-  --xh-splitter-trigger-thickness: 6px;
   --xh-splitter-trigger-bg: hsl(var(--border));
   --xh-splitter-trigger-bg-hover: hsl(var(--primary) / 50%);
   --xh-splitter-trigger-bg-dragging: hsl(var(--primary) / 50%);
+}
 
+/* 工具组的锚点：零宽的一列，紧跟分隔条，再往回拉半条分隔条宽——正好落在分隔条中线上。
+   两侧外边距一负一正、合计为零，不占面板的宽度；逻辑方向属性让 rtl（左右互换）下照样对齐 */
+.split-tools-anchor {
   position: relative;
+  flex: none;
+  inline-size: 0;
+  margin-inline: calc(var(--xh-splitter-trigger-thickness) / -2) calc(var(--xh-splitter-trigger-thickness) / 2);
 }
 
 /* 分割线悬浮工具组：垂直胶囊，悬浮在分隔条中央，不占两侧空间。
-   默认隐藏，悬停分割线（含工具组自身）、分隔条获得焦点或拖拽中才显示 */
+   默认隐藏，悬停分割线或工具组自身、分隔条获得焦点、工具组内有焦点或拖拽中才显示 */
 .split-tools {
   position: absolute;
   top: 50%;
-  left: 50%;
+  left: 0;
   z-index: 21;
   display: flex;
   flex-direction: column;
@@ -620,9 +644,8 @@ const sidebarEnableState = computed(
   transition: opacity var(--xh-motion-duration-enter) var(--xh-motion-ease-enter);
 }
 
-.split-divider:hover .split-tools,
-.split-divider:focus-within .split-tools,
-.split-divider[data-dragging] .split-tools {
+.split-divider:is(:hover, :focus, [data-dragging]) + .split-tools-anchor .split-tools,
+.split-tools:is(:hover, :focus-within) {
   opacity: 1;
   pointer-events: auto;
 }
@@ -644,7 +667,7 @@ const sidebarEnableState = computed(
   background: hsl(var(--border));
 }
 
-/* 拖拽手柄：按下的事件冒泡到分隔条，工具组里也能拖 */
+/* 拖拽手柄：按下由工具组转交给分隔条，工具组里也能拖 */
 .split-tools__grip {
   display: inline-flex;
   padding: 2px 0;
@@ -691,7 +714,7 @@ const sidebarEnableState = computed(
 .split-secondary {
   transform-origin: center;
   transition:
-    transform var(--xh-motion-duration-enter) var(--xh-motion-ease-sweep),
+    transform var(--xh-motion-duration-move) var(--xh-motion-ease-sweep),
     opacity var(--xh-motion-duration-enter) var(--xh-motion-ease-sweep);
 }
 
@@ -731,11 +754,11 @@ const sidebarEnableState = computed(
 }
 
 .swap-icon__card.is-in {
-  animation: swap-card-in var(--xh-motion-duration-enter) var(--xh-motion-ease-settle) both;
+  animation: swap-card-in var(--xh-motion-duration-move) var(--xh-motion-ease-settle) both;
 }
 
 .swap-icon__card.is-out {
-  animation: swap-card-out var(--xh-motion-duration-enter) var(--xh-motion-ease-exit) both;
+  animation: swap-card-out var(--xh-motion-duration-move) var(--xh-motion-ease-exit) both;
 }
 
 @keyframes swap-card-in {

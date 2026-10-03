@@ -79,7 +79,7 @@ const fields = computed<ListFieldSchema[]>(() => [
       return h('div', { class: 'ds-name' }, [
         h('span', { class: 'ds-name__text' }, r.sourceName),
         r.isDefault
-          ? h(XhTagRoot, { variant: 'outline', tone: 'info' }, () => h(XhTagLabel, () => t('common.statuses.default_tag')))
+          ? h(XhTagRoot, { variant: 'subtle', tone: 'info' }, () => h(XhTagLabel, () => t('common.statuses.default_tag')))
           : null,
       ])
     },
@@ -120,8 +120,8 @@ const fields = computed<ListFieldSchema[]>(() => [
     render: (row) => {
       const r = row as unknown as CodeGenDataSourceListItemDto
       return r.lastTestTime
-        ? h(XhTagRoot, { variant: 'outline', tone: r.lastTestResult ? 'success' : 'danger' }, () => h(XhTagLabel, () => (r.lastTestResult ? t('develop.code_gen.datasource.tag_normal') : t('develop.code_gen.datasource.tag_failed'))))
-        : h(XhTagRoot, { variant: 'outline', tone: 'neutral' }, () => h(XhTagLabel, () => t('develop.code_gen.datasource.tag_untested')))
+        ? h(XhTagRoot, { variant: 'subtle', tone: r.lastTestResult ? 'success' : 'danger' }, () => h(XhTagLabel, () => (r.lastTestResult ? t('develop.code_gen.datasource.tag_normal') : t('develop.code_gen.datasource.tag_failed'))))
+        : h(XhTagRoot, { variant: 'subtle', tone: 'neutral' }, () => h(XhTagLabel, () => t('develop.code_gen.datasource.tag_untested')))
     },
   },
   {
@@ -138,14 +138,14 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 6,
     render: (row) => {
       const r = row as unknown as CodeGenDataSourceListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: r.status === EnableStatus.Enabled ? 'success' : 'danger' }, () => h(XhTagLabel, () => getOptionLabel(statusEnumOptions.value, r.status)))
+      return h(XhTagRoot, { variant: 'subtle', tone: r.status === EnableStatus.Enabled ? 'success' : 'danger' }, () => h(XhTagLabel, () => getOptionLabel(statusEnumOptions.value, r.status)))
     },
   },
   { key: 'sort', title: t('common.fields.sort'), dataType: 'number', width: 80, sortable: true, order: 7 },
 ])
 
 const schema = computed<PageSchema>(() => ({
-  pageCode: 'develop.codegen.datasource',
+  pageCode: 'code_gen.datasource',
   pageName: t('develop.code_gen.tabs.datasource'),
   rowKey: 'basicId',
   batchRemovable: true,
@@ -166,10 +166,10 @@ const schema = computed<PageSchema>(() => ({
     remove: id => codeGenDataSourceApi.delete(id),
   },
   actions: [
-    { key: 'create', title: t('develop.code_gen.datasource.add'), scope: 'page', type: 'primary', icon: 'lucide:plus' },
+    { key: 'create', title: t('develop.code_gen.datasource.add'), scope: 'page', type: 'primary', icon: 'lucide:plus', permission: 'code_gen.create' },
     { key: 'test', title: t('develop.code_gen.datasource.action_test'), scope: 'row', type: 'info', icon: 'lucide:plug' },
-    { key: 'edit', title: t('common.actions.edit'), scope: 'row', icon: 'lucide:pencil' },
-    { key: 'delete', title: t('common.actions.delete'), scope: 'row', type: 'error', icon: 'lucide:trash-2' },
+    { key: 'edit', title: t('common.actions.edit'), scope: 'row', icon: 'lucide:pencil', permission: 'code_gen.update' },
+    { key: 'delete', title: t('common.actions.delete'), scope: 'row', type: 'error', icon: 'lucide:trash-2', permission: 'code_gen.delete' },
   ],
 }))
 
@@ -205,12 +205,12 @@ async function handleTest(row: CodeGenDataSourceListItemDto) {
       toast.success(t('develop.code_gen.datasource.test_success', { ms: result.elapsedMilliseconds }))
     }
     else {
-      toast.error(result.message || t('develop.code_gen.datasource.test_failed'))
+      toast.danger(result.message || t('develop.code_gen.datasource.test_failed'))
     }
     reload()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('develop.code_gen.datasource.test_error'))
+    toast.danger((error as Error)?.message || t('develop.code_gen.datasource.test_error'))
   }
   finally {
     testingId.value = null
@@ -232,7 +232,7 @@ function handleDelete(row: CodeGenDataSourceListItemDto) {
         reload()
       }
       catch (error) {
-        toast.error((error as Error)?.message || t('common.messages.delete_failed'))
+        toast.danger((error as Error)?.message || t('common.messages.delete_failed'))
       }
     },
   })
@@ -275,7 +275,7 @@ async function handleEdit(row: CodeGenDataSourceListItemDto) {
   try {
     const detail = await codeGenDataSourceApi.detail(row.basicId)
     if (!detail) {
-      toast.error(t('develop.code_gen.datasource.not_found'))
+      toast.danger(t('develop.code_gen.datasource.not_found'))
       return
     }
     editingStatus.value = detail.status
@@ -300,7 +300,7 @@ async function handleEdit(row: CodeGenDataSourceListItemDto) {
     modalVisible.value = true
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('develop.code_gen.datasource.load_detail_failed'))
+    toast.danger((error as Error)?.message || t('develop.code_gen.datasource.load_detail_failed'))
   }
 }
 
@@ -378,7 +378,7 @@ async function handleSubmit() {
     reload()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('common.messages.save_failed'))
+    toast.danger((error as Error)?.message || t('common.messages.save_failed'))
   }
   finally {
     submitLoading.value = false
@@ -401,7 +401,7 @@ async function handleSubmit() {
         class="xh-edit-form-grid"
         @submit="handleSubmit"
       >
-        <XhFormFieldGroup value="sourceName">
+        <XhFormFieldGroup name="sourceName">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.datasource.form_source_name') }}</XhFieldLabel>
             <XhFieldControl>
@@ -410,7 +410,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="databaseType">
+        <XhFormFieldGroup name="databaseType">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.datasource.form_database_type') }}</XhFieldLabel>
             <XhFieldControl>
@@ -419,7 +419,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="host">
+        <XhFormFieldGroup name="host">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.datasource.form_host') }}</XhFieldLabel>
             <XhFieldControl>
@@ -428,7 +428,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="port">
+        <XhFormFieldGroup name="port">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.datasource.form_port') }}</XhFieldLabel>
             <XhFieldControl>
@@ -437,7 +437,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="databaseName">
+        <XhFormFieldGroup name="databaseName">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.datasource.form_database_name') }}</XhFieldLabel>
             <XhFieldControl>
@@ -446,7 +446,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="userName">
+        <XhFormFieldGroup name="userName">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.datasource.form_user_name') }}</XhFieldLabel>
             <XhFieldControl>
@@ -455,7 +455,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="password">
+        <XhFormFieldGroup name="password">
           <XhFieldRoot>
             <XhFieldLabel>{{ form.basicId ? t('develop.code_gen.datasource.form_password_edit') : t('develop.code_gen.datasource.form_password') }}</XhFieldLabel>
             <XhFieldControl>
@@ -464,7 +464,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="connectionTimeout">
+        <XhFormFieldGroup name="connectionTimeout">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.datasource.form_connection_timeout') }}</XhFieldLabel>
             <XhFieldControl>
@@ -473,7 +473,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="sort">
+        <XhFormFieldGroup name="sort">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.datasource.form_sort') }}</XhFieldLabel>
             <XhFieldControl>
@@ -482,7 +482,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="isDefault">
+        <XhFormFieldGroup name="isDefault">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.datasource.form_is_default') }}</XhFieldLabel>
             <XhFieldControl>
@@ -491,7 +491,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup v-if="!form.basicId" value="status">
+        <XhFormFieldGroup v-if="!form.basicId" name="status">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('common.fields.status') }}</XhFieldLabel>
             <XhFieldControl>
@@ -500,7 +500,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="connectionString" class="xh-span-2">
+        <XhFormFieldGroup name="connectionString" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.datasource.form_connection_string') }}</XhFieldLabel>
             <XhFieldControl>
@@ -515,7 +515,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="sourceDescription" class="xh-span-2">
+        <XhFormFieldGroup name="sourceDescription" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.datasource.form_description') }}</XhFieldLabel>
             <XhFieldControl>
@@ -530,14 +530,14 @@ async function handleSubmit() {
 </template>
 
 <style scoped>
-.ds-name {
+:deep(.ds-name) {
   display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
 }
 
-.ds-name__text {
+:deep(.ds-name__text) {
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;

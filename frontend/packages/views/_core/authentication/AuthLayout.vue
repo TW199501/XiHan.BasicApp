@@ -33,7 +33,7 @@ const showEntryTabs = computed(() =>
 
 const appVersion = __APP_VERSION__
 const appBuildTime = __APP_BUILD_TIME__
-const appHomepage = __APP_HOMEPAGE__
+const appRepository = __APP_REPOSITORY__
 const appName = __APP_NAME__
 </script>
 
@@ -55,8 +55,10 @@ const appName = __APP_NAME__
 
     <LoginToolbar @layout-change="(align) => (formAlign = align)" />
 
+    <!-- 小屏上下各留 80px：上面给绝对定位的工具条（16 + 42）让路，下面给页脚折成两行（约 65）让路；
+         宽屏两者都够不着卡片，退回 56 -->
     <div
-      class="relative z-[1] mx-auto flex min-h-screen w-full max-w-[1420px] items-center px-4 py-14 sm:px-8"
+      class="relative z-[1] mx-auto flex min-h-screen w-full max-w-[1420px] items-center px-4 py-20 sm:px-8 sm:py-14"
     >
       <div
         class="auth-card relative w-full overflow-hidden rounded-[30px] border border-[hsl(var(--border))] shadow-[0_32px_80px_hsl(var(--foreground)/0.12)]"
@@ -84,7 +86,7 @@ const appName = __APP_NAME__
             <div class="relative z-[1] lg:absolute lg:left-10 lg:top-14 xl:left-14 xl:top-16">
               <img :src="appLogo" :alt="appTitle" class="mb-3 h-[78px] w-[78px] rounded-2xl object-contain">
               <p
-                class="text-xs font-semibold uppercase tracking-[0.32em] text-[hsl(var(--primary))]"
+                class="auth-caption font-semibold uppercase tracking-[0.32em] text-[hsl(var(--primary))]"
               >
                 {{ appTitle }}
               </p>
@@ -96,7 +98,7 @@ const appName = __APP_NAME__
                   {{ appSubtitle || t('page.auth.slogan_title') }}
                 </h2>
                 <span
-                  class="slogan-tag -mt-px inline-block rounded-full border-2 border-[hsl(var(--primary)/0.25)] bg-[hsl(var(--primary)/0.1)] px-3.5 py-1 text-[15px] leading-5 font-semibold text-[hsl(var(--primary))]"
+                  class="slogan-tag -mt-px inline-block rounded-full border-2 border-[hsl(var(--primary)/0.25)] bg-[hsl(var(--primary)/0.1)] px-3.5 py-1 auth-body font-semibold text-[hsl(var(--primary))]"
                 >
                   {{ appDescription || t('page.auth.slogan_desc') }}
                 </span>
@@ -118,15 +120,17 @@ const appName = __APP_NAME__
               class="overflow-hidden w-full h-full"
               :class="formAlign === 'center' ? 'max-w-[560px]' : 'max-w-[460px]'"
             >
-              <AuthEntrySwitcher v-if="showEntryTabs" class="mb-7" />
-              <!-- 这层裁掉切换过渡的 ±24px 平移；4px 内衬同时给控件聚焦环（外扩 ring-offset 2px + ring-width 2px）留出显示空间 -->
-              <div class="overflow-hidden p-1" :class="showEntryTabs ? 'min-h-[520px]' : ''">
-                <router-view v-slot="{ Component }">
-                  <transition name="auth-slide" mode="out-in">
-                    <component :is="Component" />
-                  </transition>
-                </router-view>
-              </div>
+              <!-- 登录四种入口下表单即当前标签的面板，故由切换器接住；其余页面它只透传内容 -->
+              <AuthEntrySwitcher :enabled="showEntryTabs">
+                <!-- 这层裁掉切换过渡的 ±24px 平移。不必再为聚焦环留内衬：组件库的环是 outline 配负 offset，画在控件盒内侧 -->
+                <div class="overflow-hidden" :class="showEntryTabs ? 'min-h-[520px]' : ''">
+                  <router-view v-slot="{ Component }">
+                    <transition name="auth-slide" mode="out-in">
+                      <component :is="Component" />
+                    </transition>
+                  </router-view>
+                </div>
+              </AuthEntrySwitcher>
             </div>
           </div>
         </div>
@@ -136,10 +140,10 @@ const appName = __APP_NAME__
     <!-- Footer -->
     <footer
       v-if="showFooter"
-      class="auth-footer absolute bottom-0 left-0 flex w-full flex-col items-center justify-center gap-1 px-4 py-3 text-xs text-[hsl(var(--muted-foreground))]"
+      class="auth-footer absolute bottom-0 left-0 flex w-full flex-col items-center justify-center gap-1 px-4 py-3 auth-caption text-[hsl(var(--muted-foreground))]"
     >
       <div v-if="appStore.footerShowDevInfo" class="leading-tight">
-        <a :href="appHomepage" target="_blank" class="hover:underline">{{ appName }}</a>
+        <a :href="appRepository" target="_blank" class="hover:underline">{{ appName }}</a>
         v{{ appVersion }}({{ appBuildTime }}) · Powered by
         <template v-for="(item, i) in FOUNDATION_PROJECTS" :key="item.name">
           <span v-if="i > 0"> &amp; </span>

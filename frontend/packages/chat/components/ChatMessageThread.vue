@@ -4,7 +4,7 @@ import type {
   ChatMessageItem,
 } from '../types'
 import type { ChatContextMenuItem } from './ChatContextMenu.vue'
-import { useThread, XhButton, XhEmptyStateDescription, XhEmptyStateIcon, XhEmptyStateRoot, XhEmptyStateTitle, XhPopoverContent, XhPopoverPositioner, XhPopoverRoot, XhPopoverTrigger, XhSpinner, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
+import { useMessageFeed, XhButton, XhEmptyStateDescription, XhEmptyStateIndicator, XhEmptyStateRoot, XhEmptyStateTitle, XhPopoverContent, XhPopoverPositioner, XhPopoverRoot, XhPopoverTitle, XhPopoverTrigger, XhSpinner, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import XUserAvatar from '~/components/common/UserAvatar.vue'
@@ -47,12 +47,16 @@ const { t } = useI18n()
 const chatStore = useChatStore()
 const userStore = useUserStore()
 
-// 消息区的滚动机器：新消息来了跟到底，用户上翻就松手，往上补历史时按锚元素补偿滚动位置
-const { api: thread, viewportRef, contentRef } = useThread({
+// 消息流的滚动机器：新消息来了跟到底，用户上翻就松手，往上补历史时按锚元素补偿滚动位置。
+// 每条消息是 list 的直接子节点、role=article，根上带方向键 / PageUp / PageDown 的巡航
+const { api: feed, rootRef, viewportRef, contentRef } = useMessageFeed({
   // 距底 80px 内算在底，沿用旧判定的阈值
   threshold: 80,
+  get count() {
+    return chatStore.activeMessages.length
+  },
   get translations() {
-    return xhTranslationsOfCurrentLocale().thread
+    return xhTranslationsOfCurrentLocale()['message-feed']
   },
 })
 
@@ -369,7 +373,7 @@ async function handleCtxSelect(key: string | number) {
         toast.success(t('chat.thread.copied'))
       }
       catch (error) {
-        toast.error((error as Error)?.message || t('chat.thread.copy_failed'))
+        toast.danger((error as Error)?.message || t('chat.thread.copy_failed'))
       }
       break
     case 'reply':
@@ -476,11 +480,11 @@ function toggleSearch() {
 }
 
 function isNearBottom(): boolean {
-  return thread.value.atBottom
+  return feed.value.atBottom
 }
 
 function scrollToBottom() {
-  void nextTick(() => thread.value.scrollToBottom())
+  void nextTick(() => feed.value.scrollToBottom())
 }
 
 async function handleLoadOlder() {
@@ -507,7 +511,7 @@ async function handleRecall(item: ChatLocalMessage) {
     await chatStore.recallMessage(conversationId.value, item.messageId)
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('chat.thread.recall_failed'))
+    toast.danger((error as Error)?.message || t('chat.thread.recall_failed'))
   }
 }
 
@@ -555,9 +559,9 @@ onBeforeUnmount(() => {
   <!-- 未选择会话的空态 -->
   <div v-if="!conversation" class="flex h-full items-center justify-center">
     <XhEmptyStateRoot size="sm">
-      <XhEmptyStateIcon>
+      <XhEmptyStateIndicator>
         <Icon icon="lucide:mouse-pointer-click" width="28" height="28" />
-      </XhEmptyStateIcon>
+      </XhEmptyStateIndicator>
       <XhEmptyStateTitle>{{ t('chat.thread.select_conversation_title') }}</XhEmptyStateTitle>
       <XhEmptyStateDescription>{{ t('chat.thread.select_conversation') }}</XhEmptyStateDescription>
     </XhEmptyStateRoot>
@@ -566,7 +570,7 @@ onBeforeUnmount(() => {
   <div v-else class="flex h-full min-h-0 flex-col">
     <!-- 会话头（固定高度：单聊无副行时与群聊保持一致） -->
     <div class="flex h-[56px] shrink-0 items-center gap-2 border-b border-border px-3">
-      <button v-if="props.showBack" type="button" class="chat-thread-btn" @click="emit('back')">
+      <button v-if="props.showBack" type="button" class="chat-thread-btn" :aria-label="t('header.toolbar.nav_back')" @click="emit('back')">
         <Icon icon="lucide:arrow-left" width="16" height="16" />
       </button>
       <XUserAvatar :avatar="conversation.avatar" :name="conversation.displayName" :size="32" />
@@ -583,10 +587,10 @@ onBeforeUnmount(() => {
           {{ t('chat.members.count', { n: conversation.memberCount }) }}
         </div>
       </div>
-      <button type="button" class="chat-thread-btn" :title="t('chat.thread.search')" @click="toggleSearch">
+      <button type="button" class="chat-thread-btn" :title="t('chat.thread.search')" :aria-label="t('chat.thread.search')" @click="toggleSearch">
         <Icon icon="lucide:search" width="16" height="16" />
       </button>
-      <button v-if="isGroupLike" type="button" class="chat-thread-btn" @click="emit('members')">
+      <button v-if="isGroupLike" type="button" class="chat-thread-btn" :aria-label="t('chat.members.section_members', { n: conversation.memberCount })" @click="emit('members')">
         <Icon icon="lucide:users" width="16" height="16" />
       </button>
     </div>
@@ -598,7 +602,8 @@ onBeforeUnmount(() => {
         size="sm"
         clearable
         :placeholder="t('chat.thread.search_placeholder')"
-        @keydown.enter="runSearch(false)"
+        :aria-label="t('chat.thread.search')"
+        @enter="runSearch(false)"
         @clear="searchResults = []"
       >
         <template #prefix>
@@ -623,7 +628,7 @@ onBeforeUnmount(() => {
           <span class="block truncate text-left text-xs text-foreground">{{ messageBodyLabel(hit) }}</span>
         </button>
         <div v-if="searchHasMore" class="flex justify-center py-1">
-          <XhButton text size="sm" @click="runSearch(true)">
+          <XhButton variant="subtle" size="sm" @click="runSearch(true)">
             {{ t('chat.thread.load_more') }}
           </XhButton>
         </div>
@@ -646,10 +651,11 @@ onBeforeUnmount(() => {
         <XhPopoverPositioner>
           <XhPopoverContent>
             <div class="max-h-64 overflow-y-auto">
-              <div class="mb-1 flex items-center gap-1.5 text-[13px] font-semibold text-foreground">
+              <!-- 标题部件给浮层起名（content 的 aria-labelledby 指向它） -->
+              <XhPopoverTitle class="mb-1 flex items-center gap-1.5 text-[13px] font-semibold text-foreground">
                 <Icon icon="lucide:megaphone" width="13" height="13" class="text-amber-500" />
                 {{ t('chat.members.announcement_title') }}
-              </div>
+              </XhPopoverTitle>
               <div class="text-xs leading-relaxed whitespace-pre-wrap text-muted-foreground">
                 {{ conversation.announcement }}
               </div>
@@ -671,7 +677,7 @@ onBeforeUnmount(() => {
           <Icon icon="lucide:chevron-down" width="12" height="12" />
         </XhPopoverTrigger>
         <XhPopoverPositioner>
-          <XhPopoverContent>
+          <XhPopoverContent :aria-label="t('chat.thread.pinned_count', { n: pinnedList.length })">
             <div class="flex max-h-64 flex-col gap-1 overflow-y-auto">
               <div
                 v-for="pinnedItem in pinnedList"
@@ -702,34 +708,36 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- 消息流 -->
-    <div v-bind="thread.getRootProps()" class="min-h-0 flex-1">
+    <div v-bind="feed.getRootProps()" :ref="(el) => (rootRef = el as HTMLElement | null)" class="min-h-0 flex-1">
       <div
-        v-bind="thread.getViewportProps()"
+        v-bind="feed.getViewportProps()"
         :ref="(el) => (viewportRef = el as HTMLElement | null)"
         class="px-3 py-2"
         @scroll.passive="handleScroll"
       >
+        <!-- 补历史与空态不是消息，放在 list 外：role=feed 只认 article 子节点 -->
+        <div v-if="hasMoreOlder || historyLoading" class="flex justify-center py-1.5">
+          <XhSpinner v-if="historyLoading" size="sm" />
+          <XhButton v-else variant="ghost" size="sm" @click="handleLoadOlder">
+            {{ t('chat.thread.load_more') }}
+          </XhButton>
+        </div>
+
+        <div v-if="!chatStore.activeMessages.length && !historyLoading" class="py-12">
+          <XhEmptyStateRoot size="sm">
+            <XhEmptyStateIndicator>
+              <Icon icon="lucide:inbox" width="28" height="28" />
+            </XhEmptyStateIndicator>
+            <XhEmptyStateTitle>{{ t('common.no_data') }}</XhEmptyStateTitle>
+            <XhEmptyStateDescription>{{ t('chat.thread.empty') }}</XhEmptyStateDescription>
+          </XhEmptyStateRoot>
+        </div>
+
         <!-- 消息之间的间距各自带着，这一层不再叠加 -->
-        <div v-bind="thread.getContentProps()" :ref="(el) => (contentRef = el as HTMLElement | null)" style="--xh-thread-content-gap: 0; --xh-thread-content-py: 0">
-          <div v-if="hasMoreOlder || historyLoading" class="flex justify-center py-1.5">
-            <XhSpinner v-if="historyLoading" size="sm" />
-            <XhButton v-else variant="ghost" size="sm" @click="handleLoadOlder">
-              {{ t('chat.thread.load_more') }}
-            </XhButton>
-          </div>
-
-          <div v-if="!chatStore.activeMessages.length && !historyLoading" class="py-12">
-            <XhEmptyStateRoot size="sm">
-              <XhEmptyStateIcon>
-                <Icon icon="lucide:inbox" width="28" height="28" />
-              </XhEmptyStateIcon>
-              <XhEmptyStateTitle>{{ t('common.no_data') }}</XhEmptyStateTitle>
-              <XhEmptyStateDescription>{{ t('chat.thread.empty') }}</XhEmptyStateDescription>
-            </XhEmptyStateRoot>
-          </div>
-
+        <div v-bind="feed.getListProps()" :ref="(el) => (contentRef = el as HTMLElement | null)" style="--xh-message-feed-gap: 0; --xh-message-feed-p: 0">
           <div
-            v-for="item in chatStore.activeMessages"
+            v-for="(item, index) in chatStore.activeMessages"
+            v-bind="feed.getItemProps({ id: String(item.messageId), index })"
             :id="`chat-msg-${item.messageId}`"
             :key="item.messageId"
             @contextmenu="openContextMenu($event, item)"
@@ -753,7 +761,7 @@ onBeforeUnmount(() => {
             <div class="max-w-[80%] rounded-lg bg-card px-3 py-2 text-[13px] leading-relaxed whitespace-pre-wrap break-words">
               <template v-if="assistantStream.error">
                 <span class="text-error">{{ assistantStream.error }}</span>
-                <XhButton size="sm" text tone="brand" class="ml-2" @click="chatStore.dismissAssistantStream(conversation.conversationId)">
+                <XhButton variant="subtle" size="sm" tone="brand" class="ml-2" @click="chatStore.dismissAssistantStream(conversation.conversationId)">
                   {{ t('chat.thread.assistant_dismiss') }}
                 </XhButton>
               </template>

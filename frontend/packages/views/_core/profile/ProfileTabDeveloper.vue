@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import type { ApiCredentialItem, ApiCredentialSecret } from '~/types'
-import { XhAlertDescription, XhAlertIcon, XhAlertRoot, XhAlertTitle, XhButton, XhEmptyStateDescription, XhEmptyStateIcon, XhEmptyStateRoot, XhEmptyStateTitle, XhSpinner, XhSwitch, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
+import { XhAlertContent, XhAlertDescription, XhAlertIndicator, XhAlertRoot, XhAlertTitle, XhButton, XhButtonIndicator, XhButtonLabel, XhEmptyStateDescription, XhEmptyStateIndicator, XhEmptyStateRoot, XhEmptyStateTitle, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhInputGroupRoot, XhSpinner, XhSwitch, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { XEditModal, XInput, XSelect, XTooltip } from '~/components'
@@ -28,7 +28,7 @@ async function loadCredentials() {
     credentials.value = await apis.getApiCredentialsApi()
   }
   catch (e) {
-    toast.error((e as Error).message || t('component.profile.developer.err_load_failed'))
+    toast.danger((e as Error).message || t('component.profile.developer.err_load_failed'))
   }
   finally {
     credentialsLoading.value = false
@@ -49,7 +49,7 @@ async function handleCreateCredential() {
     await loadCredentials()
   }
   catch (e) {
-    toast.error((e as Error).message || t('component.profile.developer.err_create_failed'))
+    toast.danger((e as Error).message || t('component.profile.developer.err_create_failed'))
   }
   finally {
     createSubmitting.value = false
@@ -70,7 +70,7 @@ function handleRotateSecret(cred: ApiCredentialItem) {
         await loadCredentials()
       }
       catch (e) {
-        toast.error((e as Error).message || t('component.profile.developer.err_rotate_failed'))
+        toast.danger((e as Error).message || t('component.profile.developer.err_rotate_failed'))
       }
     },
   })
@@ -83,7 +83,7 @@ async function handleToggleStatus(cred: ApiCredentialItem, enabled: boolean) {
     await loadCredentials()
   }
   catch (e) {
-    toast.error((e as Error).message || t('component.profile.developer.err_update_status_failed'))
+    toast.danger((e as Error).message || t('component.profile.developer.err_update_status_failed'))
     await loadCredentials()
   }
 }
@@ -106,7 +106,7 @@ function handleDeleteCredential(cred: ApiCredentialItem) {
         await loadCredentials()
       }
       catch (e) {
-        toast.error((e as Error).message || t('component.profile.developer.err_delete_failed'))
+        toast.danger((e as Error).message || t('component.profile.developer.err_delete_failed'))
       }
     },
   })
@@ -153,7 +153,7 @@ async function handleSaveOpenApiSettings() {
     .filter(Boolean)
     .find(line => !/^\d{1,3}(?:\.\d{1,3}){3}(?:\/\d{1,2})?$/.test(line))
   if (invalid) {
-    toast.error(t('component.profile.developer.err_ip_whitelist_invalid', { value: invalid }))
+    toast.danger(t('component.profile.developer.err_ip_whitelist_invalid', { value: invalid }))
     return
   }
 
@@ -168,7 +168,7 @@ async function handleSaveOpenApiSettings() {
     toast.success(t('component.profile.developer.msg_settings_saved'))
   }
   catch (e) {
-    toast.error((e as Error).message || t('component.profile.developer.err_save_failed'))
+    toast.danger((e as Error).message || t('component.profile.developer.err_save_failed'))
   }
   finally {
     settingsSaving.value = false
@@ -195,7 +195,7 @@ onMounted(() => {
           </div>
         </div>
         <div class="pf-section__extra">
-          <XhButton size="sm" tone="brand" @click="openCreateModal">
+          <XhButton variant="subtle" size="sm" tone="brand" @click="openCreateModal">
             <span><Icon icon="lucide:plus" /></span>
             {{ t('component.profile.developer.btn_create_credential') }}
           </XhButton>
@@ -203,30 +203,32 @@ onMounted(() => {
       </div>
       <div class="pf-section__body">
         <XhAlertRoot v-if="newSecret" tone="warning" class="pf-secret-alert">
-          <XhAlertIcon>
+          <XhAlertIndicator>
             <Icon icon="lucide:triangle-alert" width="16" height="16" />
-          </XhAlertIcon>
-          <XhAlertTitle>{{ t('component.profile.developer.secret_alert_title') }}</XhAlertTitle>
-          <XhAlertDescription>
-            <div class="pf-secret-row">
-              <span class="pf-secret-label">AppKey</span>
-              <div class="xh-input-group">
-                <XInput :value="newSecret.appKey" readonly size="sm" />
-                <XhButton size="sm" @click="copyText(newSecret.appKey)">
-                  <span><Icon icon="lucide:copy" /></span>
-                </XhButton>
+          </XhAlertIndicator>
+          <XhAlertContent>
+            <XhAlertTitle>{{ t('component.profile.developer.secret_alert_title') }}</XhAlertTitle>
+            <XhAlertDescription>
+              <div class="pf-secret-row">
+                <span class="pf-secret-label">AppKey</span>
+                <XhInputGroupRoot class="pf-secret-group">
+                  <XInput :value="newSecret.appKey" read-only size="sm" aria-label="AppKey" />
+                  <XhButton variant="subtle" size="sm" icon-only :aria-label="t('common.actions.copy')" @click="copyText(newSecret.appKey)">
+                    <span><Icon icon="lucide:copy" /></span>
+                  </XhButton>
+                </XhInputGroupRoot>
               </div>
-            </div>
-            <div class="pf-secret-row">
-              <span class="pf-secret-label">Secret</span>
-              <div class="xh-input-group">
-                <XInput :value="newSecret.appSecret" readonly size="sm" type="password" />
-                <XhButton size="sm" @click="copyText(newSecret.appSecret)">
-                  <span><Icon icon="lucide:copy" /></span>
-                </XhButton>
+              <div class="pf-secret-row">
+                <span class="pf-secret-label">Secret</span>
+                <XhInputGroupRoot class="pf-secret-group">
+                  <XInput :value="newSecret.appSecret" read-only size="sm" type="password" aria-label="Secret" />
+                  <XhButton variant="subtle" size="sm" icon-only :aria-label="t('common.actions.copy')" @click="copyText(newSecret.appSecret)">
+                    <span><Icon icon="lucide:copy" /></span>
+                  </XhButton>
+                </XhInputGroupRoot>
               </div>
-            </div>
-          </XhAlertDescription>
+            </XhAlertDescription>
+          </XhAlertContent>
         </XhAlertRoot>
 
         <div class="xh-loading-stage" :class="{ 'is-loading': credentialsLoading }">
@@ -234,9 +236,9 @@ onMounted(() => {
             <XhSpinner />
           </div>
           <XhEmptyStateRoot v-if="credentials.length === 0 && !credentialsLoading" class="pf-empty">
-            <XhEmptyStateIcon>
+            <XhEmptyStateIndicator>
               <Icon icon="lucide:inbox" width="28" height="28" />
-            </XhEmptyStateIcon>
+            </XhEmptyStateIndicator>
             <XhEmptyStateTitle>{{ t('common.no_data') }}</XhEmptyStateTitle>
             <XhEmptyStateDescription>{{ t('component.profile.developer.empty_credentials') }}</XhEmptyStateDescription>
           </XhEmptyStateRoot>
@@ -253,7 +255,7 @@ onMounted(() => {
                 </div>
                 <div class="pf-credential__key">
                   <code>{{ cred.appKey }}</code>
-                  <XhButton size="sm" variant="ghost" @click="copyText(cred.appKey)">
+                  <XhButton size="sm" variant="ghost" icon-only :aria-label="t('common.actions.copy')" @click="copyText(cred.appKey)">
                     <span><Icon icon="lucide:copy" /></span>
                   </XhButton>
                 </div>
@@ -270,17 +272,18 @@ onMounted(() => {
               <div class="pf-credential__actions">
                 <XhSwitch
                   :title="t('component.profile.developer.tooltip_toggle_status')"
+                  :aria-label="t('component.profile.developer.tooltip_toggle_status')"
                   size="sm"
                   :checked="cred.status === 'Enabled'"
                   @update:checked="(v: boolean) => handleToggleStatus(cred, v)"
                 />
                 <XTooltip :content="t('component.profile.developer.tooltip_rotate')">
-                  <XhButton size="sm" variant="ghost" @click="handleRotateSecret(cred)">
+                  <XhButton size="sm" variant="ghost" icon-only :aria-label="t('component.profile.developer.tooltip_rotate')" @click="handleRotateSecret(cred)">
                     <span><Icon icon="lucide:rotate-ccw" /></span>
                   </XhButton>
                 </XTooltip>
                 <XTooltip :content="t('component.profile.developer.tooltip_delete')">
-                  <XhButton size="sm" variant="ghost" tone="danger" @click="handleDeleteCredential(cred)">
+                  <XhButton size="sm" variant="ghost" tone="danger" icon-only :aria-label="t('component.profile.developer.tooltip_delete')" @click="handleDeleteCredential(cred)">
                     <span><Icon icon="lucide:trash-2" /></span>
                   </XhButton>
                 </XTooltip>
@@ -315,7 +318,7 @@ onMounted(() => {
               </div>
             </div>
             <div class="pf-setting-row__control">
-              <XSelect v-model:value="signAlgorithm" :options="signAlgorithmOptions" class="pf-field" size="sm" />
+              <XSelect v-model:value="signAlgorithm" :options="signAlgorithmOptions" class="pf-field" size="sm" :aria-label="t('component.profile.developer.field_sign_algorithm')" />
             </div>
           </div>
           <div class="pf-setting-row pf-setting-row--block">
@@ -332,13 +335,15 @@ onMounted(() => {
               type="textarea"
               placeholder="192.168.1.1&#10;10.0.0.0/24"
               :autosize="{ minRows: 3, maxRows: 6 }"
+              :aria-label="t('component.profile.developer.field_ip_whitelist')"
             />
           </div>
         </div>
       </div>
       <div class="pf-section__actions">
-        <XhButton tone="brand" size="sm" :loading="settingsSaving" @click="handleSaveOpenApiSettings">
-          {{ t('component.profile.developer.btn_save_settings') }}
+        <XhButton variant="subtle" tone="brand" size="sm" :loading="settingsSaving" @click="handleSaveOpenApiSettings">
+          <XhButtonIndicator />
+          <XhButtonLabel>{{ t('component.profile.developer.btn_save_settings') }}</XhButtonLabel>
         </XhButton>
       </div>
     </section>
@@ -354,7 +359,15 @@ onMounted(() => {
         <div class="pf-create-form__tip">
           {{ t('component.profile.developer.create_form_tip') }}
         </div>
-        <XInput v-model:value="createName" :placeholder="t('component.profile.developer.create_name_placeholder')" :max-length="100" show-count @keydown.enter="handleCreateCredential" />
+        <div class="xh-edit-form-grid">
+          <XhFieldRoot class="xh-span-2">
+            <XhFieldLabel>{{ t('component.profile.developer.create_name_label') }}</XhFieldLabel>
+            <XhFieldControl>
+              <XInput v-model:value="createName" :placeholder="t('component.profile.developer.create_name_placeholder')" :max-length="100" show-count @enter="handleCreateCredential" />
+            </XhFieldControl>
+            <XhFieldErrorText />
+          </XhFieldRoot>
+        </div>
       </div>
     </XEditModal>
   </div>

@@ -45,14 +45,6 @@ public interface IRoleAppService : IApplicationService
     #region RolePermission
 
     /// <summary>
-    /// 授予角色权限
-    /// </summary>
-    /// <param name="input">授权参数</param>
-    /// <param name="cancellationToken">取消令牌</param>
-    /// <returns>角色权限详情</returns>
-    Task<RolePermissionDetailDto> CreateRolePermissionAsync(RolePermissionGrantDto input, CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// 批量变更角色权限（一次性提交授予与撤销，单事务）
     /// </summary>
     /// <param name="input">批量变更参数</param>
@@ -75,66 +67,27 @@ public interface IRoleAppService : IApplicationService
     /// <returns>角色权限详情</returns>
     Task<RolePermissionDetailDto> UpdateRolePermissionStatusAsync(RolePermissionStatusUpdateDto input, CancellationToken cancellationToken = default);
 
-    /// <summary>
-    /// 撤销角色权限
-    /// </summary>
-    /// <param name="id">角色权限绑定主键</param>
-    /// <param name="cancellationToken">取消令牌</param>
-    Task DeleteRolePermissionAsync(long id, CancellationToken cancellationToken = default);
-
     #endregion RolePermission
 
     #region RoleDataScope
 
     /// <summary>
-    /// 授予角色数据范围
+    /// 设置角色数据范围：档位与自定义部门一次提交（单事务）
     /// </summary>
-    /// <param name="input">授权参数</param>
+    /// <param name="input">设置参数</param>
     /// <param name="cancellationToken">取消令牌</param>
-    /// <returns>角色数据范围详情</returns>
-    Task<RoleDataScopeDetailDto> CreateRoleDataScopeAsync(RoleDataScopeGrantDto input, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// 更新角色数据范围
-    /// </summary>
-    /// <param name="input">更新参数</param>
-    /// <param name="cancellationToken">取消令牌</param>
-    /// <returns>角色数据范围详情</returns>
-    Task<RoleDataScopeDetailDto> UpdateRoleDataScopeAsync(RoleDataScopeUpdateDto input, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// 更新角色数据范围状态
-    /// </summary>
-    /// <param name="input">状态更新参数</param>
-    /// <param name="cancellationToken">取消令牌</param>
-    /// <returns>角色数据范围详情</returns>
-    Task<RoleDataScopeDetailDto> UpdateRoleDataScopeStatusAsync(RoleDataScopeStatusUpdateDto input, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// 撤销角色数据范围
-    /// </summary>
-    /// <param name="id">角色数据范围绑定主键</param>
-    /// <param name="cancellationToken">取消令牌</param>
-    Task DeleteRoleDataScopeAsync(long id, CancellationToken cancellationToken = default);
+    Task SetRoleDataScopeAsync(RoleDataScopeSetDto input, CancellationToken cancellationToken = default);
 
     #endregion RoleDataScope
 
     #region RoleHierarchy
 
     /// <summary>
-    /// 创建角色直接继承关系
+    /// 批量变更角色的直接上级（一次提交新增与解除）
     /// </summary>
-    /// <param name="input">创建参数</param>
+    /// <param name="input">批量变更参数</param>
     /// <param name="cancellationToken">取消令牌</param>
-    /// <returns>角色继承详情</returns>
-    Task<RoleHierarchyDetailDto> CreateRoleHierarchyAsync(RoleHierarchyCreateDto input, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// 删除角色直接继承关系
-    /// </summary>
-    /// <param name="id">角色继承主键</param>
-    /// <param name="cancellationToken">取消令牌</param>
-    Task DeleteRoleHierarchyAsync(long id, CancellationToken cancellationToken = default);
+    Task BatchUpdateRoleParentsAsync(RoleHierarchyBatchUpdateDto input, CancellationToken cancellationToken = default);
 
     #endregion RoleHierarchy
 }

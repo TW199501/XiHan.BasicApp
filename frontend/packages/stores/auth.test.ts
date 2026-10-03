@@ -5,7 +5,7 @@
  * 路由、API、SignalR 均以替身注入；不发真实请求、不做真实导航。
  */
 import type { RouteRecordRaw } from 'vue-router'
-import type { AppContextApis, LoginToken, MenuRoute, PermissionInfo, UserInfo } from '~/types'
+import type { AppContextApis, LoginResponse, LoginToken, MenuRoute, PermissionInfo, UserInfo } from '~/types'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { HOME_PATH, LOCK_REASON_KEY, LOCK_STATE_KEY, LOGIN_PATH, REFRESH_TOKEN_KEY, TOKEN_KEY, USER_INFO_KEY } from '~/constants'
@@ -65,6 +65,7 @@ const getPermissionsApi = vi.fn<() => Promise<PermissionInfo>>()
 const impersonationCandidates = vi.fn()
 const impersonationStart = vi.fn()
 const impersonationStop = vi.fn()
+const switchTenant = vi.fn()
 const userSettingGet = vi.fn()
 const userSettingSave = vi.fn()
 
@@ -122,6 +123,7 @@ function registerContext(options?: {
         start: impersonationStart,
         stop: impersonationStop,
       },
+      tenantApi: { switchTenant },
     } as unknown as AppContextApis,
   })
 }
@@ -208,6 +210,24 @@ describe('密码登录', () => {
     await auth.login({ username: 'a', password: 'b' })
 
     expect(duringCall).toBe(true)
+    expect(auth.loginLoading).toBe(false)
+  })
+
+  it('登录在途时再次调用直接返回 null、不发第二个请求', async () => {
+    let release!: (value: LoginResponse) => void
+    loginApi.mockImplementation(() => new Promise<LoginResponse>((resolve) => {
+      release = resolve
+    }))
+    const auth = useAuthStore()
+
+    const first = auth.login({ username: 'a', password: 'b' })
+    const second = await auth.login({ username: 'a', password: 'b' })
+
+    expect(second).toBeNull()
+    expect(loginApi).toHaveBeenCalledTimes(1)
+
+    release({ requiresTwoFactor: true, availableTwoFactorMethods: ['email'], token: null })
+    expect((await first)?.requiresTwoFactor).toBe(true)
     expect(auth.loginLoading).toBe(false)
   })
 
@@ -379,26 +399,18 @@ describe('登录落点', () => {
     expect(router.replace).toHaveBeenCalledWith(HOME_PATH)
   })
 
-  it('未进入租户且应用注册了控制中心时落到控制中心', async () => {
-    getUserInfoApi.mockResolvedValue(user({ tenantId: null }))
+  it('落在平台（令牌不带租户）时也按首页走，不再跳控制中心——落点由后端决定', async () => {
+    getUserInfoApi.mockResolvedValue(user({ tenantId: null, isPlatform: true }))
     registerContext({ controlCenter: '/control-center' })
-    const auth = useAuthStore()
-
-    await auth.handleOAuthCallback(token(), '/known/page')
-
-    expect(router.replace).toHaveBeenCalledWith('/control-center')
-  })
-
-  it('未进入租户但应用没有控制中心概念时按普通首页走', async () => {
-    getUserInfoApi.mockResolvedValue(user({ tenantId: null }))
     const auth = useAuthStore()
 
     await auth.handleOAuthCallback(token())
 
     expect(router.replace).toHaveBeenCalledWith(HOME_PATH)
+    expect(router.replace).not.toHaveBeenCalledWith('/control-center')
   })
 
-  it('已进入唯一租户时即使配了控制中心也走正常首页', async () => {
+  it('落在租户时走正常首页', async () => {
     registerContext({ controlCenter: '/control-center' })
     const auth = useAuthStore()
 
@@ -710,13 +722,39 @@ describe('模仿登录', () => {
     await first
   })
 
-  it('候选查询透传关键词', async () => {
+  it('候选查询透传关键词与租户', async () => {
     impersonationCandidates.mockResolvedValue([{ basicId: 'u-2', userName: 'bob' }])
     const auth = useAuthStore()
 
-    const items = await auth.impersonationCandidates('bo')
+    const items = await auth.impersonationCandidates({ keyword: 'bo', tenantId: '7' })
 
-    expect(impersonationCandidates).toHaveBeenCalledWith('bo')
+    expect(impersonationCandidates).toHaveBeenCalledWith({ keyword: 'bo', tenantId: '7' })
     expect(items).toHaveLength(1)
+  })
+})
+
+describe('切换上下文', () => {
+  it('换上服务端签发的新令牌、清掉旧上下文的用户信息与标签页后整页重载', async () => {
+    const location = stubLocation()
+    switchTenant.mockResolvedValue(token({ accessToken: 'switched-access', refreshToken: 'switched-refresh' }))
+    useUserStore().setUserInfo(user())
+    const auth = useAuthStore()
+
+    await auth.switchContext('7')
+
+    expect(switchTenant).toHaveBeenCalledWith({ tenantId: '7' })
+    expect(useAccessStore().accessToken).toBe('switched-access')
+    expect(useAccessStore().refreshToken).toBe('switched-refresh')
+    expect(useUserStore().userInfo).toBeNull()
+    expect(location.href).not.toBe('')
+  })
+
+  it('服务端拒绝时原样抛出，不动本地令牌', async () => {
+    useAccessStore().setAccessToken('current-access')
+    switchTenant.mockRejectedValue(new Error('当前账号不是目标租户的有效成员，无法切换。'))
+    const auth = useAuthStore()
+
+    await expect(auth.switchContext('9')).rejects.toThrow('有效成员')
+    expect(useAccessStore().accessToken).toBe('current-access')
   })
 })

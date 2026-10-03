@@ -1,9 +1,12 @@
 // Copyright (c) 2021-Present XiHanFun and contributors.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
+using XiHan.BasicApp.Saas.Domain.DomainServices;
 using XiHan.BasicApp.Saas.Domain.Enums;
+using XiHan.BasicApp.Saas.Domain.Permissions;
 using XiHan.BasicApp.Saas.Domain.Repositories;
 using XiHan.Framework.Core.Exceptions;
+using XiHan.Framework.MultiTenancy.Abstractions;
 using XiHan.Framework.Security.Users;
 
 namespace XiHan.BasicApp.Saas.Application.Services;
@@ -14,16 +17,13 @@ namespace XiHan.BasicApp.Saas.Application.Services;
 public sealed class SuperAdminProtector : ISuperAdminProtector
 {
     /// <summary>
-    /// 超级管理员角色编码（与种子/授权快照约定一致）。
-    /// </summary>
-    private const string SuperAdminRoleCode = "super_admin";
-
-    /// <summary>
     /// 禁止操作统一提示。
     /// </summary>
     private const string ForbiddenMessage = "无权操作超级管理员数据。";
 
     private readonly ICurrentUser _currentUser;
+
+    private readonly ICurrentTenant _currentTenant;
 
     private readonly IRoleRepository _roleRepository;
 
@@ -34,30 +34,39 @@ public sealed class SuperAdminProtector : ISuperAdminProtector
     /// </summary>
     public SuperAdminProtector(
         ICurrentUser currentUser,
+        ICurrentTenant currentTenant,
         IRoleRepository roleRepository,
         IUserRoleRepository userRoleRepository)
     {
         _currentUser = currentUser;
+        _currentTenant = currentTenant;
         _roleRepository = roleRepository;
         _userRoleRepository = userRoleRepository;
     }
 
     /// <summary>
-    /// 当前用户是否为超级管理员（持有 <c>super_admin</c> 角色）。
+    /// 当前用户此刻是否以超级管理员身份操作（平台上下文且持有 <c>super_admin</c> 角色）。
     /// </summary>
+    /// <remarks>
+    /// 超管是平台概念，豁免只在平台成立：进了业务租户就只是那个租户的成员，按其在该租户的角色与套餐判定，
+    /// 与授权快照「超管通配只在平台」同一口径。
+    /// </remarks>
     public bool IsCurrentUserSuperAdmin()
     {
-        return _currentUser.IsInRole(SuperAdminRoleCode);
+        return _currentTenant.IsPlatformOperation() && _currentUser.IsInRole(SaasRoleCodes.SuperAdmin);
     }
 
     /// <summary>
-    /// 获取受保护角色 id 集合（RoleCode == <c>super_admin</c> 的角色）。
+    /// 获取受保护角色 id 集合（平台的 <c>super_admin</c> 角色）。
     /// </summary>
+    /// <remarks>
+    /// 超管是平台概念：受保护的是 TenantId=0 的 <c>super_admin</c> 系统角色，平台行经读共享在任何作用域都可见。
+    /// </remarks>
     public async Task<IReadOnlyCollection<long>> GetProtectedRoleIdsAsync(CancellationToken cancellationToken = default)
     {
-        // 写路径低频，直接查不缓存。RoleCode==super_admin 的角色（System 角色，TenantId=0）。
+        // 写路径低频，直接查不缓存
         var roles = await _roleRepository.GetListAsync(
-            role => role.RoleCode == SuperAdminRoleCode,
+            role => role.TenantId == 0 && role.RoleCode == SaasRoleCodes.SuperAdmin,
             cancellationToken);
 
         return roles.Select(role => role.BasicId).Distinct().ToList();
@@ -66,20 +75,13 @@ public sealed class SuperAdminProtector : ISuperAdminProtector
     /// <summary>
     /// 获取受保护用户 id 集合（持有受保护角色、且授权有效的用户）。
     /// </summary>
+    /// <remarks>
+    /// 「是不是超管」是全局事实：授权行不论带哪个租户的戳都算，跨租户查找，与当前作用域无关。
+    /// </remarks>
     public async Task<IReadOnlyCollection<long>> GetProtectedUserIdsAsync(CancellationToken cancellationToken = default)
     {
         var roleIds = await GetProtectedRoleIdsAsync(cancellationToken);
-        if (roleIds.Count == 0)
-        {
-            return [];
-        }
-
-        // 持有受保护角色、且授权有效（Status=Valid）的用户。
-        var userRoles = await _userRoleRepository.GetListAsync(
-            userRole => roleIds.Contains(userRole.RoleId) && userRole.Status == ValidityStatus.Valid,
-            cancellationToken);
-
-        return userRoles.Select(userRole => userRole.UserId).Distinct().ToList();
+        return await _userRoleRepository.GetValidUserIdsByRoleIdsIgnoreTenantAsync(roleIds, cancellationToken);
     }
 
     /// <summary>

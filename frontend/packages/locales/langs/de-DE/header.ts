@@ -1,4 +1,8 @@
 export default {
+  context: {
+    platform: 'Plattform',
+    switch: 'Aktuell: {name}. Zum Wechseln klicken',
+  },
   user: {
     profile: 'Profil',
     lock: 'Bildschirm sperren',
@@ -8,6 +12,8 @@ export default {
     entry: 'Identität übernehmen',
     title: 'Als anderer Benutzer anmelden',
     hint: 'Zur Fehlersuche bei Problemen, die dieser Benutzer gemeldet hat. Aktionen werden protokolliert, sensible Vorgänge sind gesperrt.',
+    scope_label: 'Bereich des Identitätswechsels',
+    scope_platform: 'Plattformkonten',
     search_placeholder: 'Nach Benutzername, Spitzname oder Namen suchen',
     reason_placeholder: 'Grund (optional, wird im Audit-Protokoll erfasst)',
     empty_title: 'Kein Benutzer verfügbar',
@@ -37,6 +43,7 @@ export default {
   },
   timezone: {
     switch_success: 'Zeitzone gewechselt: {timezone}',
+    search: 'Zeitzonen suchen',
   },
   notification: {
     bell: 'Benachrichtigungen',
@@ -79,9 +86,12 @@ export default {
     fullscreen_enter: 'Vollbild',
     fullscreen_exit: 'Vollbild verlassen',
     preferences: 'Einstellungen',
+    float_tools: 'Schnellwerkzeuge',
     refresh_page: 'Seite aktualisieren',
     nav_back: 'Zurück',
     nav_forward: 'Vorwärts',
+    menu_scroll_prev: 'Vorherige Menüpunkte',
+    menu_scroll_next: 'Nächste Menüpunkte',
     sidebar_collapse: 'Seitenleiste einklappen',
     sidebar_expand: 'Seitenleiste ausklappen',
   },

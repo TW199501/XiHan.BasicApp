@@ -1,16 +1,17 @@
 <script lang="ts" setup>
 import type { FormRules } from '@xihan-ui/headless'
-import { XhCheckbox, XhFieldControl, XhFieldRoot, XhFormFieldGroup, XhFormRoot, XhFormSubmitTrigger } from '@xihan-ui/vue'
+import type { LegalDocumentKind } from './legal'
 
-import { computed, ref } from 'vue'
+import { XhCheckbox, XhFieldControl, XhFieldLabel, XhFieldRoot, XhFormFieldGroup, XhFormRoot, XhFormSubmitTrigger } from '@xihan-ui/vue'
+import { computed, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { XInput } from '~/components'
 import { toast } from '~/composables'
 import { LOGIN_PATH } from '~/constants'
 import { useTheme } from '~/hooks'
-import { Icon } from '~/iconify'
 import { useAppContext } from '~/stores'
+import LegalDocumentDialog from './LegalDocumentDialog.vue'
 import { useAuthFormInvalid } from './use-auth-form-invalid'
 
 defineOptions({ name: 'RegisterPage' })
@@ -19,10 +20,18 @@ const { isDark } = useTheme()
 const { t } = useI18n()
 const router = useRouter()
 const { apis } = useAppContext()
-const loading = ref(false)
-const showPassword = ref(false)
-const showConfirmPassword = ref(false)
 const agreePolicy = ref(false)
+/** 同意条款那段文案里夹着两颗文书按钮，放不进复选框的标签插槽，复选框经 aria-labelledby 取它作名字 */
+const agreeLabelId = useId()
+
+/** 正在查看的法律文书；弹窗关掉后保留上一份，关闭动画里标题不会跳成另一份 */
+const legalKind = ref<LegalDocumentKind>('privacy-policy')
+const legalOpen = ref(false)
+
+function openLegal(kind: LegalDocumentKind) {
+  legalKind.value = kind
+  legalOpen.value = true
+}
 
 const formData = ref({
   username: '',
@@ -97,20 +106,21 @@ const rules = computed<FormRules>(() => ({
   confirmPassword: [
     { required: true, message: t('page.auth.confirm_password_placeholder') },
     {
-      // 第二参是整表值，跨字段规则从它读，不必回头取 formData
+      // 第二参是整表值，跨字段规则从它读，不必回头取 formData；先填它、再改密码时由 deps 带着重验
+      deps: ['password'],
       validator: (value, values) =>
         value === values.password ? null : t('page.auth.password_mismatch'),
     },
   ],
 }))
 
+// 返回的 Promise 交给表单：落定前提交钮报在途、再按不重复提交，失败在这里自己接住
 async function onSubmit() {
   try {
     if (!agreePolicy.value) {
       toast.warning(t('page.auth.agree_required'))
       return
     }
-    loading.value = true
     await apis.registerApi({
       username: formData.value.username,
       email: formData.value.email,
@@ -123,18 +133,11 @@ async function onSubmit() {
   catch (err: unknown) {
     const error = err as { message?: string }
     if (error?.message) {
-      toast.error(error.message)
+      toast.danger(error.message)
     }
-  }
-  finally {
-    loading.value = false
   }
 }
 
-function handleKeydown(e: KeyboardEvent) {
-  if (e.key === 'Enter')
-    onSubmit()
-}
 const onAuthInvalid = useAuthFormInvalid()
 </script>
 
@@ -145,7 +148,7 @@ const onAuthInvalid = useAuthFormInvalid()
         {{ t('page.auth.create_account_title') }}
       </h1>
       <p
-        class="mt-3 text-[15px] leading-7"
+        class="mt-3 auth-body"
         :class="isDark ? 'text-gray-300' : 'text-[hsl(var(--muted-foreground))]'"
       >
         {{ t('page.auth.register_subtitle') }}
@@ -157,11 +160,14 @@ const onAuthInvalid = useAuthFormInvalid()
       :rules="rules"
       validate-on="blur"
       @invalid="onAuthInvalid"
-      @keydown="handleKeydown"
       @submit="onSubmit"
     >
-      <XhFormFieldGroup value="username" class="!mb-6">
+      <!-- 各字段靠占位文案表意，标签只留给读屏 -->
+      <XhFormFieldGroup name="username" class="!mb-6">
         <XhFieldRoot>
+          <XhFieldLabel class="sr-only">
+            {{ t('page.auth.username_placeholder') }}
+          </XhFieldLabel>
           <XhFieldControl>
             <XInput
               v-model:value="formData.username"
@@ -172,8 +178,11 @@ const onAuthInvalid = useAuthFormInvalid()
           </XhFieldControl>
         </XhFieldRoot>
       </XhFormFieldGroup>
-      <XhFormFieldGroup value="email" class="!mb-6">
+      <XhFormFieldGroup name="email" class="!mb-6">
         <XhFieldRoot>
+          <XhFieldLabel class="sr-only">
+            {{ t('page.auth.email_placeholder') }}
+          </XhFieldLabel>
           <XhFieldControl>
             <XInput
               v-model:value="formData.email"
@@ -184,29 +193,42 @@ const onAuthInvalid = useAuthFormInvalid()
           </XhFieldControl>
         </XhFieldRoot>
       </XhFormFieldGroup>
-      <XhFormFieldGroup value="password" class="!mb-3">
+      <!-- 密码档自带显隐钮，不再另摆眼睛图标 -->
+      <XhFormFieldGroup name="password" class="!mb-6">
         <XhFieldRoot>
+          <XhFieldLabel class="sr-only">
+            {{ t('page.login.password_placeholder') }}
+          </XhFieldLabel>
           <XhFieldControl>
             <XInput
               v-model:value="formData.password"
-              :type="showPassword ? 'text' : 'password'"
+              type="password"
               size="lg"
               :placeholder="t('page.login.password_placeholder')"
               autocomplete="new-password"
-            >
-              <template #suffix>
-                <span
-                  class="cursor-pointer"
-                  :class="isDark ? 'text-gray-400' : 'text-[hsl(var(--muted-foreground))]'"
-                  @click="showPassword = !showPassword"
-                ><Icon :icon="showPassword ? 'lucide:eye-off' : 'lucide:eye'" width="16" /></span>
-              </template>
-            </XInput>
+            />
           </XhFieldControl>
         </XhFieldRoot>
       </XhFormFieldGroup>
 
-      <!-- Password strength -->
+      <XhFormFieldGroup name="confirmPassword" :class="formData.password ? '!mb-3' : '!mb-6'">
+        <XhFieldRoot>
+          <XhFieldLabel class="sr-only">
+            {{ t('page.auth.confirm_password_placeholder') }}
+          </XhFieldLabel>
+          <XhFieldControl>
+            <XInput
+              v-model:value="formData.confirmPassword"
+              type="password"
+              size="lg"
+              :placeholder="t('page.auth.confirm_password_placeholder')"
+              autocomplete="new-password"
+            />
+          </XhFieldControl>
+        </XhFieldRoot>
+      </XhFormFieldGroup>
+
+      <!-- 密码强度放在两个密码框之后：输密码与确认密码紧挨着，中间不插一条强度条 -->
       <div v-if="formData.password" class="flex gap-2 items-center mb-6">
         <div class="flex flex-1 gap-1">
           <div
@@ -219,52 +241,35 @@ const onAuthInvalid = useAuthFormInvalid()
             }"
           />
         </div>
-        <span class="text-xs" :style="{ color: strengthColor }">{{ strengthLabel }}</span>
+        <span class="auth-caption" :style="{ color: strengthColor }">{{ strengthLabel }}</span>
       </div>
-      <div v-else class="mb-3" />
 
-      <XhFormFieldGroup value="confirmPassword" class="!mb-6">
-        <XhFieldRoot>
-          <XhFieldControl>
-            <XInput
-              v-model:value="formData.confirmPassword"
-              :type="showConfirmPassword ? 'text' : 'password'"
-              size="lg"
-              :placeholder="t('page.auth.confirm_password_placeholder')"
-              autocomplete="new-password"
-            >
-              <template #suffix>
-                <span
-                  class="cursor-pointer"
-                  :class="isDark ? 'text-gray-400' : 'text-[hsl(var(--muted-foreground))]'"
-                  @click="showConfirmPassword = !showConfirmPassword"
-                ><Icon :icon="showConfirmPassword ? 'lucide:eye-off' : 'lucide:eye'" width="16" /></span>
-              </template>
-            </XInput>
-          </XhFieldControl>
-        </XhFieldRoot>
-      </XhFormFieldGroup>
-
-      <!-- 复选框只是那个方框，没有标签插槽：文案是并排的一段，不能塞进它里面 -->
+      <!-- 文案里夹着按钮，不能塞进复选框的标签插槽（label 里不能套可聚焦元素）：并排放一段，复选框经 aria-labelledby 指向它 -->
       <div class="mb-6">
         <span class="xh-checkbox-row">
-          <XhCheckbox v-model:checked="agreePolicy" size="sm" />
-          <span class="xh-checkbox-row__label text-sm">
+          <XhCheckbox v-model:checked="agreePolicy" :aria-labelledby="agreeLabelId" />
+          <span :id="agreeLabelId" class="xh-checkbox-row__label auth-body">
             {{ t('page.auth.agree_text') }}
-            <a class="link-primary" href="#">{{ t('page.auth.privacy_policy') }}</a>
+            <!-- 打开弹窗而不是跳页：原先的 href="#" 在哈希路由下会把人带回首页 -->
+            <button type="button" class="link-primary legal-link" @click="openLegal('privacy-policy')">
+              {{ t('page.auth.privacy_policy') }}
+            </button>
             {{ t('page.auth.and') }}
-            <a class="link-primary" href="#">{{ t('page.auth.terms_of_service') }}</a>
+            <button type="button" class="link-primary legal-link" @click="openLegal('terms-of-service')">
+              {{ t('page.auth.terms_of_service') }}
+            </button>
           </span>
         </span>
       </div>
+      <LegalDocumentDialog v-model:open="legalOpen" :kind="legalKind" />
 
-      <XhFormSubmitTrigger class="auth-submit" :disabled="loading">
+      <XhFormSubmitTrigger class="auth-submit">
         {{ t('page.auth.register_btn') }}
       </XhFormSubmitTrigger>
     </XhFormRoot>
 
     <p
-      class="mt-6 text-sm text-center"
+      class="mt-6 auth-helper text-center"
       :class="isDark ? 'text-gray-400' : 'text-[hsl(var(--muted-foreground))]'"
     >
       {{ t('page.auth.already_have_account') }}
@@ -282,5 +287,20 @@ const onAuthInvalid = useAuthFormInvalid()
 
 .link-primary:hover {
   text-decoration: underline;
+}
+
+/* 文书入口是按钮（打开弹窗），外观仍是行内链接 */
+.legal-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.legal-link:focus-visible {
+  border-radius: var(--xh-radius-sm);
+  outline: var(--xh-ring-width) solid var(--xh-ring-focus);
+  outline-offset: var(--xh-ring-width);
 }
 </style>

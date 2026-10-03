@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using XiHan.BasicApp.Saas.Application.Contracts;
 using XiHan.BasicApp.Saas.Application.Dtos;
 using XiHan.BasicApp.Saas.Application.Mappers;
+using XiHan.BasicApp.Saas.Application.Services;
 using XiHan.BasicApp.Saas.Domain.DomainServices;
 using XiHan.BasicApp.Saas.Domain.Events;
 using XiHan.BasicApp.Saas.Domain.Permissions;
@@ -32,6 +33,8 @@ public sealed class UserDepartmentAppService
 
     private readonly ILocalEventBus _localEventBus;
 
+    private readonly IOperationPermissionGuard _operationPermissionGuard;
+
     /// <summary>
     /// 构造函数
     /// </summary>
@@ -39,49 +42,64 @@ public sealed class UserDepartmentAppService
         IUserDomainService userDomainService,
         IPositionRepository positionRepository,
         IUserDepartmentRepository userDepartmentRepository,
-        ILocalEventBus localEventBus)
+        ILocalEventBus localEventBus,
+        IOperationPermissionGuard operationPermissionGuard)
     {
         _userDomainService = userDomainService;
         _positionRepository = positionRepository;
         _userDepartmentRepository = userDepartmentRepository;
         _localEventBus = localEventBus;
+        _operationPermissionGuard = operationPermissionGuard;
     }
 
     #region 用户部门
 
     /// <summary>
-    /// 分配用户部门归属
+    /// 批量变更用户部门归属（一次性提交分配与撤销，单事务）
     /// </summary>
+    /// <remarks>
+    /// 入口与「分配部门」按钮同挂授予权限；本次含撤销项时再要撤销权限，只分配不撤销的提交不需要撤销权限。
+    /// </remarks>
     [UnitOfWork(true)]
     [PermissionAuthorize(SaasPermissionCodes.UserDepartment.Grant)]
-    public async Task<UserDepartmentDetailDto> CreateUserDepartmentAsync(UserDepartmentAssignDto input, CancellationToken cancellationToken = default)
+    public async Task BatchUpdateUserDepartmentsAsync(UserDepartmentBatchUpdateDto input, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(input);
         cancellationToken.ThrowIfCancellationRequested();
 
-        await EnsurePositionExistsAsync(input.PositionId, cancellationToken);
-        var result = await _userDomainService.CreateUserDepartmentAsync(UserDepartmentApplicationMapper.ToAssignCommand(input), cancellationToken);
-
-        // 部门归属变更事件：订阅方同步部门群成员（入部门自动进群）
-        await _localEventBus.PublishAsync(new UserDepartmentChangedDomainEvent(input.UserId, input.DepartmentId, isAssigned: true));
-        return UserDepartmentApplicationMapper.ToDetailDto(result.UserDepartment, result.Department);
-    }
-
-    /// <summary>
-    /// 撤销用户部门归属
-    /// </summary>
-    [UnitOfWork(true)]
-    [PermissionAuthorize(SaasPermissionCodes.UserDepartment.Revoke)]
-    public async Task DeleteUserDepartmentAsync(long id, CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        // 删除前留存归属信息，供部门归属变更事件使用（移出部门即踢出部门群）
-        var existing = await _userDepartmentRepository.GetByIdAsync(id, cancellationToken);
-        await _userDomainService.DeleteUserDepartmentAsync(id, cancellationToken);
-        if (existing is not null)
+        if (input.RevokeUserDepartmentIds.Any(id => id > 0))
         {
-            await _localEventBus.PublishAsync(new UserDepartmentChangedDomainEvent(existing.UserId, existing.DepartmentId, isAssigned: false));
+            await _operationPermissionGuard.EnsureGrantedAsync(SaasPermissionCodes.UserDepartment.Revoke, cancellationToken);
+        }
+
+        foreach (var positionId in input.Assigns.Select(assign => assign.PositionId).Distinct())
+        {
+            await EnsurePositionExistsAsync(positionId, cancellationToken);
+        }
+
+        var result = await _userDomainService.BatchUpdateUserDepartmentsAsync(
+            new UserDepartmentBatchUpdateCommand(
+                input.UserId,
+                [.. input.Assigns.Select(assign => new UserDepartmentBatchAssignItem(
+                    assign.DepartmentId,
+                    assign.IsMain,
+                    assign.Remark,
+                    assign.PositionId,
+                    assign.JobNumber,
+                    assign.JobLevel,
+                    assign.JoinTime))],
+                input.RevokeUserDepartmentIds),
+            cancellationToken);
+
+        // 部门归属变更事件：订阅方同步部门群成员（入部门自动进群，移出部门即踢出部门群）
+        foreach (var departmentId in result.RevokedDepartmentIds)
+        {
+            await _localEventBus.PublishAsync(new UserDepartmentChangedDomainEvent(input.UserId, departmentId, isAssigned: false));
+        }
+
+        foreach (var departmentId in result.AssignedDepartmentIds)
+        {
+            await _localEventBus.PublishAsync(new UserDepartmentChangedDomainEvent(input.UserId, departmentId, isAssigned: true));
         }
     }
 

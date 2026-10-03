@@ -115,11 +115,13 @@ public static class PageRegistry
          new("tenant.list", "租户列表", "menu.tenant_list", MenuType.Menu, "/tenant/list", "TenantList", "tenant/list/index", "tenant", SaasPermissionCodes.Tenant.Read, "lucide:building", 210),
         // [3.2] 版本套餐
          new("tenant.edition", "版本套餐", "menu.tenant_edition", MenuType.Menu, "/tenant/edition", "TenantEdition", "tenant/edition/index", "tenant", SaasPermissionCodes.TenantEdition.Read, "lucide:package", 220),
+        // [3.3] 我的订阅（租户侧：本租户的版本、到期与用量；平台侧的租户列表、版本套餐在租户里不出现）
+         new("tenant.subscription", "我的订阅", "menu.tenant_subscription", MenuType.Menu, "/tenant/subscription", "TenantSubscription", "tenant/subscription/index", "tenant", SaasPermissionCodes.TenantSubscription.Read, "lucide:receipt-text", 230),
 
         // [4] 消息中心
          new("message", "消息中心", "menu.message", MenuType.Directory, "/message", "Message", null, null, null, "lucide:mail", 500, "/message/notification"),
         // [4.1] 通知公告
-         new("message.notification", "通知公告", "menu.message_notification", MenuType.Menu, "/message/notification", "MessageNotification", "message/notification/index", "message", SaasPermissionCodes.Message.Read, "lucide:bell", 310),
+         new("message.notification", "通知公告", "menu.message_notification", MenuType.Menu, "/message/notification", "MessageNotification", "message/notification/index", "message", SaasPermissionCodes.Notification.Read, "lucide:bell", 310),
         // [4.2] 邮件短信
          new("message.record", "邮件短信", "menu.message_record", MenuType.Menu, "/message/record", "MessageRecord", "message/record/index", "message", SaasPermissionCodes.Message.Read, "lucide:send", 320),
         // [4.3] 消息模板
@@ -222,6 +224,18 @@ public static class PageRegistry
          new("identity.user.reset-password", "重置密码", "identity.user", SaasPermissionCodes.UserSecurity.ResetPassword, 5),
          new("identity.user.export", "导出", "identity.user", SaasPermissionCodes.User.Export, 6),
          new("identity.user.impersonate", "模仿登录", "identity.user", SaasPermissionCodes.Impersonation.Start, 7),
+         new("identity.user.grant-role", "分配角色", "identity.user", SaasPermissionCodes.UserRole.Grant, 8),
+         new("identity.user.grant-permission", "直授权限", "identity.user", SaasPermissionCodes.UserPermission.Grant, 9),
+         new("identity.user.data-scope", "数据范围", "identity.user", SaasPermissionCodes.UserDataScope.Update, 10),
+         new("identity.user.lock", "锁定解锁", "identity.user", SaasPermissionCodes.UserSecurity.Lock, 11),
+         new("identity.user.reset-two-factor", "重置双因素", "identity.user", SaasPermissionCodes.UserSecurity.ResetTwoFactor, 12),
+         new("identity.user.revoke-sessions", "强制下线", "identity.user", SaasPermissionCodes.UserSession.Revoke, 13),
+         new("identity.user.assign-department", "分配部门", "identity.user", SaasPermissionCodes.UserDepartment.Grant, 14),
+         new("identity.user.login-policy", "登录策略", "identity.user", SaasPermissionCodes.UserSecurity.LoginPolicy, 15),
+         // 授予与撤销分挂按钮（同版本权限）：批量接口只在本次含撤销项时要撤销权限，菜单授权据此也能配出撤销能力
+         new("identity.user.revoke-role", "撤销角色", "identity.user", SaasPermissionCodes.UserRole.Revoke, 16),
+         new("identity.user.revoke-permission", "撤销直授", "identity.user", SaasPermissionCodes.UserPermission.Revoke, 17),
+         new("identity.user.revoke-department", "撤销部门", "identity.user", SaasPermissionCodes.UserDepartment.Revoke, 18),
 
         // [2.2] 角色管理
          new("identity.role.create", "新增", "identity.role", SaasPermissionCodes.Role.Create, 1),
@@ -229,7 +243,14 @@ public static class PageRegistry
          new("identity.role.delete", "删除", "identity.role", SaasPermissionCodes.Role.Delete, 3),
          new("identity.role.status", "启停", "identity.role", SaasPermissionCodes.Role.Status, 4),
          new("identity.role.grant-permission", "分配权限", "identity.role", SaasPermissionCodes.RolePermission.Grant, 5),
+         new("identity.role.members", "角色成员", "identity.role", SaasPermissionCodes.UserRole.Grant, 6),
+         new("identity.role.data-scope", "数据范围", "identity.role", SaasPermissionCodes.RoleDataScope.Update, 7),
          new("identity.role.export", "导出", "identity.role", SaasPermissionCodes.Role.Export, 9),
+         new("identity.role.revoke-permission", "收回权限", "identity.role", SaasPermissionCodes.RolePermission.Revoke, 10),
+         new("identity.role.remove-members", "移出成员", "identity.role", SaasPermissionCodes.UserRole.Revoke, 11),
+         // 上级角色：设置入口挂新增上级，解除上级另挂按钮（批量接口只在本次含解除时要删除权限）
+         new("identity.role.parents", "设置上级", "identity.role", SaasPermissionCodes.RoleHierarchy.Create, 12),
+         new("identity.role.remove-parents", "解除上级", "identity.role", SaasPermissionCodes.RoleHierarchy.Delete, 13),
 
         // [2.3] 组织机构
          new("identity.org.create", "新增", "identity.org", SaasPermissionCodes.Department.Create, 1),
@@ -237,6 +258,7 @@ public static class PageRegistry
          new("identity.org.delete", "删除", "identity.org", SaasPermissionCodes.Department.Delete, 3),
          new("identity.org.status", "启停", "identity.org", SaasPermissionCodes.Department.Status, 4),
          new("identity.org.export", "导出", "identity.org", SaasPermissionCodes.Department.Export, 9),
+         new("identity.org.edit-membership", "编辑归属", "identity.org", SaasPermissionCodes.UserDepartment.Update, 10),
 
         // [2.3.1] 岗位管理
          new("identity.position.create", "新增", "identity.position", SaasPermissionCodes.Position.Create, 1),
@@ -263,6 +285,9 @@ public static class PageRegistry
          new("identity.authorization.create", "发起申请", "identity.authorization", SaasPermissionCodes.PermissionRequest.Create, 1),
          new("identity.authorization.audit", "审批", "identity.authorization", SaasPermissionCodes.PermissionRequest.Status, 2),
          new("identity.authorization.withdraw", "撤回", "identity.authorization", SaasPermissionCodes.PermissionRequest.Withdraw, 3),
+         new("identity.authorization.delegation-create", "发起委托", "identity.authorization", SaasPermissionCodes.PermissionDelegation.Create, 4),
+         new("identity.authorization.delegation-revoke", "撤销委托", "identity.authorization", SaasPermissionCodes.PermissionDelegation.Status, 5),
+         new("identity.authorization.delegation-delete", "删除委托", "identity.authorization", SaasPermissionCodes.PermissionDelegation.Revoke, 6),
          new("identity.authorization.export", "导出", "identity.authorization", SaasPermissionCodes.PermissionRequest.Export, 9),
 
         // [2.7] 在线用户（会话实时视图：活跃会话 + SignalR 连接标注，权限复用用户会话码）
@@ -275,6 +300,9 @@ public static class PageRegistry
          new("tenant.list.status", "启停", "tenant.list", SaasPermissionCodes.Tenant.Status, 3),
          new("tenant.list.initdb", "初始化数据库", "tenant.list", SaasPermissionCodes.Tenant.InitDb, 4),
          new("tenant.list.delete", "删除", "tenant.list", SaasPermissionCodes.Tenant.Delete, 5),
+         new("tenant.list.support-member", "支持人员入驻", "tenant.list", SaasPermissionCodes.Tenant.SupportMember, 6),
+         new("tenant.list.init-admin", "初始化管理员", "tenant.list", SaasPermissionCodes.Tenant.Create, 7),
+         new("tenant.list.transfer-owner", "所有权转移", "tenant.list", SaasPermissionCodes.Tenant.TransferOwner, 8),
          new("tenant.list.export", "导出", "tenant.list", SaasPermissionCodes.Tenant.Export, 9),
 
         // [3.2] 版本套餐
@@ -288,16 +316,17 @@ public static class PageRegistry
          new("tenant.edition.permission-revoke", "版本权限撤销", "tenant.edition", SaasPermissionCodes.TenantEditionPermission.Revoke, 8),
          new("tenant.edition.export", "导出", "tenant.edition", SaasPermissionCodes.TenantEdition.Export, 9),
 
-        // [4.1] 通知公告（端点要求的是 saas:message:*，见 NotificationAppService / NotificationQueryService）
-         new("message.notification.read", "查看", "message.notification", SaasPermissionCodes.Message.Read, 0),
-         new("message.notification.create", "新增", "message.notification", SaasPermissionCodes.Message.Create, 1),
-         new("message.notification.update", "编辑", "message.notification", SaasPermissionCodes.Message.Update, 2),
-         new("message.notification.publish", "发布", "message.notification", SaasPermissionCodes.Message.Publish, 3),
-         new("message.notification.delete", "删除", "message.notification", SaasPermissionCodes.Message.Delete, 4),
+        // [4.1] 通知公告
+         new("message.notification.read", "查看", "message.notification", SaasPermissionCodes.Notification.Read, 0),
+         new("message.notification.create", "新增", "message.notification", SaasPermissionCodes.Notification.Create, 1),
+         new("message.notification.update", "编辑", "message.notification", SaasPermissionCodes.Notification.Update, 2),
+         new("message.notification.publish", "发布", "message.notification", SaasPermissionCodes.Notification.Publish, 3),
+         new("message.notification.delete", "删除", "message.notification", SaasPermissionCodes.Notification.Delete, 4),
          new("message.notification.export", "导出", "message.notification", SaasPermissionCodes.Notification.Export, 9),
 
         // [4.2] 邮件短信
          new("message.record.delete", "删除", "message.record", SaasPermissionCodes.Message.Delete, 1),
+         new("message.record.resend", "重发", "message.record", SaasPermissionCodes.Message.Status, 2),
          new("message.record.export", "导出", "message.record", SaasPermissionCodes.Message.Export, 9),
 
         // [4.3] 消息模板
@@ -339,6 +368,7 @@ public static class PageRegistry
          new("approval.review.audit", "审核", "approval.review", SaasPermissionCodes.Review.Audit, 1),
          new("approval.review.withdraw", "撤回", "approval.review", SaasPermissionCodes.Review.Withdraw, 2),
          new("approval.review.delete", "删除", "approval.review", SaasPermissionCodes.Review.Delete, 3),
+         new("approval.review.status", "启停", "approval.review", SaasPermissionCodes.Review.Status, 4),
          new("approval.review.export", "导出", "approval.review", SaasPermissionCodes.Review.Export, 9),
 
         // [5.2] 约束规则
@@ -353,6 +383,7 @@ public static class PageRegistry
          new("file.library.create", "上传", "file.library", SaasPermissionCodes.File.Create, 1),
          new("file.library.update", "编辑", "file.library", SaasPermissionCodes.File.Update, 2),
          new("file.library.delete", "删除", "file.library", SaasPermissionCodes.File.Delete, 3),
+         new("file.library.status", "归档恢复", "file.library", SaasPermissionCodes.File.Status, 4),
          new("file.library.export", "导出", "file.library", SaasPermissionCodes.File.Export, 9),
 
         // [6.2] 存储配置
@@ -416,9 +447,6 @@ public static class PageRegistry
 
         // [8.7] 版本管理（系统版本与升级迁移）
          new("setting.version.export", "导出", "setting.version", SaasPermissionCodes.Version.Export, 9),
-
-        // [1.1] 仪表盘（统计卡片按权限出现）
-         new("workbench.dashboard.user-statistics", "用户统计", "workbench.dashboard", SaasPermissionCodes.UserStatistics.Read, 1),
 
         // [9.1] 访问日志
          new("log.access.export", "导出", "log.access", SaasPermissionCodes.AccessLog.Export, 1),

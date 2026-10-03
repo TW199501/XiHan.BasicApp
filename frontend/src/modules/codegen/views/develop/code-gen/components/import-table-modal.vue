@@ -6,7 +6,8 @@ import type {
 import type {
   ApiId,
 } from '@/api'
-import { XhButton, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFormRoot, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
+import { isComposingEvent } from '@xihan-ui/core'
+import { XhButton, XhButtonIndicator, XhButtonLabel, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFormRoot, XhInputGroupRoot, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
 import { computed, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Icon, XEditModal, XInput, XSelect } from '~/components'
@@ -96,12 +97,21 @@ async function loadTables() {
     tableOptions.value = (tables ?? []).map(name => ({ label: name, value: name }))
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('develop.code_gen.import.load_tables_failed'))
+    toast.danger((error as Error)?.message || t('develop.code_gen.import.load_tables_failed'))
     tableOptions.value = []
   }
   finally {
     tableLoading.value = false
   }
+}
+
+/**
+ * 关键字是筛选条件：回车只查表（由输入框的 enter 事件接），不让它隐式提交外层的导入表单。
+ * 输入法组合中的回车是在候选框里选词，原样放行。
+ */
+function blockImplicitSubmit(event: KeyboardEvent) {
+  if (!isComposingEvent(event))
+    event.preventDefault()
 }
 
 function onDataSourceChange() {
@@ -138,7 +148,7 @@ async function handleImport() {
     }
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('develop.code_gen.import.import_failed'))
+    toast.danger((error as Error)?.message || t('develop.code_gen.import.import_failed'))
   }
   finally {
     submitLoading.value = false
@@ -155,32 +165,48 @@ async function handleImport() {
     :form-id="editFormId"
     @update:show="emit('update:show', $event)"
   >
-    <div class="import-filters">
-      <XSelect
-        v-model:value="dataSourceId"
-        class="import-filters__item"
-        :options="dataSourceOptions"
-        :placeholder="t('develop.code_gen.import.data_source_placeholder')"
-        @update:value="onDataSourceChange"
-      />
-      <XInput
-        v-model:value="queryKeyword"
-        class="import-filters__item"
-        clearable
-        :placeholder="t('develop.code_gen.import.keyword_placeholder')"
-        @keyup.enter="loadTables"
-      />
-      <XhButton :loading="tableLoading" tone="brand" @click="loadTables">
-        <span><Icon icon="lucide:search" /></span>
-        {{ t('common.actions.search') }}
-      </XhButton>
-    </div>
     <XhFormRoot
       :id="editFormId"
       validate-on="blur"
       class="xh-edit-form-grid"
       @submit="handleImport"
     >
+      <!-- 数据源与关键字是筛选条件不是提交字段，但排进同一张网格、各带标签，与其它弹窗的表单同一副面孔 -->
+      <XhFieldRoot>
+        <XhFieldLabel>{{ t('develop.code_gen.import.form_data_source') }}</XhFieldLabel>
+        <XhFieldControl>
+          <XSelect
+            v-model:value="dataSourceId"
+            :options="dataSourceOptions"
+            :placeholder="t('develop.code_gen.import.data_source_placeholder')"
+            @update:value="onDataSourceChange"
+          />
+        </XhFieldControl>
+        <XhFieldErrorText />
+      </XhFieldRoot>
+      <XhFieldRoot>
+        <XhFieldLabel>{{ t('develop.code_gen.import.form_keyword') }}</XhFieldLabel>
+        <!-- 查询钮贴在关键字输入框末端：组件库的输入组，描边与焦点环由组的外轮廓画。
+             字段的接线不能合并到输入组那层 div 上（label 的 for 落空），关掉 asChild 手工交给输入框 -->
+        <XhFieldControl v-slot="wiring" :as-child="false">
+          <XhInputGroupRoot class="import-keyword-group">
+            <XInput
+              v-bind="wiring"
+              v-model:value="queryKeyword"
+              clearable
+              :placeholder="t('develop.code_gen.import.keyword_placeholder')"
+              @enter="loadTables"
+              @keydown.enter="blockImplicitSubmit"
+            />
+            <XhButton variant="subtle" size="sm" :loading="tableLoading" tone="brand" @click="loadTables">
+              <XhButtonIndicator />
+              <span><Icon icon="lucide:search" /></span>
+              <XhButtonLabel>{{ t('common.actions.search') }}</XhButtonLabel>
+            </XhButton>
+          </XhInputGroupRoot>
+        </XhFieldControl>
+        <XhFieldErrorText />
+      </XhFieldRoot>
       <XhFieldRoot>
         <XhFieldLabel>{{ t('develop.code_gen.import.form_database_type') }}</XhFieldLabel>
         <XhFieldControl>
@@ -221,14 +247,18 @@ async function handleImport() {
 </template>
 
 <style scoped>
-.import-filters {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
+/* 输入组铺满字段格；组是 inline-flex，输入框占满余下的宽、钮不缩 */
+.import-keyword-group {
+  inline-size: 100%;
 }
 
-.import-filters__item {
-  flex: 1;
+.import-keyword-group > :first-child {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+}
+
+.import-keyword-group > :last-child {
+  flex: none;
 }
 
 .import-result {

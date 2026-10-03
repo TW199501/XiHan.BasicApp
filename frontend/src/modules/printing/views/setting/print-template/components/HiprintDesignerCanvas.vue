@@ -13,10 +13,10 @@ import type {
   PrintElementAlignAction,
   PrintElementSpacingDirection,
 } from '~/printing'
-import { useHotkeys, XhAlertDescription, XhAlertIcon, XhAlertRoot, XhEmptyStateDescription, XhEmptyStateIcon, XhEmptyStateRoot, XhEmptyStateTitle, XhSpinner } from '@xihan-ui/vue'
+import { XhAlertContent, XhAlertDescription, XhAlertIndicator, XhAlertRoot, XhEmptyStateDescription, XhEmptyStateIndicator, XhEmptyStateRoot, XhEmptyStateTitle, XhSpinner } from '@xihan-ui/vue'
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { toast } from '~/composables'
+import { toast, useHotkey } from '~/composables'
 import { Icon } from '~/iconify'
 import { createPrintDesigner, enablePrintFieldDragging } from '~/printing'
 import { PRINT_PAPER_PRESETS } from './models'
@@ -207,7 +207,7 @@ function rotatePaper(): void {
     queueMicrotask(syncToolbarState)
   }
   catch (error) {
-    toast.error((error as Error).message || t('setting.print_template.rotate_failed'))
+    toast.danger((error as Error).message || t('setting.print_template.rotate_failed'))
   }
 }
 
@@ -229,7 +229,7 @@ function alignElements(action: PrintElementAlignAction): void {
     designer.alignElements(action)
   }
   catch (error) {
-    toast.error((error as Error).message || t('setting.print_template.alignment_failed'))
+    toast.danger((error as Error).message || t('setting.print_template.alignment_failed'))
   }
 }
 
@@ -246,12 +246,12 @@ function setElementSpacing(direction: PrintElementSpacingDirection, spacing: num
     designer.setElementSpacing(spacing, direction)
   }
   catch (error) {
-    toast.error((error as Error).message || t('setting.print_template.spacing_failed'))
+    toast.danger((error as Error).message || t('setting.print_template.spacing_failed'))
   }
 }
 
 // 在画布焦点范围内支持 Ctrl/Cmd+A 全选，避免拦截属性输入框和可编辑文本的原生全选。
-useHotkeys({
+useHotkey({
   keys: ['Mod', 'A'],
   // 拦不拦默认动作交由回调按按键落点决定。
   preventDefault: false,
@@ -488,12 +488,14 @@ defineExpose({ clear, getJson, preview, redo, undo })
         >
           <XhSpinner v-if="loading" class="absolute inset-0 z-10 flex items-center justify-center" />
           <XhAlertRoot v-if="loadError" tone="danger" class="canvas-error">
-            <XhAlertIcon>
+            <XhAlertIndicator>
               <Icon icon="lucide:alert-circle" width="16" />
-            </XhAlertIcon>
-            <XhAlertDescription>
-              {{ loadError }}
-            </XhAlertDescription>
+            </XhAlertIndicator>
+            <XhAlertContent>
+              <XhAlertDescription>
+                {{ loadError }}
+              </XhAlertDescription>
+            </XhAlertContent>
           </XhAlertRoot>
           <div :id="canvasId" class="hiprint-canvas-host" />
         </main>
@@ -516,9 +518,9 @@ defineExpose({ clear, getJson, preview, redo, undo })
         <div :id="settingId" class="property-setting-host" />
         <div class="property-empty">
           <XhEmptyStateRoot size="sm">
-            <XhEmptyStateIcon>
+            <XhEmptyStateIndicator>
               <Icon icon="lucide:inbox" width="24" />
-            </XhEmptyStateIcon>
+            </XhEmptyStateIndicator>
             <XhEmptyStateTitle>{{ t('setting.print_template.properties_empty_title') }}</XhEmptyStateTitle>
             <XhEmptyStateDescription>{{ t('setting.print_template.properties_empty') }}</XhEmptyStateDescription>
           </XhEmptyStateRoot>
@@ -581,8 +583,8 @@ defineExpose({ clear, getJson, preview, redo, undo })
 }
 
 .canvas-stage:focus-visible {
-  outline: 2px solid rgba(32, 128, 240, 0.6);
-  outline-offset: -2px;
+  outline: var(--xh-ring-width) solid var(--xh-ring-focus);
+  outline-offset: var(--xh-ring-offset);
 }
 
 .canvas-error {

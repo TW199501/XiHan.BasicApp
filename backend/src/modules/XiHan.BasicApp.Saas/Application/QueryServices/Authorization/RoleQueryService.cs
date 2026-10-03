@@ -21,6 +21,7 @@ using XiHan.Framework.Caching.Distributed.Abstracts;
 using XiHan.Framework.Domain.Shared.Paging.Dtos;
 using XiHan.Framework.Domain.Shared.Paging.Enums;
 using XiHan.Framework.Domain.Shared.Paging.Models;
+using XiHan.Framework.MultiTenancy.Abstractions;
 
 namespace XiHan.BasicApp.Saas.Application.QueryServices;
 
@@ -52,6 +53,8 @@ public sealed class RoleQueryService
     /// </summary>
     private readonly IFieldSecurityService _fieldSecurity;
 
+    private readonly ICurrentTenant _currentTenant;
+
     /// <summary>
     /// 构造函数
     /// </summary>
@@ -59,8 +62,10 @@ public sealed class RoleQueryService
         IRoleRepository roleRepository,
         IDistributedCache<SaasRoleSelectCacheItem, string> roleSelectCache,
         ISuperAdminProtector superAdminProtector,
-        IFieldSecurityService fieldSecurityService)
+        IFieldSecurityService fieldSecurityService,
+        ICurrentTenant currentTenant)
     {
+        _currentTenant = currentTenant;
         _roleRepository = roleRepository;
         _roleSelectCache = roleSelectCache;
         _superAdminProtector = superAdminProtector;
@@ -82,16 +87,16 @@ public sealed class RoleQueryService
 
         var request = BuildRolePageRequest(input);
 
-        // 超管隐藏：非超管用户在列表中排除 super_admin 角色（超管自身不受限）
+        // 字段安全：剔除读受保护字段上的排序、过滤与关键字搜索（防按结果反推原值）
+        await _fieldSecurity.GuardQueryAsync(request.Conditions, typeof(SysRole), cancellationToken);
+
+        // 超管隐藏：非超管用户在列表中排除 super_admin 角色（超管自身不受限）。
+        // 强制约束放在字段安全门控之后，编码字段即便受保护也不会被剔除。
         if (!_superAdminProtector.IsCurrentUserSuperAdmin())
         {
-            request.Conditions.AddFilter((SysRole role) => role.RoleCode, "super_admin", QueryOperator.NotEqual);
+            request.Conditions.AddFilter((SysRole role) => role.RoleCode, SaasRoleCodes.SuperAdmin, QueryOperator.NotEqual);
         }
 
-        // 排序：前端选择优先，FLS 门控剔除不可读/已脱敏字段；无有效排序回退默认排序
-        await _fieldSecurity.GuardSortsAsync(request.Conditions, "SysRole", cancellationToken);
-        // 过滤：前端下发的区间/多选过滤同样经 FLS 门控（剔除不可读/已脱敏字段）
-        await _fieldSecurity.GuardFiltersAsync(request.Conditions, "SysRole", cancellationToken);
         if (request.Conditions.Sorts.Count == 0)
         {
             ApplyRoleSorts(request);
@@ -148,7 +153,7 @@ public sealed class RoleQueryService
             return await QueryEnabledRolesAsync(input, cancellationToken);
         }
 
-        var cacheKey = SaasCacheKeys.RoleSelect((int?)input.RoleType, input.IsGlobal, input.Limit);
+        var cacheKey = SaasCacheKeys.RoleSelect(_currentTenant.Id, (int?)input.RoleType, input.IsGlobal, input.Limit);
         var item = await _roleSelectCache.GetOrAddAsync(
             cacheKey,
             async () => new SaasRoleSelectCacheItem
@@ -239,9 +244,9 @@ public sealed class RoleQueryService
             input.IsGlobal,
             EnableStatus.Enabled);
 
-        // 超管隐藏：选择项始终排除 super_admin 角色（内置单例、不可经下拉授予；
-        // 结果按 type/global/limit 缓存，按用户过滤会污染缓存，故无条件排除最安全）
-        request.Conditions.AddFilter((SysRole role) => role.RoleCode, "super_admin", QueryOperator.NotEqual);
+        // 系统角色不进选择项：超管与租户所有者都是单例、由系统流程维护，不可经下拉授予
+        // （结果按 type/global/limit 缓存，按用户过滤会污染缓存，故无条件排除）
+        request.Conditions.AddFilter((SysRole role) => role.RoleType, RoleType.System, QueryOperator.NotEqual);
 
         request.Conditions.AddSort((SysRole role) => role.RoleType, SortDirection.Ascending, 0);
         request.Conditions.AddSort((SysRole role) => role.Sort, SortDirection.Ascending, 1);

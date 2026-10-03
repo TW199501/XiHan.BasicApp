@@ -4,8 +4,9 @@
 export default {
   chat: {
     bell: '在线聊天',
+    unread_label: '{n} 条未读聊天',
     island_new_message_fallback: '收到新消息',
-    drawer: {
+    panel: {
       title: '在线聊天',
       open_page: '打开独立页',
     },
@@ -62,6 +63,7 @@ export default {
       assistant_thinking: '正在生成…',
       assistant_dismiss: '知道了',
       voice_unplayed: '未听',
+      view_image: '查看图片',
       recalled: '消息已撤回',
       recall: '撤回',
       recall_failed: '撤回失败',
@@ -107,6 +109,7 @@ export default {
       send_key_enter: '按 Enter 键发送消息',
       send_key_ctrl_enter: '按 Ctrl + Enter 键发送消息',
       emoji: '表情',
+      mention: '提及成员',
       image: '发送图片',
       file: '发送文件',
       voice: '语音输入',

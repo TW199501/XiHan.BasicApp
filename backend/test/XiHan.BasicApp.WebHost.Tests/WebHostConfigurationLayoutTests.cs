@@ -48,7 +48,6 @@ public sealed class WebHostConfigurationLayoutTests
     /// </remarks>
     /// <param name="fileName">配置文件名。</param>
     [Theory]
-    [InlineData("appsettings.json")]
     [InlineData("appsettings.Development.json")]
     public void AppSettings_MigrationsRootPathShouldMatchRealDirectory(string fileName)
     {
@@ -62,6 +61,24 @@ public sealed class WebHostConfigurationLayoutTests
         Assert.True(
             Directory.Exists(directory),
             $"{fileName} 配置的升级脚本目录在工程里不存在：{configured}（升级会静默跳过）。");
+    }
+
+    /// <summary>
+    /// 演示数据开关由各环境的配置写明：开发环境开启（示例租户与账号）。
+    /// </summary>
+    /// <remarks>
+    /// 开关缺省按关闭处理，基础配置不写。appsettings.Production.json 不入库（.gitignore），
+    /// 生产环境的取值在部署处的配置里写明，这里只断言入库的开发环境配置。
+    /// </remarks>
+    [Fact]
+    public void AppSettings_DevelopmentShouldEnableDemoData()
+    {
+        const string fileName = "appsettings.Development.json";
+        using var document = ReadConfiguration(fileName);
+
+        var element = ResolvePath(document.RootElement, "Saas", "Seed", "EnableDemoData");
+        Assert.True(element is not null, $"{fileName} 缺少 Saas:Seed:EnableDemoData。");
+        Assert.Equal(JsonValueKind.True, element!.Value.ValueKind);
     }
 
     /// <summary>

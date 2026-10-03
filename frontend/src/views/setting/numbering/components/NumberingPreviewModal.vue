@@ -8,7 +8,7 @@ import type {
   NumberingRuleListItemDto,
 } from '@/api'
 import type { XDataTableColumn } from '~/components'
-import { XhButton, XhCardBody, XhCardRoot, XhDescriptionsItem, XhDescriptionsLabel, XhDescriptionsRoot, XhDescriptionsValue, XhDialogCloseTrigger, XhDialogContent, XhDialogRoot, XhDialogTitle, XhEmptyStateDescription, XhEmptyStateIcon, XhEmptyStateRoot, XhEmptyStateTitle, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFlex, XhFormRoot } from '@xihan-ui/vue'
+import { XhButton, XhButtonIndicator, XhButtonLabel, XhCardContent, XhCardRoot, XhDescriptionsItem, XhDescriptionsLabel, XhDescriptionsRoot, XhDescriptionsValue, XhDialogCloseTrigger, XhDialogContent, XhDialogRoot, XhDialogTitle, XhEmptyStateDescription, XhEmptyStateIndicator, XhEmptyStateRoot, XhEmptyStateTitle, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFlex, XhFormRoot } from '@xihan-ui/vue'
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
@@ -217,7 +217,7 @@ async function executePreview(): Promise<void> {
   }
   catch (error) {
     if (version === requestVersion)
-      toast.error((error as Error).message || t('setting.numbering.preview_failed'))
+      toast.danger((error as Error).message || t('setting.numbering.preview_failed'))
   }
   finally {
     if (version === requestVersion)
@@ -236,9 +236,9 @@ async function executePreview(): Promise<void> {
       <XhDialogCloseTrigger />
       <div class="grid min-h-[480px] grid-cols-1 gap-4 lg:grid-cols-[340px_minmax(0,1fr)]">
         <XhCardRoot variant="ghost">
-          <XhCardBody>
-            <XhFlex direction="column" gap="lg">
-              <XhDescriptionsRoot v-if="rule" :columns="1" bordered placement="left" size="sm">
+          <XhCardContent>
+            <XhFlex orientation="vertical" gap="lg">
+              <XhDescriptionsRoot v-if="rule" :columns="1" variant="outline" placement="left" size="sm">
                 <XhDescriptionsItem>
                   <XhDescriptionsLabel>{{ t('setting.numbering.rule_code') }}</XhDescriptionsLabel>
                   <XhDescriptionsValue>
@@ -288,16 +288,17 @@ async function executePreview(): Promise<void> {
               </XhFormRoot>
 
               <XhButton full-width variant="solid" tone="brand" :loading="loading" :disabled="!rule" @click="executePreview">
-                {{ t('setting.numbering.preview_execute') }}
+                <XhButtonIndicator />
+                <XhButtonLabel>{{ t('setting.numbering.preview_execute') }}</XhButtonLabel>
               </XhButton>
             </XhFlex>
-          </XhCardBody>
+          </XhCardContent>
         </XhCardRoot>
 
         <XhCardRoot variant="ghost">
-          <XhCardBody>
-            <XhFlex v-if="metadata" direction="column" gap="lg">
-              <XhDescriptionsRoot :columns="3" bordered placement="top" size="sm">
+          <XhCardContent>
+            <XhFlex v-if="metadata" orientation="vertical" gap="lg">
+              <XhDescriptionsRoot :columns="3" variant="outline" placement="top" size="sm">
                 <XhDescriptionsItem>
                   <XhDescriptionsLabel>{{ t('setting.numbering.preview_period') }}</XhDescriptionsLabel>
                   <XhDescriptionsValue>
@@ -326,14 +327,14 @@ async function executePreview(): Promise<void> {
             </XhFlex>
             <div v-else class="flex min-h-[400px] items-center justify-center">
               <XhEmptyStateRoot>
-                <XhEmptyStateIcon>
+                <XhEmptyStateIndicator>
                   <Icon icon="lucide:inbox" width="28" />
-                </XhEmptyStateIcon>
+                </XhEmptyStateIndicator>
                 <XhEmptyStateTitle>{{ t('common.empty') }}</XhEmptyStateTitle>
                 <XhEmptyStateDescription>{{ t('setting.numbering.preview_empty') }}</XhEmptyStateDescription>
               </XhEmptyStateRoot>
             </div>
-          </XhCardBody>
+          </XhCardContent>
         </XhCardRoot>
       </div>
     </XhDialogContent>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
   XhButton,
+  XhDrawerCloseTrigger,
   XhDrawerContent,
   XhDrawerRoot,
   XhDrawerTitle,
@@ -11,6 +12,7 @@ import {
   XhScrollAreaTrack,
   XhScrollAreaViewport,
   XhTabsContent,
+  XhTabsIndicator,
   XhTabsList,
   XhTabsRoot,
   XhTabsTrigger,
@@ -25,9 +27,7 @@ import {
 import { useTheme } from '~/hooks'
 import { Icon } from '~/iconify'
 import { useAppStore, useAuthStore, useLayoutBridgeStore } from '~/stores'
-import { usePreferenceEntry } from '../composables'
 import PreferenceAppearanceTab from './preference/PreferenceAppearanceTab.vue'
-import PreferenceFab from './preference/PreferenceFab.vue'
 import PreferenceGeneralTab from './preference/PreferenceGeneralTab.vue'
 import PreferenceLayoutTab from './preference/PreferenceLayoutTab.vue'
 import PreferenceShortcutTab from './preference/PreferenceShortcutTab.vue'
@@ -40,8 +40,6 @@ const layoutBridgeStore = useLayoutBridgeStore()
 const { t } = useI18n()
 const visible = ref(false)
 const activeTab = ref('appearance')
-// 偏好设置入口：头部按钮与悬浮 FAB 互斥，统一由 usePreferenceEntry 判定（auto 模式窄屏走 FAB）
-const { showFab: showFloatingFab } = usePreferenceEntry()
 const { animateThemeTransition } = useTheme()
 
 const themeMode = computed(() => appStore.themeMode)
@@ -104,7 +102,7 @@ async function copyPreferences() {
     toast.success(t('preference.drawer.copy_success'))
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('preference.drawer.copy_failed'))
+    toast.danger((error as Error)?.message || t('preference.drawer.copy_failed'))
   }
 }
 
@@ -122,10 +120,6 @@ function savePreferences() {
 
 function openDrawer() {
   visible.value = true
-}
-
-function handleFabClick() {
-  layoutBridgeStore.requestOpenPreferenceDrawer()
 }
 
 function handleOpenPreferenceDrawer() {
@@ -178,8 +172,6 @@ watch(visible, (open, was) => {
 </script>
 
 <template>
-  <PreferenceFab :show="showFloatingFab" @click="handleFabClick" />
-
   <XhDrawerRoot v-model:open="visible" side="right">
     <XhDrawerContent class="preference-drawer-content">
       <div class="drawer-header">
@@ -189,14 +181,8 @@ watch(visible, (open, was) => {
           </XhDrawerTitle>
           <SyncStatusBadge :synced="appStore.preferenceSyncEnabled" />
         </div>
-        <button
-          tabindex="-1"
-          class="close-btn"
-          :aria-label="t('common.actions.close')"
-          @click="visible = false"
-        >
-          <Icon icon="lucide:x" width="16" height="16" />
-        </button>
+        <!-- 关闭钮用组件库部件：键盘可达，可及名取全局文案，悬停、按压与聚焦环随家族配方 -->
+        <XhDrawerCloseTrigger class="drawer-close" />
       </div>
 
       <!-- 面板内容各不相同，标签与面板手摆而不喂 collection。
@@ -215,6 +201,7 @@ watch(visible, (open, was) => {
           <XhTabsTrigger value="general">
             {{ t('preference.drawer.tab.general') }}
           </XhTabsTrigger>
+          <XhTabsIndicator />
         </XhTabsList>
 
         <XhScrollAreaRoot class="preference-scrollbar">
@@ -262,16 +249,18 @@ watch(visible, (open, was) => {
           <XhButton
             variant="subtle"
             tone="brand"
+            icon-only
             class="footer-round"
             :title="t('preference.drawer.copy')"
+            :aria-label="t('preference.drawer.copy')"
             @click="copyPreferences"
           >
             <Icon icon="lucide:copy" width="16" />
           </XhButton>
-          <XhButton variant="outline" class="footer-round" :title="t('preference.drawer.reset')" @click="resetPreferences">
+          <XhButton variant="outline" icon-only class="footer-round" :title="t('preference.drawer.reset')" :aria-label="t('preference.drawer.reset')" @click="resetPreferences">
             <Icon icon="lucide:rotate-ccw" width="16" />
           </XhButton>
-          <XhButton variant="outline" class="footer-round" :title="t('preference.drawer.clear_cache')" @click="clearAndLogout">
+          <XhButton variant="outline" icon-only class="footer-round" :title="t('preference.drawer.clear_cache')" :aria-label="t('preference.drawer.clear_cache')" @click="clearAndLogout">
             <Icon icon="lucide:trash-2" width="16" />
           </XhButton>
         </div>
@@ -348,36 +337,16 @@ watch(visible, (open, was) => {
   width: 100%;
 }
 
+/* 皮肤给角落关闭钮让出的标题右内衬：关闭钮在头部行内，撤掉免得把同步徽标推远 */
 .drawer-title {
+  padding-inline-end: 0;
   font-size: 16px;
   font-weight: 600;
   color: hsl(var(--foreground));
 }
 
-/* 自定义关闭按钮 */
-.close-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: hsl(var(--muted-foreground));
-  cursor: pointer;
-  transition:
-    background var(--xh-motion-duration-micro) var(--xh-motion-ease-enter),
-    color var(--xh-motion-duration-micro) var(--xh-motion-ease-enter);
-  outline: none;
-}
-
-.close-btn:hover {
-  background: hsl(var(--accent));
-  color: hsl(var(--foreground));
-}
-
-.close-btn:active {
-  background: hsl(var(--accent) / 0.7);
+/* 关闭钮留在头部行尾、与标题同行居中，不走皮肤的角落绝对定位 */
+.drawer-close {
+  position: static;
 }
 </style>

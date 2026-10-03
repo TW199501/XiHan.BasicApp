@@ -7,10 +7,10 @@ import type {
   ApiId,
 } from '@/api'
 import type { XDataTableColumn } from '~/components'
-import { XhDialogCloseTrigger, XhDialogContent, XhDialogRoot, XhDialogTitle, XhEmptyStateDescription, XhEmptyStateIcon, XhEmptyStateRoot, XhEmptyStateTitle, XhSpinner } from '@xihan-ui/vue'
+import { XhDialogCloseTrigger, XhDialogContent, XhDialogRoot, XhDialogTitle, XhEmptyStateDescription, XhEmptyStateIndicator, XhEmptyStateRoot, XhEmptyStateTitle, XhSpinner } from '@xihan-ui/vue'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { SchemaPagination, XDataTable } from '~/components'
+import { XDataTable } from '~/components'
 import { toast } from '~/composables'
 import { Icon } from '~/iconify'
 import {
@@ -95,7 +95,7 @@ async function loadSchema(tableId: ApiId) {
     await loadData()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('develop.code_gen.runtime.load_schema_failed'))
+    toast.danger((error as Error)?.message || t('develop.code_gen.runtime.load_schema_failed'))
     schema.value = null
     rows.value = []
     total.value = 0
@@ -120,7 +120,7 @@ async function loadData() {
     total.value = result.totalCount
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('develop.code_gen.runtime.load_data_failed'))
+    toast.danger((error as Error)?.message || t('develop.code_gen.runtime.load_data_failed'))
     rows.value = []
     total.value = 0
   }
@@ -157,30 +157,29 @@ function handlePageSizeChange(value: number) {
           <XhEmptyStateRoot
             v-if="!schemaLoading && (!schema || schema.columns.length === 0)"
           >
-            <XhEmptyStateIcon>
+            <XhEmptyStateIndicator>
               <Icon icon="lucide:inbox" />
-            </XhEmptyStateIcon>
+            </XhEmptyStateIndicator>
             <XhEmptyStateTitle>{{ t('common.empty') }}</XhEmptyStateTitle>
             <XhEmptyStateDescription>{{ t('develop.code_gen.runtime.empty') }}</XhEmptyStateDescription>
           </XhEmptyStateRoot>
           <template v-else>
-            <!-- flex-height：让表体撑满容器，横向滚动条贴在表格底部而不是跟着内容高度浮在中间 -->
+            <!-- 表格撑满定高容器（max-height 100% 撤掉皮肤 24rem 的缺省上限），横向滚动条贴在表格底部，
+                 分页底栏与列表页同一副 -->
             <XDataTable
               class="runtime__table"
               :columns="columns"
               :data="rows"
               :loading="dataLoading"
-              size="sm"
+              max-height="100%"
+              :pagination="{
+                page,
+                pageSize,
+                itemCount: total,
+                onUpdatePage: handlePageChange,
+                onUpdatePageSize: handlePageSizeChange,
+              }"
             />
-            <div class="runtime__foot">
-              <SchemaPagination
-                v-model:page="page"
-                v-model:page-size="pageSize"
-                :total="total"
-                :page-sizes="[10, 20, 50, 100]" @update:page="handlePageChange"
-                @update:page-size="handlePageSizeChange"
-              />
-            </div>
           </template>
         </div>
       </div>
@@ -201,11 +200,5 @@ function handlePageSizeChange(value: number) {
 .runtime__table {
   flex: 1;
   min-height: 0;
-}
-
-.runtime__foot {
-  display: flex;
-  flex-shrink: 0;
-  justify-content: flex-end;
 }
 </style>

@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import {
-  XhPaginationEllipsis,
+  XhPaginationContent,
+  XhPaginationEllipsisTrigger,
   XhPaginationItem,
   XhPaginationNextTrigger,
+  XhPaginationPositioner,
   XhPaginationPrevTrigger,
   XhPaginationRoot,
   XhSelectRoot,
@@ -55,8 +57,10 @@ function onSizeChange(value: string[]): void {
 
 <template>
   <div class="schema-pagination">
+    <!-- 省略位是可展开的按钮（aria-haspopup）：按序列里自带的 side 渲染，展开后被折叠的页码列在浮层里，
+         浮层定位层与内容必须给，否则按钮宣称有弹出却什么也打不开 -->
     <XhPaginationRoot
-      v-slot="{ pages }"
+      v-slot="{ pageItems }"
       :count="total"
       :page="page"
       :page-size="pageSize"
@@ -67,17 +71,23 @@ function onSizeChange(value: string[]): void {
       <XhPaginationPrevTrigger>
         <Icon icon="lucide:chevron-left" width="14" height="14" />
       </XhPaginationPrevTrigger>
-      <template v-for="(item, index) in pages" :key="`${item}-${index}`">
-        <XhPaginationItem v-if="item !== 'ellipsis'" :value="item">
-          {{ item }}
+      <template v-for="(item, index) in pageItems" :key="`${item.type}-${index}`">
+        <XhPaginationEllipsisTrigger v-if="item.type === 'ellipsis'" :side="item.side" />
+        <XhPaginationItem v-else :value="item.value">
+          {{ item.value }}
         </XhPaginationItem>
-        <XhPaginationEllipsis v-else :side="index < pages.length / 2 ? 'start' : 'end'">
-          …
-        </XhPaginationEllipsis>
       </template>
       <XhPaginationNextTrigger>
         <Icon icon="lucide:chevron-right" width="14" height="14" />
       </XhPaginationNextTrigger>
+
+      <XhPaginationPositioner>
+        <XhPaginationContent v-slot="{ pages }">
+          <XhPaginationItem v-for="folded in pages" :key="folded" :value="folded">
+            {{ folded }}
+          </XhPaginationItem>
+        </XhPaginationContent>
+      </XhPaginationPositioner>
     </XhPaginationRoot>
 
     <XhSelectRoot
@@ -99,8 +109,14 @@ function onSizeChange(value: string[]): void {
 }
 
 /* 每页数量：外框定宽，触发器跟着收进来。
-   触发器有自己的固有宽度，不收就会顶出外框、给分页条挤出一条横向滚动条 */
+   触发器有自己的固有宽度，不收就会顶出外框、给分页条挤出一条横向滚动条。
+   组件库给 select 根整件 12rem 的最小宽（--xh-select-control-min-w），压得过这里的 110px，
+   放开它，否则页码组被挤到 65px 宽、三颗钮竖着折成一列 */
 .schema-pagination__size {
+  --xh-select-control-min-w: 0;
+
+  /* 定宽不参与收缩：窄栏里让页码组在外层横向滚动，不把下拉压成一条竖线 */
+  flex: none;
   inline-size: 110px;
 }
 

@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using SqlSugar;
 using XiHan.BasicApp.Saas.Domain.Entities;
 using XiHan.Framework.Data.SqlSugar.Clients;
+using XiHan.Framework.Data.SqlSugar.Extensions;
 using XiHan.Framework.MultiTenancy.Abstractions;
 using XiHan.Framework.Security.Claims;
 using XiHan.Framework.Auditing;
@@ -38,8 +39,6 @@ public class SaasApiLogWriter : IApiLogWriter
         _httpContextAccessor = httpContextAccessor;
     }
 
-    private ISqlSugarClient DbClient => _clientResolver.GetCurrentClient();
-
     /// <summary>
     /// 写入接口日志
     /// </summary>
@@ -62,9 +61,12 @@ public class SaasApiLogWriter : IApiLogWriter
             userName = await ResolveUserNameAsync(record.UserId.Value, cancellationToken);
         }
 
+        // 落在记录产生时的租户，而不是写入时的环境上下文（位于租户解析之前的中间件、排队异步写入时环境里都没有请求的租户）；
+        // 切入该租户再取连接，库隔离租户的日志进它自己的库
+        using var tenantScope = _currentTenant.Change(record.TenantId);
         var entity = new SysOpenApiLog
         {
-            TenantId = _currentTenant.Id ?? 0,
+            TenantId = record.TenantId ?? 0,
             UserId = record.UserId,
             UserName = SaasLogMappingHelper.TrimOrNull(userName, 50),
             ApiName = SaasLogMappingHelper.TrimOrNull(record.ApiName, 200),
@@ -97,7 +99,7 @@ public class SaasApiLogWriter : IApiLogWriter
             ErrorMessage = SaasLogMappingHelper.TrimOrNull(record.ErrorMessage, 2000)
         };
 
-        await DbClient.Insertable(entity).SplitTable().ExecuteCommandAsync();
+        await _clientResolver.GetClientForEntity<SysOpenApiLog>().Insertable(entity).SplitTable().ExecuteCommandAsync();
     }
 
     /// <summary>
@@ -107,9 +109,9 @@ public class SaasApiLogWriter : IApiLogWriter
     {
         try
         {
-            return await DbClient.Queryable<SysUser>()
-                .ClearFilter()
-                .Where(user => user.BasicId == userId && !user.IsDeleted)
+            return await _clientResolver.GetClientForEntity<SysUser>().Queryable<SysUser>()
+                .ClearTenantFilter()
+                .Where(user => user.BasicId == userId)
                 .Select(user => user.UserName)
                 .FirstAsync(cancellationToken);
         }

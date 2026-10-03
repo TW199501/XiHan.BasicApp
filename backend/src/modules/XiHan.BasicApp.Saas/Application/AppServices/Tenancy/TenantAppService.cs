@@ -9,6 +9,7 @@ using XiHan.BasicApp.Saas.Application.Caching;
 using XiHan.BasicApp.Saas.Application.Dtos;
 using XiHan.BasicApp.Saas.Application.Mappers;
 using XiHan.BasicApp.Saas.Domain.DomainServices;
+using XiHan.BasicApp.Saas.Domain.Entities;
 using XiHan.BasicApp.Saas.Domain.Permissions;
 using XiHan.Framework.Application.Attributes;
 using XiHan.Framework.Authentication.Users;
@@ -17,6 +18,7 @@ using XiHan.Framework.Core.Exceptions;
 using XiHan.Framework.Security.Password;
 using XiHan.Framework.Security.Users;
 using XiHan.Framework.Uow.Attributes;
+using XiHan.BasicApp.Saas.Application.Services;
 
 namespace XiHan.BasicApp.Saas.Application.AppServices;
 
@@ -46,6 +48,8 @@ public sealed class TenantAppService
     private readonly IPasswordHasher _passwordHasher;
     private readonly IAuthenticationService _authenticationService;
 
+    private readonly IFieldSecurityService _fieldSecurity;
+
     /// <summary>
     /// 构造函数
     /// </summary>
@@ -56,7 +60,8 @@ public sealed class TenantAppService
         IPasswordHasher passwordHasher,
         IAuthenticationService authenticationService,
         ICurrentUser currentUser,
-        ISaasCacheInvalidator cacheInvalidator)
+        ISaasCacheInvalidator cacheInvalidator,
+        IFieldSecurityService fieldSecurity)
     {
         _tenantDomainService = tenantDomainService;
         _tenantProvisionDomainService = tenantProvisionDomainService;
@@ -65,10 +70,11 @@ public sealed class TenantAppService
         _authenticationService = authenticationService;
         _currentUser = currentUser;
         _cacheInvalidator = cacheInvalidator;
+        _fieldSecurity = fieldSecurity;
     }
 
     /// <summary>
-    /// 创建租户
+    /// 创建租户（不带管理员：之后经 <see cref="InitializeTenantAdminAsync"/> 开通，库隔离租户先初始化数据库）
     /// </summary>
     [UnitOfWork(true)]
     [PermissionAuthorize(SaasPermissionCodes.Tenant.Create)]
@@ -77,23 +83,10 @@ public sealed class TenantAppService
         ArgumentNullException.ThrowIfNull(input);
         cancellationToken.ThrowIfCancellationRequested();
 
-        // 管理员账号先于建租户校验：没有管理员的租户没有任何账号能登录，因此是创建租户的必要组成
-        var adminUserName = input.AdminUserName?.Trim() ?? string.Empty;
-        var adminEmail = input.AdminEmail?.Trim() ?? string.Empty;
-        var adminPassword = input.AdminPassword?.Trim() ?? string.Empty;
-        await ValidateTenantAdminAsync(input, adminUserName, adminEmail, adminPassword);
+        // 字段安全：只读字段不能填写
+        await _fieldSecurity.EnsureCreatableAsync(typeof(SysTenant), input, cancellationToken);
 
         var result = await _tenantDomainService.CreateTenantAsync(TenantApplicationMapper.ToCreateCommand(input), cancellationToken);
-
-        // 一站式开通：管理员 + Owner 角色 + 按版本白名单授权
-        var passwordHash = _passwordHasher.HashPassword(adminPassword);
-        _ = await _tenantProvisionDomainService.ProvisionTenantAdminAsync(
-            result.Tenant,
-            adminUserName,
-            adminEmail,
-            passwordHash,
-            cancellationToken);
-
         return TenantApplicationMapper.ToDetailDto(result.Tenant, result.Now);
     }
 
@@ -101,9 +94,9 @@ public sealed class TenantAppService
     /// 校验租户管理员账号：用户名长度、邮箱格式、密码策略
     /// </summary>
     /// <remarks>
-    /// 用户名与邮箱的唯一性在 <see cref="ITenantProvisionDomainService.InitializeTenantAdminAsync"/> 内校验（平台态查账号注册表）。
+    /// 用户名与邮箱的唯一性在 <see cref="ITenantProvisionDomainService.ProvisionTenantAdminAsync"/> 内校验（平台态查账号注册表）。
     /// </remarks>
-    private async Task ValidateTenantAdminAsync(TenantCreateDto input, string adminUserName, string adminEmail, string adminPassword)
+    private async Task ValidateTenantAdminAsync(string adminUserName, string adminEmail, string adminPassword, string? tenantCode, string? tenantName)
     {
         if (string.IsNullOrWhiteSpace(adminUserName))
         {
@@ -126,9 +119,9 @@ public sealed class TenantAppService
         }
 
         // 密码黑名单：禁止用账号自身信息做密码
-        var blacklist = new List<string> { adminUserName, adminEmail, input.TenantCode, input.TenantName }
+        var blacklist = new List<string?> { adminUserName, adminEmail, tenantCode, tenantName }
             .Where(item => !string.IsNullOrWhiteSpace(item))
-            .Select(item => item.Trim())
+            .Select(item => item!.Trim())
             .ToList();
 
         var validation = await _authenticationService.ValidatePasswordStrengthAsync(adminPassword, blacklist);
@@ -149,6 +142,9 @@ public sealed class TenantAppService
         ArgumentNullException.ThrowIfNull(input);
         cancellationToken.ThrowIfCancellationRequested();
 
+        // 字段安全：只读字段不能改，表单交回的脱敏值还原为原值
+        await _fieldSecurity.EnsureUpdatableAsync(typeof(SysTenant), input.BasicId, input, cancellationToken);
+
         var result = await _tenantDomainService.UpdateTenantAsync(TenantApplicationMapper.ToUpdateCommand(input), cancellationToken);
         // 租户可能更换版本：失效版本门控缓存（事务提交后生效）
         await _cacheInvalidator.InvalidateEditionGateAsync(cancellationToken);
@@ -164,6 +160,9 @@ public sealed class TenantAppService
     {
         ArgumentNullException.ThrowIfNull(input);
         cancellationToken.ThrowIfCancellationRequested();
+
+        // 字段安全：只读字段不能改，表单交回的脱敏值还原为原值
+        await _fieldSecurity.EnsureUpdatableAsync(typeof(SysTenant), input.BasicId, input, cancellationToken);
 
         var result = await _tenantDomainService.UpdateTenantStatusAsync(
             TenantApplicationMapper.ToStatusCommand(input, _currentUser.UserId),
@@ -185,6 +184,34 @@ public sealed class TenantAppService
         cancellationToken.ThrowIfCancellationRequested();
 
         var tenant = await _tenantDatabaseInitializer.InitializeAsync(id, cancellationToken);
+        return TenantApplicationMapper.ToDetailDto(tenant, DateTimeOffset.UtcNow);
+    }
+
+    /// <summary>
+    /// 初始化租户管理员：管理员账号 + 所有者成员关系与所有者角色（库隔离租户要先初始化数据库）
+    /// </summary>
+    [UnitOfWork(true)]
+    [HttpPost]
+    [PermissionAuthorize(SaasPermissionCodes.Tenant.Create)]
+    public async Task<TenantDetailDto> InitializeTenantAdminAsync(TenantAdminInitializeDto input, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var tenant = await _tenantProvisionDomainService.GetTenantAwaitingAdminAsync(input.TenantId, cancellationToken);
+
+        var adminUserName = input.AdminUserName?.Trim() ?? string.Empty;
+        var adminEmail = input.AdminEmail?.Trim() ?? string.Empty;
+        var adminPassword = input.AdminPassword?.Trim() ?? string.Empty;
+        await ValidateTenantAdminAsync(adminUserName, adminEmail, adminPassword, tenant.TenantCode, tenant.TenantName);
+
+        _ = await _tenantProvisionDomainService.ProvisionTenantAdminAsync(
+            tenant,
+            adminUserName,
+            adminEmail,
+            _passwordHasher.HashPassword(adminPassword),
+            cancellationToken);
+
         return TenantApplicationMapper.ToDetailDto(tenant, DateTimeOffset.UtcNow);
     }
 
@@ -216,6 +243,55 @@ public sealed class TenantAppService
             TenantMemberApplicationMapper.ToAddCommand(input, _currentUser.UserId),
             cancellationToken);
         return TenantMemberApplicationMapper.ToDetailDto(result.Member, result.Now);
+    }
+
+    /// <summary>
+    /// 支持人员入驻：把平台账号以支持成员身份加入租户（平台）
+    /// </summary>
+    [UnitOfWork(true)]
+    [PermissionAuthorize(SaasPermissionCodes.Tenant.SupportMember)]
+    public async Task<TenantMemberDetailDto> AddTenantSupportMemberAsync(TenantSupportMemberAddDto input, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var result = await _tenantDomainService.AddTenantSupportMemberAsync(
+            TenantMemberApplicationMapper.ToSupportAddCommand(input, _currentUser.UserId),
+            cancellationToken);
+        return TenantMemberApplicationMapper.ToDetailDto(result.Member, result.Now);
+    }
+
+    /// <summary>
+    /// 支持人员离场：撤销平台账号在租户的支持成员身份（平台）
+    /// </summary>
+    [UnitOfWork(true)]
+    [PermissionAuthorize(SaasPermissionCodes.Tenant.SupportMember)]
+    public async Task RemoveTenantSupportMemberAsync(long tenantId, long memberId, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        await _tenantDomainService.RemoveTenantSupportMemberAsync(tenantId, memberId, cancellationToken);
+    }
+
+    /// <summary>
+    /// 所有权转移：把租户所有者身份转给该租户的另一名成员，原所有者改为管理员（平台）
+    /// </summary>
+    /// <returns>接任所有者的成员关系</returns>
+    [UnitOfWork(true)]
+    [HttpPost]
+    [PermissionAuthorize(SaasPermissionCodes.Tenant.TransferOwner)]
+    public async Task<TenantMemberDetailDto> TransferTenantOwnerAsync(TenantOwnerTransferDto input, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var result = await _tenantDomainService.TransferTenantOwnerAsync(
+            TenantMemberApplicationMapper.ToOwnerTransferCommand(input),
+            cancellationToken);
+
+        // 所有者角色换了人：两人的授权快照都要重建（事务提交后生效）
+        await _cacheInvalidator.InvalidateAuthorizationAsync(result.PreviousOwner.UserId, cancellationToken);
+        await _cacheInvalidator.InvalidateAuthorizationAsync(result.NewOwner.UserId, cancellationToken);
+        return TenantMemberApplicationMapper.ToDetailDto(result.NewOwner, result.Now);
     }
 
     /// <summary>

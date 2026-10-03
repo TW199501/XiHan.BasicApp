@@ -4,8 +4,9 @@
 export default {
   chat: {
     bell: '온라인 채팅',
+    unread_label: '읽지 않은 채팅 {n}건',
     island_new_message_fallback: '새 메시지 도착',
-    drawer: {
+    panel: {
       title: '온라인 채팅',
       open_page: '전체 페이지 열기',
     },
@@ -62,6 +63,7 @@ export default {
       assistant_thinking: '생성 중…',
       assistant_dismiss: '확인했어요',
       voice_unplayed: '미재생',
+      view_image: '이미지 보기',
       recalled: '전송이 취소된 메시지',
       recall: '전송 취소',
       recall_failed: '전송 취소 실패',
@@ -107,6 +109,7 @@ export default {
       send_key_enter: 'Enter 키로 메시지 전송',
       send_key_ctrl_enter: 'Ctrl + Enter 키로 메시지 전송',
       emoji: '이모지',
+      mention: '멤버 멘션',
       image: '이미지 보내기',
       file: '파일 보내기',
       voice: '음성 입력',

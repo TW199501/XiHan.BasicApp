@@ -5,7 +5,7 @@ import type {
 import type {
   ApiId,
 } from '@/api'
-import { XhButton, XhDialogCloseTrigger, XhDialogContent, XhDialogRoot, XhDialogTitle, XhEmptyStateDescription, XhEmptyStateIcon, XhEmptyStateRoot, XhEmptyStateTitle, XhFlex, XhSpinner, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
+import { XhButton, XhDialogCloseTrigger, XhDialogContent, XhDialogRoot, XhDialogTitle, XhEmptyStateDescription, XhEmptyStateIndicator, XhEmptyStateRoot, XhEmptyStateTitle, XhFlex, XhSpinner, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
 import { computed, h, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Icon, XCodeEditor, XSegmented, XTree } from '~/components'
@@ -229,7 +229,7 @@ async function loadPreview() {
   try {
     const result = await codeGenerationApi.preview({ tableId: props.tableId })
     if (!result.success) {
-      toast.error(result.message || t('develop.code_gen.preview.preview_failed'))
+      toast.danger(result.message || t('develop.code_gen.preview.preview_failed'))
       artifacts.value = []
       return
     }
@@ -237,7 +237,7 @@ async function loadPreview() {
     activeIndex.value = 0
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('develop.code_gen.preview.preview_failed'))
+    toast.danger((error as Error)?.message || t('develop.code_gen.preview.preview_failed'))
     artifacts.value = []
   }
   finally {
@@ -264,12 +264,13 @@ async function loadPreview() {
               <XSegmented v-model:value="activeSide" :options="sideOptions" size="sm" />
             </div>
             <XhEmptyStateRoot v-if="artifactTree.length === 0" class="gen__tree-empty" size="sm">
-              <XhEmptyStateIcon><Icon icon="lucide:inbox" /></XhEmptyStateIcon>
+              <XhEmptyStateIndicator><Icon icon="lucide:inbox" /></XhEmptyStateIndicator>
               <XhEmptyStateTitle>{{ t('common.empty') }}</XhEmptyStateTitle>
               <XhEmptyStateDescription>{{ t('develop.code_gen.preview.side_empty') }}</XhEmptyStateDescription>
             </XhEmptyStateRoot>
             <XTree
               v-else
+              :aria-label="t('develop.code_gen.preview.file_tree')"
               :data="artifactTree"
               :render-label="renderNodeLabel"
               :expanded-keys="expandedKeys"
@@ -280,7 +281,7 @@ async function loadPreview() {
           </div>
           <div class="gen__content">
             <XhEmptyStateRoot v-if="!activeArtifact" class="gen__content-empty">
-              <XhEmptyStateIcon><Icon icon="lucide:inbox" /></XhEmptyStateIcon>
+              <XhEmptyStateIndicator><Icon icon="lucide:inbox" /></XhEmptyStateIndicator>
               <XhEmptyStateTitle>{{ t('common.empty') }}</XhEmptyStateTitle>
               <XhEmptyStateDescription>{{ t('develop.code_gen.preview.empty') }}</XhEmptyStateDescription>
             </XhEmptyStateRoot>
@@ -299,7 +300,7 @@ async function loadPreview() {
       <div class="xh-dialog-footer">
         <XhFlex justify="between">
           <span class="gen__hint">{{ t('develop.code_gen.preview.total_files', { count: artifacts.length }) }}</span>
-          <XhButton @click="emit('update:show', false)">
+          <XhButton variant="subtle" @click="emit('update:show', false)">
             {{ t('common.actions.close') }}
           </XhButton>
         </XhFlex>
@@ -353,7 +354,7 @@ async function loadPreview() {
   min-block-size: 0;
 }
 
-.gen__node-icon {
+:deep(.gen__node-icon) {
   font-size: 15px;
   color: var(--text-secondary);
 }

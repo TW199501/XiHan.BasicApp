@@ -3,6 +3,8 @@
 
 using SqlSugar;
 using XiHan.BasicApp.Core.Entities;
+using XiHan.Framework.Data.SqlSugar.Routing;
+using XiHan.Framework.Domain.Entities.Abstracts;
 
 namespace XiHan.BasicApp.Saas.Domain.Entities;
 
@@ -38,6 +40,8 @@ namespace XiHan.BasicApp.Saas.Domain.Entities;
 /// - 登录失败次数限制 / 账户临时锁定
 /// - 多因素认证（MFA/TOTP）开关与密钥管理
 /// - 密码最近修改时间、过期策略
+///
+/// 账号域：TenantId 固定为注册地租户（平台账号为 0），严格租户隔离；按用户主键跨租户读取，写入在注册地租户内进行。
 /// </remarks>
 [SugarTable(TableName = "Sys_User_Security", TableDescription = "系统用户安全状态表")]
 [SugarIndex("IX_{table}_TeId_CrTi", nameof(TenantId), OrderByType.Asc, nameof(CreatedTime), OrderByType.Desc)]
@@ -45,7 +49,8 @@ namespace XiHan.BasicApp.Saas.Domain.Entities;
 [SugarIndex("IX_{table}_TeId_IsDe", nameof(TenantId), OrderByType.Asc, nameof(IsDeleted), OrderByType.Asc)]
 [SugarIndex("UX_{table}_UsId", nameof(UserId), OrderByType.Asc, nameof(IsDeleted), OrderByType.Asc, true)]
 [SugarIndex("IX_{table}_LoEnTi", nameof(LockoutEndTime), OrderByType.Desc)]
-public partial class SysUserSecurity : BasicAppFullAuditedEntity
+[PlatformDataSource]
+public partial class SysUserSecurity : BasicAppFullAuditedEntity, IStrictMultiTenantEntity
 {
     /// <summary>
     /// 用户ID
@@ -72,6 +77,16 @@ public partial class SysUserSecurity : BasicAppFullAuditedEntity
     /// </summary>
     [SugarColumn(ColumnName = "Password_Expiration_Time", ColumnDescription = "密码过期时间", IsNullable = true)]
     public virtual DateTimeOffset? PasswordExpirationTime { get; set; }
+
+    /// <summary>
+    /// 是否需要本人修改密码
+    /// </summary>
+    /// <remarks>
+    /// 密码由他人设置时为 true（管理员创建或重置、平台开通管理员、种子写入），本人改密或找回密码后清除。
+    /// 只在参数「密码设置」的 forceChange 开启时生效：登录后锁定到改密为止。
+    /// </remarks>
+    [SugarColumn(ColumnName = "Password_Change_Required", ColumnDescription = "是否需要本人改密")]
+    public virtual bool PasswordChangeRequired { get; set; }
 
     /// <summary>
     /// 失败登录次数

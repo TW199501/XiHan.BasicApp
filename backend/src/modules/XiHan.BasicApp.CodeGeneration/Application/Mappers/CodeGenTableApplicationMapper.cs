@@ -34,7 +34,6 @@ public static class CodeGenTableApplicationMapper
             input.GenType,
             input.GenerationScope,
             input.EnabledActions,
-            input.GenPath,
             input.ParentMenuId,
             input.PrimaryKeyColumn,
             input.TreeParentColumn,
@@ -112,7 +111,6 @@ public static class CodeGenTableApplicationMapper
             GenType = table.GenType,
             GenerationScope = table.GenerationScope,
             EnabledActions = table.EnabledActions,
-            GenPath = table.GenPath,
             ParentMenuId = table.ParentMenuId,
             PrimaryKeyColumn = table.PrimaryKeyColumn,
             TreeParentColumn = table.TreeParentColumn,
@@ -166,6 +164,7 @@ public static class CodeGenTableApplicationMapper
             IsIdentity = column.IsIdentity,
             IsNullable = column.IsNullable,
             IsRequired = column.IsRequired,
+            IsUnique = column.IsUnique,
             IsList = column.IsList,
             IsInsert = column.IsInsert,
             IsEdit = column.IsEdit,
@@ -176,6 +175,8 @@ public static class CodeGenTableApplicationMapper
             DictCode = column.DictCode,
             EnumTypeName = column.EnumTypeName,
             ConstValues = column.ConstValues,
+            RelationTableId = column.RelationTableId,
+            RelationLabelColumn = column.RelationLabelColumn,
             Sort = column.Sort,
             Status = column.Status
         };

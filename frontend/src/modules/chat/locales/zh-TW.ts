@@ -4,8 +4,9 @@
 export default {
   chat: {
     bell: '線上聊天',
+    unread_label: '{n} 則未讀聊天',
     island_new_message_fallback: '收到新訊息',
-    drawer: {
+    panel: {
       title: '線上聊天',
       open_page: '開啟獨立頁面',
     },
@@ -62,6 +63,7 @@ export default {
       assistant_thinking: '正在產生…',
       assistant_dismiss: '我知道了',
       voice_unplayed: '未聽',
+      view_image: '查看圖片',
       recalled: '訊息已收回',
       recall: '收回',
       recall_failed: '收回失敗',
@@ -107,6 +109,7 @@ export default {
       send_key_enter: '按 Enter 鍵傳送訊息',
       send_key_ctrl_enter: '按 Ctrl + Enter 鍵傳送訊息',
       emoji: '表情符號',
+      mention: '提及成員',
       image: '傳送圖片',
       file: '傳送檔案',
       voice: '語音輸入',

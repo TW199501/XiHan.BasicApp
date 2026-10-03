@@ -69,6 +69,32 @@ public static class SaasPermissionCodes
         /// 导出租户
         /// </summary>
         public const string Export = "saas:tenant:export";
+
+        /// <summary>
+        /// 支持人员入驻（把平台账号以支持成员身份加入租户或移除）
+        /// </summary>
+        public const string SupportMember = "saas:tenant:support-member";
+
+        /// <summary>
+        /// 所有权转移（把租户所有者身份转给该租户的另一名成员）
+        /// </summary>
+        public const string TransferOwner = "saas:tenant:transfer-owner";
+    }
+
+    /// <summary>
+    /// 租户订阅权限码（租户看自己的订阅）
+    /// </summary>
+    public static class TenantSubscription
+    {
+        /// <summary>
+        /// 分组编码（资源段）
+        /// </summary>
+        public const string Group = "tenant-subscription";
+
+        /// <summary>
+        /// 查看本租户的订阅
+        /// </summary>
+        public const string Read = "saas:tenant-subscription:read";
     }
 
     /// <summary>
@@ -1173,11 +1199,6 @@ public static class SaasPermissionCodes
         public const string Status = "saas:message:status";
 
         /// <summary>
-        /// 发布系统通知
-        /// </summary>
-        public const string Publish = "saas:message:publish";
-
-        /// <summary>
         /// 删除系统消息
         /// </summary>
         public const string Delete = "saas:message:delete";
@@ -1631,24 +1652,9 @@ public static class SaasPermissionCodes
         public const string Read = "saas:role-data-scope:read";
 
         /// <summary>
-        /// 授予角色数据范围
-        /// </summary>
-        public const string Grant = "saas:role-data-scope:grant";
-
-        /// <summary>
-        /// 更新角色数据范围
+        /// 设置角色数据范围（档位与自定义部门一次落地）
         /// </summary>
         public const string Update = "saas:role-data-scope:update";
-
-        /// <summary>
-        /// 更新角色数据范围状态
-        /// </summary>
-        public const string Status = "saas:role-data-scope:status";
-
-        /// <summary>
-        /// 撤销角色数据范围
-        /// </summary>
-        public const string Revoke = "saas:role-data-scope:revoke";
     }
 
     /// <summary>
@@ -1775,24 +1781,9 @@ public static class SaasPermissionCodes
         public const string Read = "saas:user-data-scope:read";
 
         /// <summary>
-        /// 授予用户数据范围
-        /// </summary>
-        public const string Grant = "saas:user-data-scope:grant";
-
-        /// <summary>
-        /// 更新用户数据范围
+        /// 设置用户数据范围（档位与自定义部门一次落地）
         /// </summary>
         public const string Update = "saas:user-data-scope:update";
-
-        /// <summary>
-        /// 更新用户数据范围状态
-        /// </summary>
-        public const string Status = "saas:user-data-scope:status";
-
-        /// <summary>
-        /// 撤销用户数据范围
-        /// </summary>
-        public const string Revoke = "saas:user-data-scope:revoke";
     }
 
     /// <summary>
@@ -1995,7 +1986,7 @@ public static class SaasPermissionCodes
     /// </summary>
     /// <remarks>
     /// <see cref="Start"/> 是发起模仿的门槛，可授予租户管理员；
-    /// <see cref="CrossTenant"/> 是跨租户 / 平台态发起模仿的升级权，登记为平台专属。
+    /// <see cref="CrossTenant"/> 是跨租户 / 平台态发起模仿的升级权，作用侧为平台。
     /// </remarks>
     public static class Impersonation
     {

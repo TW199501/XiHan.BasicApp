@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import type { MenuNode } from '@xihan-ui/headless'
-import type { Tone } from '@xihan-ui/kernel'
 import type { ActionSchema, ListFieldSchema, PageSchema, SchemaActionPayload, SchemaColumn } from './types'
 import type { ApiId } from '~/types/contracts'
-import { XhButton, XhCardBody, XhCardRoot, XhMenuRoot, XhSkeletonBone, XhSkeletonRoot } from '@xihan-ui/vue'
+import { XhButton, XhButtonIndicator, XhButtonLabel, XhCardContent, XhCardRoot, XhMenuRoot, XhSkeletonItem, XhSkeletonRoot } from '@xihan-ui/vue'
 import { computed, h, onMounted, ref, useSlots, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { dialog, toast } from '~/composables'
@@ -12,6 +11,9 @@ import { usePermission } from '~/hooks'
 import { Icon } from '~/iconify'
 import { useAppContext, useAppStore } from '~/stores'
 import XIconButton from '../common/XIconButton.vue'
+import { actionMenuPrefix } from './action-menu'
+import { actionButtonTone, actionMenuTone } from './action-tone'
+import { formatFieldText } from './renderer'
 import SchemaActionPanel from './SchemaActionPanel.vue'
 import SchemaImportDialog from './SchemaImportDialog.vue'
 import SchemaSearchPanel from './SchemaSearchPanel.vue'
@@ -31,6 +33,8 @@ defineOptions({ name: 'SchemaPage' })
 const props = defineProps<{
   /** 页面单一事实源 */
   schema: PageSchema<Row>
+  /** 逐行附加属性（class / style / 事件）：主从页用它做整行点选与当前行高亮 */
+  rowProps?: (row: Row, rowIndex: number) => Record<string, unknown>
 }>()
 
 const emit = defineEmits<{
@@ -54,19 +58,18 @@ const table = useSchemaTable<Row>(props.schema)
 const { loading, rows, total, page, pageSize, filters, sorts, search, reset, changePage, changePageSize, changeSort, remove } = table
 
 /**
- * 字典/枚举异步取值：按字段 dictionaryCode 拉取元数据并注入 field.options，
- * 使单元格按值映射 label、搜索区自动渲染为下拉。静态 options 优先。
+ * 字典/枚举异步取值：按字段 dictionaryCode（枚举）或 dictCode（系统字典）拉取选项并注入 field.options，
+ * 使单元格按值映射 label、搜索区自动渲染为下拉。解析结果优先，为空时回退字段静态 options。
  */
 const dictionaries = useSchemaDictionaries(() => props.schema.fields)
 const resolvedFields = computed<ListFieldSchema[]>(() =>
   props.schema.fields.map((field) => {
-    // 字典/枚举选项注入（字段脱敏已由服务端在响应里落地，前端不再二次打码）
-    // dictionaryCode 解析结果优先（本地化选项）；为空时回退字段静态 options 兜底
-    if (!field.dictionaryCode) {
+    // 字段脱敏已由服务端在响应里落地，前端不再二次打码
+    if (!field.dictionaryCode && !field.dictCode && !field.optionsLoader) {
       return field
     }
-    const options = dictionaries.optionsMap.value[field.dictionaryCode]
-    return options?.length ? { ...field, options } : field
+    const options = dictionaries.optionsFor(field)
+    return options && options !== field.options ? { ...field, options } : field
   }),
 )
 const resolvedSchema = computed<PageSchema<Row>>(() => ({ ...props.schema, fields: resolvedFields.value }))
@@ -248,31 +251,18 @@ function visibleRowActions(row: Row): ActionSchema<Row>[] {
   return rowActions.value.filter(a => !a.visible || a.visible(row))
 }
 
-/** 操作 Schema 的 type 到组件库 tone 轴的换算（Schema 里的词汇沿用页面既有声明，不改） */
-function toneOfActionType(type: ActionSchema<Row>['type']): Tone {
-  switch (type) {
-    case 'primary':
-      return 'brand'
-    case 'error':
-      return 'danger'
-    case 'info':
-    case 'success':
-    case 'warning':
-      return type
-    default:
-      return 'neutral'
-  }
-}
-
 function renderRowActions(row: Row) {
-  const collection: MenuNode[] = visibleRowActions(row).map(a => ({
+  const actions = visibleRowActions(row)
+  const collection: MenuNode[] = actions.map(a => ({
     value: a.key,
     label: a.title,
     disabled: a.disabled ? a.disabled(row) : false,
+    tone: actionMenuTone(a.type),
   }))
   if (collection.length === 0) {
     return h('span', { class: 'text-foreground/30' }, '-')
   }
+  const itemPrefix = actionMenuPrefix(actions)
   return h(
     XhMenuRoot,
     {
@@ -288,6 +278,7 @@ function renderRowActions(row: Row) {
         { variant: 'outline', size: 'sm' },
         () => [t('component.schema_page.more'), h(Icon, { icon: 'lucide:chevron-down' })],
       ),
+      ...(itemPrefix ? { 'item-prefix': itemPrefix } : {}),
     },
   )
 }
@@ -303,10 +294,14 @@ function dispatchAction(key: string, payload: SchemaActionPayload<Row>) {
     return
   }
 
+  const content = typeof action.confirmText === 'function'
+    ? (payload.row ? action.confirmText(payload.row) : undefined)
+    : action.confirmText
   void dialog.confirm({
     title: action.title,
-    content: action.confirmText ?? t('component.schema_page.action_confirm'),
+    content: content ?? t('component.schema_page.action_confirm'),
     badge: 'warning',
+    tone: action.type === 'error' ? 'danger' : undefined,
     okText: t('component.schema_page.confirm'),
     cancelText: t('component.schema_page.cancel'),
     onOk: () => {
@@ -566,11 +561,27 @@ onMounted(async () => {
   firstLoaded.value = true
 })
 
+/**
+ * 按字段把一行格式化成显示文本：选项列（枚举、字典、异步选项）取名称、日期按格式、布尔为是/否，空值为空串。
+ * 供打印这类要「显示值」而非原始值的场景用；隐藏字段（只供搜索或导入）同样格式化。
+ */
+function formatRow(row: object): Record<string, string> {
+  const result: Record<string, string> = {}
+  for (const field of resolvedFields.value) {
+    const raw = (row as Record<string, unknown>)[field.key]
+    result[field.key] = raw == null || raw === '' ? '' : formatFieldText(field, row as Row)
+  }
+  return result
+}
+
 defineExpose({
   reload,
+  formatRow,
   remove,
   clearSelection,
   filters,
+  // 当前页数据：主从页据此同步「当前行」（选中项被过滤掉时改选首条）
+  rows,
   // 搜索方案接口（无内置 UI，供页面自定义方案入口调用）
   views: viewManager.views,
   activeViewCode: viewManager.activeCode,
@@ -627,10 +638,11 @@ const tableDensity = computed<'sm' | 'md' | 'lg'>(() => {
     <!-- 搜索面板：与表格同款卡片容器；overflow 放开，高级条件浮层才不被卡片裁掉 -->
     <XhCardRoot
       v-if="searchFields.length || advancedFields.length"
+      class="xh-schema-card"
       variant="outline"
       style="overflow: visible"
     >
-      <XhCardBody class="xh-schema-card__body">
+      <XhCardContent>
         <SchemaSearchPanel
           :advanced-fields="advancedFields"
           :common-fields="searchFields"
@@ -649,13 +661,17 @@ const tableDensity = computed<'sm' | 'md' | 'lg'>(() => {
             />
           </template>
         </SchemaSearchPanel>
-      </XhCardBody>
+      </XhCardContent>
     </XhCardRoot>
 
     <!-- 操作工具栏：页面级操作按钮 + 内置工具（刷新/导入/导出/列设置/全屏） -->
-    <XhCardRoot variant="outline" style="overflow: visible">
-      <XhCardBody class="xh-schema-card__body xh-schema-card__body--toolbar">
+    <XhCardRoot class="xh-schema-card xh-schema-card--toolbar" variant="outline" style="overflow: visible">
+      <XhCardContent>
         <SchemaActionPanel :actions="schema.actions ?? []" @action="onPageAction">
+          <!-- 页面自定义的前置标签（如主从页的当前对象名） -->
+          <template v-if="$slots['toolbar-leading']" #leading>
+            <slot name="toolbar-leading" />
+          </template>
           <template #toolbar>
             <!-- 页面自定义工具栏项 -->
             <slot name="toolbar" :reload="reload" />
@@ -719,12 +735,12 @@ const tableDensity = computed<'sm' | 'md' | 'lg'>(() => {
             />
           </template>
         </SchemaActionPanel>
-      </XhCardBody>
+      </XhCardContent>
     </XhCardRoot>
 
     <!-- 表格容器：定高卡片（flex-1 + height:0），卡片体成为定高 flex 列，滚动只发生在表格内部 -->
-    <XhCardRoot class="flex-1" variant="outline" style="height: 0">
-      <XhCardBody class="xh-schema-card__body xh-schema-card__body--table">
+    <XhCardRoot class="xh-schema-card flex-1" variant="outline" style="height: 0">
+      <XhCardContent class="xh-schema-card__body--table">
         <!-- 列表骨架屏：列宽/行高对应真实表格，逐行逐列，形似即将加载出来的数据 -->
         <XhSkeletonRoot v-if="!firstLoaded" class="xh-table-skeleton" aria-hidden="true">
           <div class="xh-skel-row xh-skel-row--head" :style="{ height: `${skeletonRowHeight}px` }">
@@ -734,7 +750,7 @@ const tableDensity = computed<'sm' | 'md' | 'lg'>(() => {
               class="xh-skel-cell"
               :style="col.width ? { flex: `0 0 ${col.width}` } : { flex: '1 1 0' }"
             >
-              <XhSkeletonBone v-if="!col.control" class="xh-skel-bar" style="inline-size: 52%; block-size: 13px" />
+              <XhSkeletonItem v-if="!col.control" class="xh-skel-bar" style="inline-size: 52%; block-size: 13px" />
             </div>
           </div>
           <div
@@ -749,8 +765,8 @@ const tableDensity = computed<'sm' | 'md' | 'lg'>(() => {
               class="xh-skel-cell"
               :style="col.width ? { flex: `0 0 ${col.width}` } : { flex: '1 1 0' }"
             >
-              <XhSkeletonBone v-if="col.control" class="xh-skel-bar xh-skel-bar--square" style="inline-size: 16px; block-size: 16px" />
-              <XhSkeletonBone v-else class="xh-skel-bar" :style="{ inlineSize: col.fill, blockSize: '15px' }" />
+              <XhSkeletonItem v-if="col.control" class="xh-skel-bar xh-skel-bar--square" style="inline-size: 16px; block-size: 16px" />
+              <XhSkeletonItem v-else class="xh-skel-bar" :style="{ inlineSize: col.fill, blockSize: '15px' }" />
             </div>
           </div>
         </XhSkeletonRoot>
@@ -776,6 +792,7 @@ const tableDensity = computed<'sm' | 'md' | 'lg'>(() => {
             :children-key="schema.tree?.childrenKey ?? 'children'"
             :default-expand-all="schema.tree?.defaultExpandAll ?? true"
             :remount-key="tableRemountKey"
+            :row-props="rowProps"
             :peek-fields="peekFields"
             :render-expand="renderExpand"
             @sort="changeSort"
@@ -798,7 +815,8 @@ const tableDensity = computed<'sm' | 'md' | 'lg'>(() => {
                   :loading="batchStatusUpdating"
                   @click="handleBatchStatus(true)"
                 >
-                  {{ t('component.schema_page.batch_enable') }}
+                  <XhButtonIndicator />
+                  <XhButtonLabel>{{ t('component.schema_page.batch_enable') }}</XhButtonLabel>
                 </XhButton>
                 <XhButton
                   v-if="canBatchStatus"
@@ -808,7 +826,8 @@ const tableDensity = computed<'sm' | 'md' | 'lg'>(() => {
                   :loading="batchStatusUpdating"
                   @click="handleBatchStatus(false)"
                 >
-                  {{ t('component.schema_page.batch_disable') }}
+                  <XhButtonIndicator />
+                  <XhButtonLabel>{{ t('component.schema_page.batch_disable') }}</XhButtonLabel>
                 </XhButton>
                 <XhButton
                   v-if="canBatchRemove"
@@ -818,14 +837,15 @@ const tableDensity = computed<'sm' | 'md' | 'lg'>(() => {
                   :loading="batchRemoving"
                   @click="handleBatchRemove"
                 >
-                  {{ t('component.schema_page.batch_delete') }}
+                  <XhButtonIndicator />
+                  <XhButtonLabel>{{ t('component.schema_page.batch_delete') }}</XhButtonLabel>
                 </XhButton>
                 <XhButton
                   v-for="action in batchActions"
                   :key="action.key"
                   size="sm"
                   variant="outline"
-                  :tone="toneOfActionType(action.type)"
+                  :tone="actionButtonTone(action.type)"
                   @click="onBatchAction(action.key)"
                 >
                   {{ action.title }}
@@ -834,7 +854,7 @@ const tableDensity = computed<'sm' | 'md' | 'lg'>(() => {
             </template>
           </SchemaTablePanel>
         </template>
-      </XhCardBody>
+      </XhCardContent>
     </XhCardRoot>
 
     <!-- 内置导入对话框（模板下载/解析/预校验/批量创建） -->
@@ -854,13 +874,15 @@ const tableDensity = computed<'sm' | 'md' | 'lg'>(() => {
 </template>
 
 <style scoped>
-/* 卡片体内边距：卡片皮肤给的是通用值，管理页三块卡片各有自己的紧凑档 */
-.xh-schema-card__body {
-  padding: 12px 16px;
+/* 卡片内边距：Card 皮肤把内边距放在根上（--xh-card-p，缺省 surface-pad-lg），管理页三块卡片走更紧的档。
+ * 只改这一个公开槽，随密度轴换档（紧凑 8/12、宽松 12/16）；不要再给 content 叠一层内边距，会双倍。 */
+.xh-schema-card {
+  --xh-card-p: var(--xh-surface-pad-md) var(--xh-surface-pad-lg);
 }
 
-.xh-schema-card__body--toolbar {
-  padding: 8px 16px;
+/* 工具条一行按钮，竖向再收一档 */
+.xh-schema-card--toolbar {
+  --xh-card-p: var(--xh-surface-pad-sm) var(--xh-surface-pad-lg);
 }
 
 /* 表格卡片：卡片体成为定高 flex 列，内部滚动 */

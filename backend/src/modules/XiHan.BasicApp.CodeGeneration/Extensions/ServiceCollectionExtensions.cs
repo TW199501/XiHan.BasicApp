@@ -6,8 +6,10 @@ using XiHan.BasicApp.CodeGeneration.Domain.DomainServices;
 using XiHan.BasicApp.CodeGeneration.Domain.Generation;
 using XiHan.BasicApp.CodeGeneration.Infrastructure.Generation;
 using XiHan.BasicApp.CodeGeneration.Infrastructure.Inference;
-using XiHan.BasicApp.CodeGeneration.Infrastructure.Seeders.System;
+using XiHan.BasicApp.CodeGeneration.Infrastructure.Seeders;
 using XiHan.Framework.Data.Extensions.DependencyInjection;
+using XiHan.BasicApp.CodeGeneration.Domain.Entities;
+using XiHan.BasicApp.Saas.Extensions;
 
 namespace XiHan.BasicApp.CodeGeneration.Extensions;
 
@@ -17,22 +19,15 @@ namespace XiHan.BasicApp.CodeGeneration.Extensions;
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// 添加 CodeGeneration 种子数据提供者
+    /// 添加代码生成种子：权限目录、菜单、内置模板
     /// </summary>
-    /// <remarks>
-    /// 代码生成种子独立使用 Order 100+ 段，整体晚于 Saas 全部种子执行，与 Saas 互不交叠、互不影响。
-    /// 链内顺序：操作字典 → 资源 → 权限(资源×操作) → 菜单 → 角色授权 → 模板。
-    /// </remarks>
     /// <param name="services">服务集合</param>
     /// <returns></returns>
     public static IServiceCollection AddCodeGenerationDataSeeders(this IServiceCollection services)
     {
-        services.AddDataSeeder<SysOperationSeeder>();        // Order = 100（操作字典，权限派生前置）
-        services.AddDataSeeder<SysResourceSeeder>();        // Order = 101（资源，权限派生前置）
-        services.AddDataSeeder<SysPermissionSeeder>();      // Order = 102（资源 × 操作 → code_gen:* 权限）
-        services.AddDataSeeder<CodeGenerationMenuSeeder>(); // Order = 103（PageRegistry 驱动，建即绑 code_gen:read）
-        services.AddDataSeeder<SysRolePermissionSeeder>();  // Order = 104
-        services.AddDataSeeder<SysCodeGenTemplateSeeder>(); // Order = 105
+        services.AddDataSeeder<CodeGenPermissionCatalogSeeder>();
+        services.AddDataSeeder<CodeGenerationMenuSeeder>();
+        services.AddDataSeeder<SysCodeGenTemplateSeeder>();
         return services;
     }
 
@@ -51,11 +46,11 @@ public static class ServiceCollectionExtensions
         services.AddTransient<ITemplateRenderer, ScribanTemplateRenderer>();
         services.AddTransient<ITemplateRendererResolver, TemplateRendererResolver>();
 
-        // 落盘选项 + 类型映射 + 产物打包 + 受控落盘写入器
+        // 生成选项 + 类型映射 + 产物打包 + 生成到项目的写入器
         services.AddOptions<CodeGenerationOptions>().BindConfiguration(CodeGenerationOptions.SectionName);
         services.AddTransient<ITypeMappingProvider, DefaultTypeMappingProvider>();
         services.AddTransient<IGeneratedArtifactPackager, ZipArtifactPackager>();
-        services.AddTransient<IGeneratedArtifactWriter, FileSystemArtifactWriter>();
+        services.AddTransient<IGeneratedArtifactWriter, ProjectArtifactWriter>();
 
         // 实体元数据目录（反射一次、进程内缓存）+ 表配置推断引擎
         services.AddSingleton<IEntityMetadataCatalog, EntityMetadataCatalog>();
@@ -86,5 +81,19 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ICodeGenTemplateDomainService, CodeGenTemplateDomainService>();
 
         return services;
+    }
+
+    /// <summary>
+    /// 登记代码生成模块可配置字段安全的实体
+    /// </summary>
+    /// <param name="services">服务集合</param>
+    /// <returns>服务集合</returns>
+    public static IServiceCollection AddCodeGenerationFieldSecurityEntities(this IServiceCollection services)
+    {
+        return services.AddFieldSecurityEntities(entities => entities
+            .Add<SysCodeGenDataSource>()
+            .Add<SysCodeGenTable>()
+            .Add<SysCodeGenTemplate>()
+            .Add<SysCodeGenHistory>());
     }
 }

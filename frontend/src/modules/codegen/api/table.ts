@@ -1,4 +1,5 @@
 import type {
+  CodeGenParentMenuOptionDto,
   CodeGenTableDetailDto,
   CodeGenTableListItemDto,
   CodeGenTablePageQueryDto,
@@ -35,5 +36,9 @@ export const codeGenTableApi = {
   },
   detail(id: ApiId) {
     return query.get<CodeGenTableDetailDto | null>('Detail', { id })
+  },
+  /** 父菜单候选：平台菜单树（目录可选，菜单只表明位置），带上级供组树 */
+  parentMenuOptions() {
+    return query.get<CodeGenParentMenuOptionDto[]>('ParentMenuOptions')
   },
 }

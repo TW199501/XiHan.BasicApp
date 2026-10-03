@@ -3,8 +3,10 @@
 
 using Microsoft.Extensions.Caching.Distributed;
 using XiHan.BasicApp.Saas.Application.Caching;
+using XiHan.BasicApp.Saas.Domain.DomainServices;
 using XiHan.BasicApp.Saas.Domain.Entities;
 using XiHan.BasicApp.Saas.Domain.Enums;
+using XiHan.BasicApp.Saas.Domain.Permissions;
 using XiHan.BasicApp.Saas.Domain.Repositories;
 using XiHan.Framework.Caching.Distributed.Abstracts;
 using XiHan.Framework.MultiTenancy.Abstractions;
@@ -14,18 +16,26 @@ namespace XiHan.BasicApp.Saas.Application.QueryServices;
 /// <summary>
 /// 授权快照查询服务实现
 /// </summary>
+/// <remarks>
+/// 生效权限 = 当前上下文的授权绑定 ∩ 作用侧允许当前上下文的权限 ∩ 套餐白名单（仅业务租户）：
+/// <list type="bullet">
+///   <item>授权绑定（用户角色 / 直授 / 委托）只在所属上下文生效：平台的绑定（含超管）不带进任何租户，租户的绑定也不带进平台；</item>
+///   <item>作用侧来自权限目录（<c>SysPermission.Side</c>），不在当前上下文生效的权限码随快照下发，鉴权与菜单据此先行拒绝；</item>
+///   <item>超管的通配 * 只在平台成立，业务租户里一律经套餐门控；</item>
+///   <item>租户所有者（持有本租户的 tenant_owner 系统角色）拿到租户生效的全部权限，再经套餐门控收窄到白名单——
+///   不靠授权行，套餐升降、新增权限码都即时反映。</item>
+/// </list>
+/// </remarks>
 public sealed class AuthorizationSnapshotQueryService
     : IAuthorizationSnapshotQueryService
 {
-    private const string SuperAdminRoleCode = "super_admin";
-
     private readonly IUserRoleRepository _userRoleRepository;
 
     private readonly IRoleRepository _roleRepository;
 
     private readonly IRolePermissionRepository _rolePermissionRepository;
 
-    private readonly IRoleHierarchyRepository _roleHierarchyRepository;
+    private readonly IRoleHierarchyDomainService _roleHierarchyDomainService;
 
     private readonly IUserPermissionRepository _userPermissionRepository;
 
@@ -50,7 +60,7 @@ public sealed class AuthorizationSnapshotQueryService
         IUserRoleRepository userRoleRepository,
         IRoleRepository roleRepository,
         IRolePermissionRepository rolePermissionRepository,
-        IRoleHierarchyRepository roleHierarchyRepository,
+        IRoleHierarchyDomainService roleHierarchyDomainService,
         IUserPermissionRepository userPermissionRepository,
         IPermissionRepository permissionRepository,
         IPermissionDelegationRepository permissionDelegationRepository,
@@ -63,7 +73,7 @@ public sealed class AuthorizationSnapshotQueryService
         _userRoleRepository = userRoleRepository;
         _roleRepository = roleRepository;
         _rolePermissionRepository = rolePermissionRepository;
-        _roleHierarchyRepository = roleHierarchyRepository;
+        _roleHierarchyDomainService = roleHierarchyDomainService;
         _userPermissionRepository = userPermissionRepository;
         _permissionRepository = permissionRepository;
         _permissionDelegationRepository = permissionDelegationRepository;
@@ -101,6 +111,7 @@ public sealed class AuthorizationSnapshotQueryService
                     Roles = built.Roles,
                     Permissions = built.Permissions,
                     PermissionIds = [.. built.PermissionIds],
+                    ContextDeniedCodes = [.. built.ContextDeniedCodes],
                     CachedAt = DateTimeOffset.UtcNow
                 };
             },
@@ -110,7 +121,11 @@ public sealed class AuthorizationSnapshotQueryService
 
         var snapshot = item is null
             ? await BuildSnapshotAsync(userId, now, cancellationToken)
-            : new AuthorizationSnapshot(item.Roles, item.Permissions, [.. item.PermissionIds]);
+            : new AuthorizationSnapshot(
+                item.Roles,
+                item.Permissions,
+                [.. item.PermissionIds],
+                new HashSet<string>(item.ContextDeniedCodes, StringComparer.OrdinalIgnoreCase));
 
         // 套餐(Edition)运行时门控：在 per-user 缓存之外按当前租户上下文叠加，避免切换租户后缓存串味
         return await ApplyEditionGatingAsync(snapshot, cancellationToken);
@@ -128,19 +143,13 @@ public sealed class AuthorizationSnapshotQueryService
     /// 按当前租户版本(Edition)的权限白名单收窄有效权限。
     /// </summary>
     /// <remarks>
-    /// 例外（不门控）：超管通配 *、平台运维态（无租户）、租户未绑定版本、版本未配置白名单（避免误锁）。
+    /// 业务租户上下文一律门控：租户未绑定版本、或版本白名单为空时，生效权限为空（不放行）；平台上下文不门控。
     /// 门控在用户快照缓存之外叠加：白名单走独立的版本门控缓存（10 分钟 TTL，版本权限/租户换版写路径调
-    /// InvalidateEditionGateAsync 失效），鉴权热路径不再每请求查 2 次库。
+    /// InvalidateEditionGateAsync 失效），缓存不可用时直接查库，鉴权热路径不再每请求查 2 次库。
     /// </remarks>
     private async Task<AuthorizationSnapshot> ApplyEditionGatingAsync(AuthorizationSnapshot snapshot, CancellationToken cancellationToken)
     {
-        // 超管通配 * 不受门控
-        if (snapshot.Permissions.Contains("*"))
-        {
-            return snapshot;
-        }
-
-        // 平台运维态（无租户上下文）不门控
+        // 平台上下文（0 号租户）不门控
         var tenantId = _currentTenant.Id;
         if (tenantId is not > 0)
         {
@@ -149,34 +158,11 @@ public sealed class AuthorizationSnapshotQueryService
 
         var gate = await _editionGateCache.GetOrAddAsync(
             SaasCacheKeys.EditionGate(tenantId.Value),
-            async () =>
-            {
-                var tenant = await _tenantRepository.GetByIdAsync(tenantId.Value, cancellationToken);
-                if (tenant?.EditionId is not > 0)
-                {
-                    return new SaasEditionGateCacheItem { EditionId = null, CachedAt = DateTimeOffset.UtcNow };
-                }
-
-                var whitelist = await _tenantEditionPermissionRepository.GetByEditionIdAsync(tenant.EditionId.Value, cancellationToken);
-                return new SaasEditionGateCacheItem
-                {
-                    EditionId = tenant.EditionId,
-                    PermissionIds = [.. whitelist
-                        .Where(item => item.Status == ValidityStatus.Valid)
-                        .Select(item => item.PermissionId)
-                        .Distinct()],
-                    CachedAt = DateTimeOffset.UtcNow
-                };
-            },
+            () => LoadEditionGateAsync(tenantId.Value, cancellationToken),
             CreateCacheOptions,
             hideErrors: true,
-            token: cancellationToken);
-
-        // 缓存异常 / 未绑定版本 / 版本未配置白名单：视为未启用门控，保持原快照（避免把租户锁死）
-        if (gate?.EditionId is not > 0 || gate.PermissionIds.Count == 0)
-        {
-            return snapshot;
-        }
+            token: cancellationToken)
+            ?? await LoadEditionGateAsync(tenantId.Value, cancellationToken);
 
         var allowedIds = gate.PermissionIds.ToHashSet();
 
@@ -202,17 +188,49 @@ public sealed class AuthorizationSnapshotQueryService
     }
 
     /// <summary>
+    /// 从库里读取租户的套餐白名单（未绑定版本即空白名单）
+    /// </summary>
+    private async Task<SaasEditionGateCacheItem> LoadEditionGateAsync(long tenantId, CancellationToken cancellationToken)
+    {
+        var tenant = await _tenantRepository.GetByIdAsync(tenantId, cancellationToken);
+        if (tenant?.EditionId is not > 0)
+        {
+            return new SaasEditionGateCacheItem { EditionId = null, CachedAt = DateTimeOffset.UtcNow };
+        }
+
+        var whitelist = await _tenantEditionPermissionRepository.GetByEditionIdAsync(tenant.EditionId.Value, cancellationToken);
+        return new SaasEditionGateCacheItem
+        {
+            EditionId = tenant.EditionId,
+            PermissionIds = [.. whitelist
+                .Where(item => item.Status == ValidityStatus.Valid)
+                .Select(item => item.PermissionId)
+                .Distinct()],
+            CachedAt = DateTimeOffset.UtcNow
+        };
+    }
+
+    /// <summary>
     /// 实时构建用户授权快照（缓存未命中时执行）。
     /// </summary>
     private async Task<AuthorizationSnapshot> BuildSnapshotAsync(long userId, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        // 绑定行显式按租户上下文过滤：授权绑定（用户角色/直授/委托）按 (当前租户 OR 全局) 生效。
-        // 租户上下文时与全局租户过滤器等价；平台态（无租户上下文，过滤器关闭）则仅全局绑定生效，
-        // 防止多租户成员在平台态聚合出跨租户权限（渗漏）。
+        // 授权绑定（用户角色 / 直授 / 委托）只在所属上下文生效：严格按当前作用域取（平台就是 0 号租户）。
+        // 平台的绑定（含超管）不带进任何租户，租户的绑定也不带进平台。
         var bindingScopeTenantId = _currentTenant.Id ?? 0;
+        var isPlatformContext = bindingScopeTenantId == 0;
+
+        // 作用侧：权限目录里在当前上下文生效与不生效的两部分
+        var catalog = await _permissionRepository.GetListAsync(permission => permission.Status == EnableStatus.Enabled, cancellationToken);
+        var effectiveCatalog = catalog.Where(permission => permission.Side.IsEffectiveIn(isPlatformContext)).ToList();
+        var contextDeniedCodes = catalog
+            .Where(permission => !permission.Side.IsEffectiveIn(isPlatformContext))
+            .Select(permission => permission.PermissionCode)
+            .Where(code => !string.IsNullOrWhiteSpace(code))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var userRoles = (await _userRoleRepository.GetValidByUserIdAsync(userId, now, cancellationToken))
-            .Where(item => item.TenantId == bindingScopeTenantId || item.TenantId == 0)
+            .Where(item => item.TenantId == bindingScopeTenantId)
             .ToList();
         var roles = await _roleRepository.GetEnabledByIdsAsync(userRoles.Select(item => item.RoleId), cancellationToken);
         var roleCodes = roles
@@ -221,27 +239,33 @@ public sealed class AuthorizationSnapshotQueryService
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(code => code, StringComparer.OrdinalIgnoreCase)
             .ToList();
-        var isSuperAdmin = roleCodes.Contains(SuperAdminRoleCode, StringComparer.OrdinalIgnoreCase);
+        // 超管只在平台成立：持有平台的 super_admin 绑定，拿到平台生效的全部权限与通配 *
+        var isSuperAdmin = isPlatformContext && roleCodes.Contains(SaasRoleCodes.SuperAdmin, StringComparer.OrdinalIgnoreCase);
+        // 租户所有者只在所属租户成立：持有本租户的 tenant_owner 系统角色，拿到租户生效的全部权限（随后经套餐门控收窄）
+        var isTenantOwner = !isPlatformContext && roles.Any(IsTenantOwnerRole);
 
-        if (isSuperAdmin)
+        if (isSuperAdmin || isTenantOwner)
         {
-            var allPermissions = await _permissionRepository.GetListAsync(permission => permission.Status == EnableStatus.Enabled, cancellationToken);
-            var permissionIds = allPermissions.Select(permission => permission.BasicId).ToHashSet();
-            var superAdminPermissionCodes = allPermissions
+            var permissionIds = effectiveCatalog.Select(permission => permission.BasicId).ToHashSet();
+            var allPermissionCodes = effectiveCatalog
                 .Select(permission => permission.PermissionCode)
                 .Where(code => !string.IsNullOrWhiteSpace(code))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .OrderBy(code => code, StringComparer.OrdinalIgnoreCase)
                 .ToList();
-            superAdminPermissionCodes.Insert(0, "*");
-            return new AuthorizationSnapshot(roleCodes, superAdminPermissionCodes, permissionIds);
+            if (isSuperAdmin)
+            {
+                allPermissionCodes.Insert(0, "*");
+            }
+
+            return new AuthorizationSnapshot(roleCodes, allPermissionCodes, permissionIds, contextDeniedCodes);
         }
 
-        // 角色权限（含角色继承展开：后代继承祖先 Grant，Deny 覆盖）
+        // 角色权限：每个角色按自己的有效继承链结算，角色级 Deny 只作用于本链
         var roleGrantIds = await ResolveRoleGrantIdsAsync(roles.Select(role => role.BasicId), now, cancellationToken);
 
         var userPermissions = (await _userPermissionRepository.GetValidByUserIdAsync(userId, now, cancellationToken))
-            .Where(item => item.TenantId == bindingScopeTenantId || item.TenantId == 0)
+            .Where(item => item.TenantId == bindingScopeTenantId)
             .ToList();
         var userGrantIds = userPermissions
             .Where(permission => permission.PermissionAction == PermissionAction.Grant)
@@ -258,7 +282,7 @@ public sealed class AuthorizationSnapshotQueryService
 
         // 叠加当前有效的权限委托（被委托人 = 当前用户）：
         // - 直接委托权限（PermissionId）→ 直接并入
-        // - 委托角色（RoleId）→ 展开为该角色当前有效的 Grant 权限（扣除该角色 Deny）
+        // - 委托角色（RoleId）→ 按该角色的有效继承链结算（与持有角色同一口径）
         // 用户显式 Deny 仍然优先（最后再扣除一次）。
         var delegatedGrantIds = await ResolveDelegatedPermissionIdsAsync(userId, now, cancellationToken);
         if (delegatedGrantIds.Count > 0)
@@ -267,16 +291,27 @@ public sealed class AuthorizationSnapshotQueryService
             finalPermissionIds.ExceptWith(userDenyIds);
         }
 
-        var permissions = await _permissionRepository.GetByIdsAsync(finalPermissionIds, cancellationToken);
-        var permissionCodes = permissions
-            .Where(permission => permission.Status == EnableStatus.Enabled)
+        // 只留作用侧允许当前上下文、且启用的权限
+        var effectivePermissions = effectiveCatalog.Where(permission => finalPermissionIds.Contains(permission.BasicId)).ToList();
+        var effectiveIds = effectivePermissions.Select(permission => permission.BasicId).ToHashSet();
+        var permissionCodes = effectivePermissions
             .Select(permission => permission.PermissionCode)
             .Where(code => !string.IsNullOrWhiteSpace(code))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(code => code, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        return new AuthorizationSnapshot(roleCodes, permissionCodes, finalPermissionIds);
+        return new AuthorizationSnapshot(roleCodes, permissionCodes, effectiveIds, contextDeniedCodes);
+    }
+
+    /// <summary>
+    /// 租户所有者角色：租户自己的系统角色、编码为 tenant_owner（系统角色租户里不能新建，同码的自定义角色不算）
+    /// </summary>
+    private static bool IsTenantOwnerRole(SysRole role)
+    {
+        return role.RoleType == RoleType.System
+            && !role.IsGlobal
+            && string.Equals(role.RoleCode, SaasRoleCodes.TenantOwner, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -284,10 +319,10 @@ public sealed class AuthorizationSnapshotQueryService
     /// </summary>
     private async Task<HashSet<long>> ResolveDelegatedPermissionIdsAsync(long userId, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        // 委托绑定同样按 (当前租户 OR 全局) 生效，见 BuildSnapshotAsync 中绑定行过滤说明
+        // 委托绑定同样只在所属上下文生效，见 BuildSnapshotAsync 中绑定行过滤说明
         var bindingScopeTenantId = _currentTenant.Id ?? 0;
         var delegations = (await _permissionDelegationRepository.GetActiveByDelegateeIdAsync(userId, now, cancellationToken))
-            .Where(item => item.TenantId == bindingScopeTenantId || item.TenantId == 0)
+            .Where(item => item.TenantId == bindingScopeTenantId)
             .ToList();
         if (delegations.Count == 0)
         {
@@ -318,42 +353,43 @@ public sealed class AuthorizationSnapshotQueryService
     }
 
     /// <summary>
-    /// 解析给定角色（含其继承链上的祖先角色）当前有效的 Grant 权限 ID 集合（Deny 覆盖）。
+    /// 解析给定角色当前有效的 Grant 权限 ID 集合
     /// </summary>
     /// <remarks>
-    /// 角色继承语义：后代自动获得祖先的 Grant 权限，Deny 覆盖；继承链上仅启用角色参与。
-    /// 无继承关系时展开结果即为角色自身，等价于不展开的原行为。
+    /// 角色继承语义：每个角色单独结算自己的有效继承链（自身 + 经启用角色可达的上级），
+    /// 链上 Grant 并集减去链上 Deny 并集；多个角色之间取并集，一个角色的 Deny 不影响另一个独立角色。
+    /// 自身停用的角色不贡献权限；停用的上级不贡献，也切断经由它的继承。
     /// </remarks>
     private async Task<HashSet<long>> ResolveRoleGrantIdsAsync(IEnumerable<long> roleIds, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        var directRoleIds = roleIds.Where(id => id > 0).Distinct().ToList();
-        if (directRoleIds.Count == 0)
-        {
-            return [];
-        }
-
-        // 角色自身始终参与；再沿闭包表叠加其祖先角色（Depth>0），后代继承祖先权限。
-        // 不依赖闭包表的自身行(Depth=0)：未配置继承关系时祖先集为空，展开结果即为角色自身（等价于原行为）。
-        var expandedRoleIds = new HashSet<long>(directRoleIds);
-        var ancestorIds = await _roleHierarchyRepository.GetAncestorIdsAsync(directRoleIds, includeSelf: false, cancellationToken);
-        expandedRoleIds.UnionWith(ancestorIds);
-        // 继承链上仅启用角色参与（停用角色不贡献权限）
-        var enabledRoles = await _roleRepository.GetEnabledByIdsAsync(expandedRoleIds, cancellationToken);
+        var enabledRoles = await _roleRepository.GetEnabledByIdsAsync(roleIds.Where(id => id > 0).Distinct(), cancellationToken);
         if (enabledRoles.Count == 0)
         {
             return [];
         }
 
-        var rolePermissions = await _rolePermissionRepository.GetValidByRoleIdsAsync(enabledRoles.Select(role => role.BasicId), now, cancellationToken);
-        var grantIds = rolePermissions
+        var roleIdList = enabledRoles.Select(role => role.BasicId).ToList();
+        var effectiveAncestors = await _roleHierarchyDomainService.GetEffectiveAncestorsAsync(roleIdList, cancellationToken);
+        var chains = roleIdList
+            .Select(roleId => effectiveAncestors[roleId].Keys.Append(roleId).ToHashSet())
+            .ToList();
+
+        var rolePermissions = await _rolePermissionRepository.GetValidByRoleIdsAsync(chains.SelectMany(chain => chain).Distinct(), now, cancellationToken);
+        var grantsByRole = rolePermissions
             .Where(permission => permission.PermissionAction == PermissionAction.Grant)
-            .Select(permission => permission.PermissionId)
-            .ToHashSet();
-        var denyIds = rolePermissions
+            .ToLookup(permission => permission.RoleId, permission => permission.PermissionId);
+        var deniesByRole = rolePermissions
             .Where(permission => permission.PermissionAction == PermissionAction.Deny)
-            .Select(permission => permission.PermissionId)
-            .ToHashSet();
-        grantIds.ExceptWith(denyIds);
+            .ToLookup(permission => permission.RoleId, permission => permission.PermissionId);
+
+        var grantIds = new HashSet<long>();
+        foreach (var chain in chains)
+        {
+            var chainGrantIds = chain.SelectMany(roleId => grantsByRole[roleId]).ToHashSet();
+            chainGrantIds.ExceptWith(chain.SelectMany(roleId => deniesByRole[roleId]));
+            grantIds.UnionWith(chainGrantIds);
+        }
+
         return grantIds;
     }
 }

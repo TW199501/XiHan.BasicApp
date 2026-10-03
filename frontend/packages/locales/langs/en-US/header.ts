@@ -1,4 +1,8 @@
 export default {
+  context: {
+    platform: 'Platform',
+    switch: 'Current: {name}. Click to switch',
+  },
   user: {
     profile: 'Profile',
     lock: 'Lock Screen',
@@ -8,6 +12,8 @@ export default {
     entry: 'Impersonate',
     title: 'Sign in as another user',
     hint: 'For troubleshooting issues reported by that user. Actions are audited and sensitive operations are blocked.',
+    scope_label: 'Impersonation scope',
+    scope_platform: 'Platform accounts',
     search_placeholder: 'Search by username, nickname or name',
     reason_placeholder: 'Reason (optional, recorded in the audit trail)',
     empty_title: 'No user available',
@@ -37,6 +43,7 @@ export default {
   },
   timezone: {
     switch_success: 'Timezone switched: {timezone}',
+    search: 'Search timezones',
   },
   notification: {
     bell: 'Notifications',
@@ -79,9 +86,12 @@ export default {
     fullscreen_enter: 'Fullscreen',
     fullscreen_exit: 'Exit fullscreen',
     preferences: 'Preferences',
+    float_tools: 'Quick tools',
     refresh_page: 'Refresh page',
     nav_back: 'Back',
     nav_forward: 'Forward',
+    menu_scroll_prev: 'Previous menu items',
+    menu_scroll_next: 'Next menu items',
     sidebar_collapse: 'Collapse sidebar',
     sidebar_expand: 'Expand sidebar',
   },

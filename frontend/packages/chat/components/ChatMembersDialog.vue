@@ -3,7 +3,7 @@ import type {
   ChatConversationListItem,
   ChatMemberItem,
 } from '../types'
-import { XhButton, XhDialogCloseTrigger, XhDialogContent, XhDialogRoot, XhDialogTitle, XhEmptyStateDescription, XhEmptyStateIcon, XhEmptyStateRoot, XhEmptyStateTitle, XhPopconfirmCancelTrigger, XhPopconfirmConfirmTrigger, XhPopconfirmContent, XhPopconfirmDescription, XhPopconfirmPositioner, XhPopconfirmRoot, XhPopconfirmTrigger, XhSpinner, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
+import { XhButton, XhButtonIndicator, XhButtonLabel, XhDialogCloseTrigger, XhDialogContent, XhDialogRoot, XhDialogTitle, XhEmptyStateDescription, XhEmptyStateIndicator, XhEmptyStateRoot, XhEmptyStateTitle, XhPopconfirmCancelTrigger, XhPopconfirmConfirmTrigger, XhPopconfirmContent, XhPopconfirmDescription, XhPopconfirmPositioner, XhPopconfirmRoot, XhPopconfirmTrigger, XhSpinner, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import XUserAvatar from '~/components/common/UserAvatar.vue'
@@ -305,6 +305,7 @@ async function handleLeave() {
                 :max-length="CHAT_MAX_GROUP_NAME_LENGTH"
                 :disabled="isDepartment"
                 :placeholder="t('chat.members.info_name')"
+                :aria-label="t('chat.members.info_name')"
               />
             </div>
           </div>
@@ -321,6 +322,7 @@ async function handleLeave() {
               :max-length="2000"
               show-count
               :placeholder="t('chat.members.info_announcement_placeholder')"
+              :aria-label="t('chat.members.info_announcement')"
             />
           </div>
 
@@ -335,12 +337,14 @@ async function handleLeave() {
               :autosize="{ minRows: 1, maxRows: 3 }"
               :max-length="500"
               :placeholder="t('chat.members.info_description')"
+              :aria-label="t('chat.members.info_description')"
             />
           </div>
 
           <div class="flex justify-end">
-            <XhButton size="sm" tone="brand" :loading="infoSaving" @click="handleSaveInfo">
-              {{ t('chat.members.info_save') }}
+            <XhButton variant="subtle" size="sm" tone="brand" :loading="infoSaving" @click="handleSaveInfo">
+              <XhButtonIndicator />
+              <XhButtonLabel>{{ t('chat.members.info_save') }}</XhButtonLabel>
             </XhButton>
           </div>
         </div>
@@ -367,7 +371,7 @@ async function handleLeave() {
 
         <!-- 添加成员 -->
         <div v-if="canManage" class="mb-3">
-          <XhButton v-if="!showAdd" size="sm" dashed full-width @click="showAdd = true">
+          <XhButton v-if="!showAdd" variant="subtle" size="sm" full-width @click="showAdd = true">
             <Icon icon="lucide:user-plus" width="14" height="14" />
             {{ t('chat.members.add') }}
           </XhButton>
@@ -379,17 +383,19 @@ async function handleLeave() {
               :placeholder="t('chat.start.users_placeholder')"
             />
             <div class="flex justify-end gap-2">
-              <XhButton size="sm" :disabled="adding" @click="showAdd = false">
+              <XhButton variant="subtle" size="sm" :disabled="adding" @click="showAdd = false">
                 {{ t('chat.start.cancel') }}
               </XhButton>
               <XhButton
+                variant="subtle"
                 size="sm"
                 tone="brand"
                 :loading="adding"
                 :disabled="!addUserIds.length"
                 @click="handleAddMembers"
               >
-                {{ t('chat.start.confirm') }}
+                <XhButtonIndicator />
+                <XhButtonLabel>{{ t('chat.start.confirm') }}</XhButtonLabel>
               </XhButton>
             </div>
           </div>
@@ -398,9 +404,9 @@ async function handleLeave() {
         <!-- 成员列表 -->
         <div v-if="!members.length && !loading" class="py-8">
           <XhEmptyStateRoot size="sm">
-            <XhEmptyStateIcon>
+            <XhEmptyStateIndicator>
               <Icon icon="lucide:inbox" width="28" />
-            </XhEmptyStateIcon>
+            </XhEmptyStateIndicator>
             <XhEmptyStateTitle>{{ t('common.no_data') }}</XhEmptyStateTitle>
             <XhEmptyStateDescription>{{ t('common.empty') }}</XhEmptyStateDescription>
           </XhEmptyStateRoot>
@@ -436,7 +442,7 @@ async function handleLeave() {
                   {{ t('chat.members.transfer') }}
                 </XhPopconfirmTrigger>
                 <XhPopconfirmPositioner>
-                  <XhPopconfirmContent>
+                  <XhPopconfirmContent :aria-label="t('chat.members.transfer')">
                     <XhPopconfirmDescription>{{ t('chat.members.transfer_confirm', { name: member.userName ?? '' }) }}</XhPopconfirmDescription>
                     <XhPopconfirmCancelTrigger>{{ t('common.actions.cancel') }}</XhPopconfirmCancelTrigger>
                     <XhPopconfirmConfirmTrigger>{{ t('common.actions.confirm') }}</XhPopconfirmConfirmTrigger>
@@ -451,7 +457,7 @@ async function handleLeave() {
                   {{ t('chat.members.remove') }}
                 </XhPopconfirmTrigger>
                 <XhPopconfirmPositioner>
-                  <XhPopconfirmContent>
+                  <XhPopconfirmContent :aria-label="t('chat.members.remove')">
                     <XhPopconfirmDescription>{{ t('chat.members.remove_confirm', { name: member.userName ?? '' }) }}</XhPopconfirmDescription>
                     <XhPopconfirmCancelTrigger>{{ t('common.actions.cancel') }}</XhPopconfirmCancelTrigger>
                     <XhPopconfirmConfirmTrigger>{{ t('common.actions.confirm') }}</XhPopconfirmConfirmTrigger>
@@ -470,7 +476,7 @@ async function handleLeave() {
               {{ t('chat.members.leave') }}
             </XhPopconfirmTrigger>
             <XhPopconfirmPositioner>
-              <XhPopconfirmContent>
+              <XhPopconfirmContent :aria-label="t('chat.members.leave')">
                 <XhPopconfirmDescription>{{ t('chat.members.leave_confirm') }}</XhPopconfirmDescription>
                 <XhPopconfirmCancelTrigger>{{ t('common.actions.cancel') }}</XhPopconfirmCancelTrigger>
                 <XhPopconfirmConfirmTrigger>{{ t('common.actions.confirm') }}</XhPopconfirmConfirmTrigger>

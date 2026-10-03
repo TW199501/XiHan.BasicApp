@@ -28,6 +28,7 @@ import {
   PermissionAction,
   PermissionChangeType,
   PermissionRequestStatus,
+  PermissionSide,
   PermissionType,
   ResourceAccessLevel,
   ResourceType,
@@ -344,6 +345,12 @@ export const PERMISSION_TYPE_OPTIONS = [
   { label: '数据范围', value: PermissionType.DataScope },
 ]
 
+export const PERMISSION_SIDE_OPTIONS = [
+  { label: '平台', value: PermissionSide.Platform },
+  { label: '租户', value: PermissionSide.Tenant },
+  { label: '两侧', value: PermissionSide.Both },
+]
+
 // ==================== 资源 ====================
 
 export const RESOURCE_TYPE_OPTIONS = [
@@ -448,13 +455,11 @@ export const FIELD_MASK_STRATEGY_OPTIONS = [
   { label: '部分脱敏', value: FieldMaskStrategy.PartialMask },
   { label: '哈希', value: FieldMaskStrategy.Hash },
   { label: '固定替换', value: FieldMaskStrategy.Redact },
-  { label: '自定义', value: FieldMaskStrategy.Custom },
 ]
 
 export const FIELD_SECURITY_TARGET_TYPE_OPTIONS = [
   { label: '角色', value: FieldSecurityTargetType.Role },
   { label: '用户', value: FieldSecurityTargetType.User },
-  { label: '权限', value: FieldSecurityTargetType.Permission },
   { label: '部门', value: FieldSecurityTargetType.Department },
 ]
 
@@ -471,6 +476,8 @@ export const PERMISSION_CHANGE_TYPE_OPTIONS = [
   { label: '角色权限拒绝', value: PermissionChangeType.RoleDenyPermission },
   { label: '用户获得委托授权', value: PermissionChangeType.UserDelegateGrant },
   { label: '用户委托授权收回', value: PermissionChangeType.UserDelegateRevoke },
+  { label: '角色新增上级', value: PermissionChangeType.RoleAddParent },
+  { label: '角色解除上级', value: PermissionChangeType.RoleRemoveParent },
 ]
 
 // ==================== 约束规则 ====================

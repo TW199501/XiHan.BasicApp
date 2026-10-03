@@ -4,6 +4,7 @@
 using SqlSugar;
 using XiHan.BasicApp.CodeGeneration.Domain.Enums;
 using XiHan.BasicApp.Core.Entities;
+using XiHan.Framework.Data.SqlSugar.Routing;
 
 namespace XiHan.BasicApp.CodeGeneration.Domain.Entities;
 
@@ -43,6 +44,7 @@ namespace XiHan.BasicApp.CodeGeneration.Domain.Entities;
 [SugarIndex("IX_{table}_GeTi", nameof(GenTime), OrderByType.Desc)]
 [SugarIndex("IX_{table}_GeSt", nameof(GenStatus), OrderByType.Asc)]
 [SugarIndex("IX_{table}_TeId_TaId", nameof(TenantId), OrderByType.Asc, nameof(TableId), OrderByType.Asc)]
+[PlatformDataSource]
 public partial class SysCodeGenHistory : BasicAppFullAuditedEntity
 {
     /// <summary>
@@ -100,9 +102,9 @@ public partial class SysCodeGenHistory : BasicAppFullAuditedEntity
     public virtual long TotalSize { get; set; } = 0;
 
     /// <summary>
-    /// 生成路径
+    /// 写入位置（生成到项目时写入的后端项目目录与前端工程目录，以「；」分隔；生成并下载时为空）
     /// </summary>
-    [SugarColumn(ColumnName = "Gen_Path", ColumnDescription = "生成路径", Length = 500, IsNullable = true)]
+    [SugarColumn(ColumnName = "Gen_Path", ColumnDescription = "写入位置", Length = 500, IsNullable = true)]
     public virtual string? GenPath { get; set; }
 
     /// <summary>

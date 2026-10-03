@@ -3,6 +3,7 @@
 
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using XiHan.BasicApp.Core.Dtos;
 using XiHan.BasicApp.Saas.Domain.Entities;
 using XiHan.Framework.Domain.Shared.Paging.Dtos;
@@ -16,22 +17,29 @@ namespace XiHan.BasicApp.Saas.Application.Exporting;
 /// 基类负责翻页循环、首页回填总数、列投影、范围（单页/全量）与安全上限。
 /// </summary>
 /// <typeparam name="TQueryDto">资源自身分页查询 DTO（含 Page 分页元数据）</typeparam>
-/// <typeparam name="TRowDto">资源列表行 DTO（已脱敏/已映射）</typeparam>
+/// <typeparam name="TRowDto">资源列表行 DTO（写出前由基类按发起人打码）</typeparam>
 public abstract class QueryServiceExportProviderBase<TQueryDto, TRowDto> : IExportProvider
     where TQueryDto : BasicAppPRDto, new()
 {
     /// <summary>
-    /// 查询快照反序列化选项（Web 默认：camelCase + 大小写不敏感）
+    /// 查询快照反序列化选项（Web 默认：camelCase + 大小写不敏感 + 数字可读字符串）
     /// </summary>
-    protected static readonly JsonSerializerOptions QueryJsonOptions = new(JsonSerializerDefaults.Web);
+    /// <remarks>
+    /// 快照是页面查询入参原样序列化的结果，与线上报文同形：枚举按成员名传（全局 JsonStringEnumConverter）。
+    /// 这里不认成员名，带枚举筛选的快照就整体反序列化失败，导出任务会以「查询条件无法解析」失败。
+    /// </remarks>
+    protected static readonly JsonSerializerOptions QueryJsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        Converters = { new JsonStringEnumConverter() }
+    };
 
     /// <summary>
-    /// 业务类型（= 前端 pageCode）
+    /// 业务类型（= 导出按钮所属页面码，见 PageRegistry）
     /// </summary>
     public abstract string BusinessType { get; }
 
     /// <summary>
-    /// 导出所需权限码（执行器进程内显式校验，补 [PermissionAuthorize] 不触发的缺口）
+    /// 导出所需权限码（与页面导出按钮绑定的权限一致；提交时拦截，执行器进程内再校验一次）
     /// </summary>
     public abstract string RequiredPermission { get; }
 
@@ -63,6 +71,8 @@ public abstract class QueryServiceExportProviderBase<TQueryDto, TRowDto> : IExpo
             query.Page.PageIndex = pageIndex;
             query.Page.PageSize = pageSize;
             var page = await QueryPageAsync(query, cancellationToken);
+            // 进程内直调不经过 HTTP 响应过滤器，写出前按发起人打码，导出与在线列表同一口径
+            await context.FieldSecurity.MaskAsync(page, cancellationToken);
 
             if (first)
             {
@@ -100,8 +110,12 @@ public abstract class QueryServiceExportProviderBase<TQueryDto, TRowDto> : IExpo
     }
 
     /// <summary>
-    /// 反序列化查询快照为资源查询 DTO（缺省返回空查询）
+    /// 反序列化查询快照为资源查询 DTO（未带快照即不加筛选；快照解析不了直接抛出，任务按失败收口）
     /// </summary>
+    /// <remarks>
+    /// 解析失败不能落回空查询：空查询等于不加任何筛选，导出范围会悄悄从「当前筛选结果」变成全量。
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">快照不是该资源的查询条件</exception>
     protected virtual TQueryDto Deserialize(string? snapshot)
     {
         if (string.IsNullOrWhiteSpace(snapshot))
@@ -109,14 +123,18 @@ public abstract class QueryServiceExportProviderBase<TQueryDto, TRowDto> : IExpo
             return new TQueryDto();
         }
 
+        TQueryDto? query;
         try
         {
-            return JsonSerializer.Deserialize<TQueryDto>(snapshot, QueryJsonOptions) ?? new TQueryDto();
+            query = JsonSerializer.Deserialize<TQueryDto>(snapshot, QueryJsonOptions);
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
-            return new TQueryDto();
+            var position = string.IsNullOrEmpty(ex.Path) ? string.Empty : $"（{ex.Path}）";
+            throw new InvalidOperationException($"查询条件无法解析{position}，导出已终止。", ex);
         }
+
+        return query ?? throw new InvalidOperationException("查询条件无法解析（快照为 null），导出已终止。");
     }
 
     /// <summary>

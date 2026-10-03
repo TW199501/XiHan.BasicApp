@@ -97,8 +97,8 @@ public sealed class OnlineUserQueryService
             _ = request.Conditions.AddFilters(filters);
         }
 
-        await _fieldSecurity.GuardFiltersAsync(request.Conditions, "SysUserSession", cancellationToken);
-        await _fieldSecurity.GuardSortsAsync(request.Conditions, "SysUserSession", cancellationToken);
+        // 字段安全：剔除读受保护字段上的排序、过滤与关键字搜索（防按结果反推原值）
+        await _fieldSecurity.GuardQueryAsync(request.Conditions, typeof(SysUserSession), cancellationToken);
         if (request.Conditions.Sorts.Count == 0)
         {
             request.Conditions.AddSort((SysUserSession session) => session.LastActivityTime, SortDirection.Descending);
@@ -114,7 +114,7 @@ public sealed class OnlineUserQueryService
         }
 
         var userIds = sessionPage.Items.Select(session => session.UserId).Where(id => id > 0).Distinct().ToArray();
-        var users = await _userRepository.GetByIdsAsync(userIds, cancellationToken);
+        var users = await _userRepository.GetListByIdsIgnoreTenantAsync(userIds, cancellationToken);
         var userMap = users.ToDictionary(user => user.BasicId);
 
         // 实时连接标注：按去重用户查询一次连接管理器（进程内/缓存查询，开销可忽略）

@@ -10,7 +10,7 @@ import type {
   PageResult,
 } from '@/api'
 import type { ListFieldSchema, PageSchema, SchemaActionPayload } from '~/components'
-import { XhButton, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFormFieldGroup, XhFormRoot, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
+import { XhButton, XhButtonIndicator, XhButtonLabel, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFormFieldGroup, XhFormRoot, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
 import { computed, h, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
@@ -109,7 +109,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     // 内置模板随程序版本回刷、不可编辑删除，单列呈现比挂在名称后更容易扫读
     render: (row) => {
       const r = row as unknown as CodeGenTemplateListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: r.isBuiltIn ? 'warning' : 'neutral' }, () => h(XhTagLabel, () => (r.isBuiltIn ? t('develop.code_gen.template.built_in') : t('develop.code_gen.template.custom'))))
+      return h(XhTagRoot, { variant: 'subtle', tone: r.isBuiltIn ? 'warning' : 'neutral' }, () => h(XhTagLabel, () => (r.isBuiltIn ? t('develop.code_gen.template.built_in') : t('develop.code_gen.template.custom'))))
     },
   },
   {
@@ -121,7 +121,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 8,
     render: (row) => {
       const r = row as unknown as CodeGenTemplateListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: r.isEnabled ? 'success' : 'neutral' }, () => h(XhTagLabel, () => (r.isEnabled ? t('common.statuses.yes') : t('common.statuses.no'))))
+      return h(XhTagRoot, { variant: 'subtle', tone: r.isEnabled ? 'success' : 'neutral' }, () => h(XhTagLabel, () => (r.isEnabled ? t('common.statuses.yes') : t('common.statuses.no'))))
     },
   },
   {
@@ -138,14 +138,14 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 9,
     render: (row) => {
       const r = row as unknown as CodeGenTemplateListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: r.status === EnableStatus.Enabled ? 'success' : 'danger' }, () => h(XhTagLabel, () => getOptionLabel(statusEnumOptions.value, r.status)))
+      return h(XhTagRoot, { variant: 'subtle', tone: r.status === EnableStatus.Enabled ? 'success' : 'danger' }, () => h(XhTagLabel, () => getOptionLabel(statusEnumOptions.value, r.status)))
     },
   },
   { key: 'createdTime', title: t('common.fields.created_time'), dataType: 'datetime', minWidth: 170, sortable: true, order: 10 },
 ])
 
 const schema = computed<PageSchema>(() => ({
-  pageCode: 'develop.codegen.template',
+  pageCode: 'code_gen.template',
   pageName: t('develop.code_gen.tabs.template'),
   rowKey: 'basicId',
   batchRemovable: true,
@@ -165,10 +165,10 @@ const schema = computed<PageSchema>(() => ({
     remove: id => codeGenTemplateApi.delete(id),
   },
   actions: [
-    { key: 'create', title: t('develop.code_gen.template.add'), scope: 'page', type: 'primary', icon: 'lucide:plus' },
+    { key: 'create', title: t('develop.code_gen.template.add'), scope: 'page', type: 'primary', icon: 'lucide:plus', permission: 'code_gen.create' },
     // 内置模板随程序版本回刷，改了也会被覆盖，故与删除一样禁用
-    { key: 'edit', title: t('common.actions.edit'), scope: 'row', icon: 'lucide:pencil', disabled: row => (row as unknown as CodeGenTemplateListItemDto).isBuiltIn },
-    { key: 'delete', title: t('common.actions.delete'), scope: 'row', type: 'error', icon: 'lucide:trash-2', disabled: row => (row as unknown as CodeGenTemplateListItemDto).isBuiltIn },
+    { key: 'edit', title: t('common.actions.edit'), scope: 'row', icon: 'lucide:pencil', disabled: row => (row as unknown as CodeGenTemplateListItemDto).isBuiltIn, permission: 'code_gen.update' },
+    { key: 'delete', title: t('common.actions.delete'), scope: 'row', type: 'error', icon: 'lucide:trash-2', disabled: row => (row as unknown as CodeGenTemplateListItemDto).isBuiltIn, permission: 'code_gen.delete' },
   ],
 }))
 
@@ -214,7 +214,7 @@ function handleDelete(row: CodeGenTemplateListItemDto) {
         reload()
       }
       catch (error) {
-        toast.error((error as Error)?.message || t('common.messages.delete_failed'))
+        toast.danger((error as Error)?.message || t('common.messages.delete_failed'))
       }
     },
   })
@@ -274,7 +274,7 @@ async function handleEdit(row: CodeGenTemplateListItemDto) {
   try {
     const detail = await codeGenTemplateApi.detail(row.basicId)
     if (!detail) {
-      toast.error(t('develop.code_gen.template.not_found'))
+      toast.danger(t('develop.code_gen.template.not_found'))
       return
     }
     editingStatus.value = detail.status
@@ -299,7 +299,7 @@ async function handleEdit(row: CodeGenTemplateListItemDto) {
     modalVisible.value = true
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('develop.code_gen.template.load_detail_failed'))
+    toast.danger((error as Error)?.message || t('develop.code_gen.template.load_detail_failed'))
   }
 }
 
@@ -318,11 +318,11 @@ async function handleValidate(templateContent: string) {
       toast.success(t('develop.code_gen.template.validate_pass'))
     }
     else {
-      toast.error(t('develop.code_gen.template.validate_fail', { errors: result.errors.join('；') || t('develop.code_gen.template.validate_unknown_error') }))
+      toast.danger(t('develop.code_gen.template.validate_fail', { errors: result.errors.join('；') || t('develop.code_gen.template.validate_unknown_error') }))
     }
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('develop.code_gen.template.validate_error'))
+    toast.danger((error as Error)?.message || t('develop.code_gen.template.validate_error'))
   }
   finally {
     validating.value = false
@@ -397,7 +397,7 @@ async function handleSubmit() {
     reload()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('common.messages.save_failed'))
+    toast.danger((error as Error)?.message || t('common.messages.save_failed'))
   }
   finally {
     submitLoading.value = false
@@ -421,7 +421,7 @@ async function handleSubmit() {
         class="xh-edit-form-grid"
         @submit="handleSubmit"
       >
-        <XhFormFieldGroup value="templateCode">
+        <XhFormFieldGroup name="templateCode">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.template.form_template_code') }}</XhFieldLabel>
             <XhFieldControl>
@@ -435,7 +435,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="templateName">
+        <XhFormFieldGroup name="templateName">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.template.form_template_name') }}</XhFieldLabel>
             <XhFieldControl>
@@ -444,7 +444,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="templateGroup">
+        <XhFormFieldGroup name="templateGroup">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.template.form_template_group') }}</XhFieldLabel>
             <XhFieldControl>
@@ -453,7 +453,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="templateType">
+        <XhFormFieldGroup name="templateType">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.template.form_template_type') }}</XhFieldLabel>
             <XhFieldControl>
@@ -462,7 +462,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="templateEngine">
+        <XhFormFieldGroup name="templateEngine">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.template.form_template_engine') }}</XhFieldLabel>
             <XhFieldControl>
@@ -471,7 +471,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="writeMode">
+        <XhFormFieldGroup name="writeMode">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.template.form_write_mode') }}</XhFieldLabel>
             <XhFieldControl>
@@ -480,7 +480,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="fileExtension">
+        <XhFormFieldGroup name="fileExtension">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.template.form_file_extension') }}</XhFieldLabel>
             <XhFieldControl>
@@ -489,7 +489,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="fileNameExpression">
+        <XhFormFieldGroup name="fileNameExpression">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.template.form_file_name_expression') }}</XhFieldLabel>
             <XhFieldControl>
@@ -498,7 +498,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="filePathExpression">
+        <XhFormFieldGroup name="filePathExpression">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.template.form_file_path_expression') }}</XhFieldLabel>
             <XhFieldControl>
@@ -507,7 +507,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="sort">
+        <XhFormFieldGroup name="sort">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.template.form_sort') }}</XhFieldLabel>
             <XhFieldControl>
@@ -516,7 +516,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup v-if="!form.basicId" value="status">
+        <XhFormFieldGroup v-if="!form.basicId" name="status">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('common.fields.status') }}</XhFieldLabel>
             <XhFieldControl>
@@ -525,7 +525,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="templateDescription" class="xh-span-2">
+        <XhFormFieldGroup name="templateDescription" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.template.form_template_description') }}</XhFieldLabel>
             <XhFieldControl>
@@ -534,7 +534,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="templateContent" class="xh-span-2">
+        <XhFormFieldGroup name="templateContent" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.template.form_template_content') }}</XhFieldLabel>
             <XhFieldControl :as-child="false">
@@ -557,9 +557,10 @@ async function handleSubmit() {
                 </template>
                 <!-- 校验的是正在编辑的草稿，而非已回写表单的值 -->
                 <template #footer-extra="{ value }">
-                  <XhButton size="sm" :loading="validating" @click="handleValidate(value)">
+                  <XhButton variant="subtle" size="sm" :loading="validating" @click="handleValidate(value)">
+                    <XhButtonIndicator />
                     <span><Icon icon="lucide:check-check" /></span>
-                    {{ t('develop.code_gen.template.validate_syntax') }}
+                    <XhButtonLabel>{{ t('develop.code_gen.template.validate_syntax') }}</XhButtonLabel>
                   </XhButton>
                 </template>
               </XContentEditorField>

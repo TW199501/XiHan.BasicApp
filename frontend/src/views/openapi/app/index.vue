@@ -7,12 +7,12 @@ import type {
   OAuthAppUpdateDto,
 } from '@/api'
 import type { ListFieldSchema, PageSchema, SchemaActionPayload } from '~/components'
-import { XhButton, XhDescriptionsItem, XhDescriptionsLabel, XhDescriptionsRoot, XhDescriptionsValue, XhDrawerCloseTrigger, XhDrawerContent, XhDrawerRoot, XhDrawerTitle, XhEmptyStateDescription, XhEmptyStateIcon, XhEmptyStateRoot, XhEmptyStateTitle, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFlex, XhFormFieldGroup, XhFormRoot, XhSpinner, XhSwitch, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
+import { XhButton, XhDescriptionsItem, XhDescriptionsLabel, XhDescriptionsRoot, XhDescriptionsValue, XhDrawerCloseTrigger, XhDrawerContent, XhDrawerRoot, XhDrawerTitle, XhEmptyStateDescription, XhEmptyStateIndicator, XhEmptyStateRoot, XhEmptyStateTitle, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFlex, XhFormFieldGroup, XhFormRoot, XhSpinner, XhSwitch, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
 import { computed, h, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { appManagementApi, createPageRequest, EnableStatus, OAuthAppType, querySortsFromSchema } from '@/api'
 import { OAUTH_APP_TYPE_OPTIONS, STATUS_OPTIONS } from '@/constants'
-import { Icon, SchemaPage, XEditModal, XInput, XNumberInput, XSelect } from '~/components'
+import { deleteConfirmText, Icon, SchemaPage, statusConfirmText, XEditModal, XInput, XNumberInput, XSelect } from '~/components'
 import { toast } from '~/composables'
 import { useEnumOptions } from '~/hooks'
 import { formatDate, getOptionLabel } from '~/utils'
@@ -118,7 +118,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     searchPlaceholder: t('openapi.app.skip_consent_placeholder'),
     width: 110,
     order: 7,
-    render: row => h(XhTagRoot, { variant: 'outline', tone: (row as unknown as OAuthAppListItemDto).skipConsent ? 'warning' : 'neutral' }, () => h(XhTagLabel, () => (row as unknown as OAuthAppListItemDto).skipConsent ? t('openapi.app.tag_skip') : t('openapi.app.tag_confirm'))),
+    render: row => h(XhTagRoot, { variant: 'subtle', tone: (row as unknown as OAuthAppListItemDto).skipConsent ? 'warning' : 'neutral' }, () => h(XhTagLabel, () => (row as unknown as OAuthAppListItemDto).skipConsent ? t('openapi.app.tag_skip') : t('openapi.app.tag_confirm'))),
   },
   {
     key: 'status',
@@ -138,7 +138,7 @@ const fields = computed<ListFieldSchema[]>(() => [
 
 // ── 资源适配器：归一化查询参数 → 后端 API ──────────────────────
 const schema = computed<PageSchema>(() => ({
-  pageCode: 'platform.app',
+  pageCode: 'openapi.app',
   exportPermission: 'openapi.app.export',
   pageName: t('openapi.app.page_name'),
   batchRemovable: true,
@@ -165,12 +165,12 @@ const schema = computed<PageSchema>(() => ({
     updateStatus: (id, enabled) => appManagementApi.updateStatus({ basicId: id, status: enabled ? EnableStatus.Enabled : EnableStatus.Disabled }),
   },
   actions: [
-    { key: 'create', title: t('openapi.app.action_create'), scope: 'page', type: 'primary', icon: 'lucide:plus' },
-    { key: 'view', title: t('openapi.app.action_view'), scope: 'row' },
-    { key: 'edit', title: t('openapi.app.action_edit'), scope: 'row' },
-    { key: 'toggle', title: t('openapi.app.action_toggle'), scope: 'row' },
-    { key: 'secret', title: t('openapi.app.action_secret'), scope: 'row' },
-    { key: 'delete', title: t('openapi.app.action_delete'), scope: 'row' },
+    { key: 'create', title: t('openapi.app.action_create'), scope: 'page', type: 'primary', icon: 'lucide:plus', permission: 'openapi.app.create' },
+    { key: 'view', title: t('openapi.app.action_view'), scope: 'row', icon: 'lucide:eye' },
+    { key: 'edit', title: t('openapi.app.action_edit'), scope: 'row', icon: 'lucide:pencil', permission: 'openapi.app.update' },
+    { key: 'toggle', title: t('openapi.app.action_toggle'), scope: 'row', icon: 'lucide:power', confirm: true, confirmText: row => statusConfirmText(t, (row as unknown as OAuthAppListItemDto).status === EnableStatus.Enabled, (row as unknown as OAuthAppListItemDto).appName), permission: 'openapi.app.status' },
+    { key: 'secret', title: t('openapi.app.action_secret'), scope: 'row', icon: 'lucide:key-square', type: 'error', confirm: true, confirmText: row => t('openapi.app.confirm_secret', { name: (row as unknown as OAuthAppListItemDto).appName }), permission: 'openapi.app.secret' },
+    { key: 'delete', title: t('openapi.app.action_delete'), scope: 'row', icon: 'lucide:trash-2', type: 'error', confirm: true, confirmText: row => deleteConfirmText(t, (row as unknown as OAuthAppListItemDto).appName), permission: 'openapi.app.delete' },
   ],
 }))
 
@@ -253,7 +253,7 @@ async function handleView(row: OAuthAppListItemDto) {
   }
   catch (error) {
     currentDetail.value = null
-    toast.error((error as Error)?.message || t('openapi.app.msg_load_detail_failed'))
+    toast.danger((error as Error)?.message || t('openapi.app.msg_load_detail_failed'))
   }
   finally {
     detailLoading.value = false
@@ -269,7 +269,7 @@ async function handleEdit(row: OAuthAppListItemDto) {
   try {
     const detail = await appManagementApi.detail(row.basicId)
     if (!detail) {
-      toast.error(t('openapi.app.msg_load_app_detail_failed'))
+      toast.danger(t('openapi.app.msg_load_app_detail_failed'))
       return
     }
     appForm.value = {
@@ -293,7 +293,7 @@ async function handleEdit(row: OAuthAppListItemDto) {
     modalVisible.value = true
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('openapi.app.msg_load_app_detail_failed'))
+    toast.danger((error as Error)?.message || t('openapi.app.msg_load_app_detail_failed'))
   }
 }
 
@@ -374,7 +374,7 @@ async function handleSubmit() {
     reloadApp()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('openapi.app.msg_save_failed'))
+    toast.danger((error as Error)?.message || t('openapi.app.msg_save_failed'))
   }
   finally {
     submitLoading.value = false
@@ -388,7 +388,7 @@ async function handleRegenerateSecret(id: string) {
     toast.success(t('openapi.app.msg_secret_regenerated'))
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('openapi.app.msg_secret_regenerate_failed'))
+    toast.danger((error as Error)?.message || t('openapi.app.msg_secret_regenerate_failed'))
   }
 }
 
@@ -399,7 +399,7 @@ function copySecret() {
   navigator.clipboard.writeText(currentSecret.value.clientSecret).then(() => {
     toast.success(t('openapi.app.msg_secret_copied'))
   }).catch(() => {
-    toast.error(t('openapi.app.msg_copy_failed'))
+    toast.danger(t('openapi.app.msg_copy_failed'))
   })
 }
 
@@ -414,7 +414,7 @@ async function handleToggleStatus(row: OAuthAppListItemDto) {
     reloadApp()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('openapi.app.msg_update_status_failed'))
+    toast.danger((error as Error)?.message || t('openapi.app.msg_update_status_failed'))
   }
 }
 
@@ -425,7 +425,7 @@ async function handleDelete(row: OAuthAppListItemDto) {
     reloadApp()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('openapi.app.msg_delete_failed'))
+    toast.danger((error as Error)?.message || t('openapi.app.msg_delete_failed'))
   }
 }
 </script>
@@ -446,14 +446,14 @@ async function handleDelete(row: OAuthAppListItemDto) {
             <XhSpinner />
           </div>
           <XhEmptyStateRoot v-if="!detailLoading && !currentDetail" class="xh-detail-empty">
-            <XhEmptyStateIcon>
+            <XhEmptyStateIndicator>
               <Icon icon="lucide:inbox" width="28" />
-            </XhEmptyStateIcon>
+            </XhEmptyStateIndicator>
             <XhEmptyStateTitle>{{ t('common.no_data') }}</XhEmptyStateTitle>
             <XhEmptyStateDescription>{{ t('openapi.app.detail_empty') }}</XhEmptyStateDescription>
           </XhEmptyStateRoot>
           <div v-else-if="currentDetail" class="xh-scroll-area" style="max-height: calc(100vh - 180px)">
-            <XhDescriptionsRoot :columns="1" bordered size="sm">
+            <XhDescriptionsRoot :columns="1" variant="outline" size="sm">
               <XhDescriptionsItem>
                 <XhDescriptionsLabel>{{ t('openapi.app.detail_app_name') }}</XhDescriptionsLabel>
                 <XhDescriptionsValue>
@@ -576,7 +576,7 @@ async function handleDelete(row: OAuthAppListItemDto) {
         class="xh-edit-form-grid"
         @submit="handleSubmit"
       >
-        <XhFormFieldGroup value="appName">
+        <XhFormFieldGroup name="appName">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('openapi.app.form_app_name') }}</XhFieldLabel>
             <XhFieldControl>
@@ -585,7 +585,7 @@ async function handleDelete(row: OAuthAppListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup v-if="!appForm.basicId" value="clientId">
+        <XhFormFieldGroup v-if="!appForm.basicId" name="clientId">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('openapi.app.form_client_id') }}</XhFieldLabel>
             <XhFieldControl>
@@ -594,7 +594,7 @@ async function handleDelete(row: OAuthAppListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup v-else value="clientId">
+        <XhFormFieldGroup v-else name="clientId">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('openapi.app.form_client_id') }}</XhFieldLabel>
             <XhFieldControl>
@@ -603,7 +603,7 @@ async function handleDelete(row: OAuthAppListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup v-if="!appForm.basicId" value="appType">
+        <XhFormFieldGroup v-if="!appForm.basicId" name="appType">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('openapi.app.form_app_type') }}</XhFieldLabel>
             <XhFieldControl>
@@ -612,7 +612,7 @@ async function handleDelete(row: OAuthAppListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="grantTypes">
+        <XhFormFieldGroup name="grantTypes">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('openapi.app.form_grant_types') }}</XhFieldLabel>
             <XhFieldControl>
@@ -621,7 +621,7 @@ async function handleDelete(row: OAuthAppListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="scopes">
+        <XhFormFieldGroup name="scopes">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('openapi.app.form_scopes') }}</XhFieldLabel>
             <XhFieldControl>
@@ -630,7 +630,7 @@ async function handleDelete(row: OAuthAppListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="redirectUris" class="xh-span-2">
+        <XhFormFieldGroup name="redirectUris" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('openapi.app.form_redirect_uris') }}</XhFieldLabel>
             <XhFieldControl>
@@ -639,7 +639,7 @@ async function handleDelete(row: OAuthAppListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="homepage">
+        <XhFormFieldGroup name="homepage">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('openapi.app.form_homepage') }}</XhFieldLabel>
             <XhFieldControl>
@@ -648,7 +648,7 @@ async function handleDelete(row: OAuthAppListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="logo">
+        <XhFormFieldGroup name="logo">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('openapi.app.form_logo') }}</XhFieldLabel>
             <XhFieldControl>
@@ -657,7 +657,7 @@ async function handleDelete(row: OAuthAppListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="accessTokenLifetime">
+        <XhFormFieldGroup name="accessTokenLifetime">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('openapi.app.form_access_token_lifetime') }}</XhFieldLabel>
             <XhFieldControl>
@@ -666,7 +666,7 @@ async function handleDelete(row: OAuthAppListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="refreshTokenLifetime">
+        <XhFormFieldGroup name="refreshTokenLifetime">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('openapi.app.form_refresh_token_lifetime') }}</XhFieldLabel>
             <XhFieldControl>
@@ -675,7 +675,7 @@ async function handleDelete(row: OAuthAppListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="authorizationCodeLifetime">
+        <XhFormFieldGroup name="authorizationCodeLifetime">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('openapi.app.form_authorization_code_lifetime') }}</XhFieldLabel>
             <XhFieldControl>
@@ -684,7 +684,7 @@ async function handleDelete(row: OAuthAppListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="skipConsent">
+        <XhFormFieldGroup name="skipConsent">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('openapi.app.form_skip_consent') }}</XhFieldLabel>
             <XhFieldControl>
@@ -693,7 +693,7 @@ async function handleDelete(row: OAuthAppListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup v-if="!appForm.basicId" value="status">
+        <XhFormFieldGroup v-if="!appForm.basicId" name="status">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('openapi.app.form_status') }}</XhFieldLabel>
             <XhFieldControl>
@@ -702,7 +702,7 @@ async function handleDelete(row: OAuthAppListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="appDescription" class="xh-span-2">
+        <XhFormFieldGroup name="appDescription" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('openapi.app.form_app_description') }}</XhFieldLabel>
             <XhFieldControl>
@@ -717,7 +717,7 @@ async function handleDelete(row: OAuthAppListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="remark" class="xh-span-2">
+        <XhFormFieldGroup name="remark" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('openapi.app.form_remark') }}</XhFieldLabel>
             <XhFieldControl>
@@ -740,8 +740,8 @@ async function handleDelete(row: OAuthAppListItemDto) {
       <XhDrawerContent style="--xh-drawer-size: 420px">
         <XhDrawerTitle>{{ t('openapi.app.secret_title') }}</XhDrawerTitle>
         <XhDrawerCloseTrigger />
-        <XhFlex v-if="currentSecret" direction="column" gap="md">
-          <XhDescriptionsRoot :columns="1" bordered size="sm">
+        <XhFlex v-if="currentSecret" orientation="vertical" gap="md">
+          <XhDescriptionsRoot :columns="1" variant="outline" size="sm">
             <XhDescriptionsItem>
               <XhDescriptionsLabel>{{ t('openapi.app.secret_client_id') }}</XhDescriptionsLabel>
               <XhDescriptionsValue>
@@ -764,7 +764,7 @@ async function handleDelete(row: OAuthAppListItemDto) {
             <span><Icon icon="lucide:copy" /></span>
             {{ t('openapi.app.secret_copy') }}
           </XhButton>
-          <XhButton full-width @click="secretVisible = false">
+          <XhButton variant="subtle" full-width @click="secretVisible = false">
             {{ t('openapi.app.secret_close') }}
           </XhButton>
         </XhFlex>

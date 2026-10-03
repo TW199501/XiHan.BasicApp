@@ -1,4 +1,8 @@
 export default {
+  context: {
+    platform: '平台',
+    switch: '当前：{name}，点击切换',
+  },
   user: {
     profile: '个人中心',
     lock: '锁屏',
@@ -8,6 +12,8 @@ export default {
     entry: '模仿登录',
     title: '以他人身份登录',
     hint: '用于排查该用户遇到的问题。期间的操作会记入审计，敏感操作被禁用。',
+    scope_label: '模仿范围',
+    scope_platform: '平台账号',
     search_placeholder: '搜索用户名 / 昵称 / 姓名',
     reason_placeholder: '模仿事由（选填，落审计）',
     empty_title: '没有可模仿的用户',
@@ -37,6 +43,7 @@ export default {
   },
   timezone: {
     switch_success: '已切换时区：{timezone}',
+    search: '搜索时区',
   },
   notification: {
     bell: '通知',
@@ -79,9 +86,12 @@ export default {
     fullscreen_enter: '全屏',
     fullscreen_exit: '退出全屏',
     preferences: '偏好设置',
+    float_tools: '快捷工具',
     refresh_page: '刷新页面',
     nav_back: '后退',
     nav_forward: '前进',
+    menu_scroll_prev: '上一组菜单',
+    menu_scroll_next: '下一组菜单',
     sidebar_collapse: '折叠侧栏',
     sidebar_expand: '展开侧栏',
   },

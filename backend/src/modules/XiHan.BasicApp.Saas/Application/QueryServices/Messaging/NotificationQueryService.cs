@@ -70,7 +70,7 @@ public sealed class NotificationQueryService
     /// <param name="input">查询条件</param>
     /// <param name="cancellationToken">取消令牌</param>
     /// <returns>系统通知分页列表</returns>
-    [PermissionAuthorize(SaasPermissionCodes.Message.Read)]
+    [PermissionAuthorize(SaasPermissionCodes.Notification.Read)]
     [HttpPost]
     public async Task<PageResultDtoBase<NotificationListItemDto>> GetNotificationPageAsync(NotificationPageQueryDto input, CancellationToken cancellationToken = default)
     {
@@ -79,10 +79,8 @@ public sealed class NotificationQueryService
 
         var request = BuildNotificationPageRequest(input);
 
-        // 排序：前端选择优先，FLS 门控剔除不可读/已脱敏字段；无有效排序回退默认排序
-        await _fieldSecurity.GuardSortsAsync(request.Conditions, "SysNotification", cancellationToken);
-        // 过滤：FLS 门控剔除不可读/已脱敏字段后再交框架统一应用
-        await _fieldSecurity.GuardFiltersAsync(request.Conditions, "SysNotification", cancellationToken);
+        // 字段安全：剔除读受保护字段上的排序、过滤与关键字搜索（防按结果反推原值）
+        await _fieldSecurity.GuardQueryAsync(request.Conditions, typeof(SysNotification), cancellationToken);
         if (request.Conditions.Sorts.Count == 0)
         {
             ApplyNotificationSorts(request);
@@ -98,7 +96,7 @@ public sealed class NotificationQueryService
     /// <param name="id">系统通知主键</param>
     /// <param name="cancellationToken">取消令牌</param>
     /// <returns>系统通知详情</returns>
-    [PermissionAuthorize(SaasPermissionCodes.Message.Read)]
+    [PermissionAuthorize(SaasPermissionCodes.Notification.Read)]
     public async Task<NotificationDetailDto?> GetNotificationDetailAsync(long id, CancellationToken cancellationToken = default)
     {
         if (id <= 0)
@@ -118,7 +116,7 @@ public sealed class NotificationQueryService
     /// <param name="input">查询条件</param>
     /// <param name="cancellationToken">取消令牌</param>
     /// <returns>用户通知分页列表</returns>
-    [PermissionAuthorize(SaasPermissionCodes.Message.Read)]
+    [PermissionAuthorize(SaasPermissionCodes.Notification.Read)]
     [HttpPost]
     public async Task<PageResultDtoBase<UserNotificationListItemDto>> GetUserNotificationPageAsync(UserNotificationPageQueryDto input, CancellationToken cancellationToken = default)
     {
@@ -147,7 +145,7 @@ public sealed class NotificationQueryService
     /// <param name="id">用户通知主键</param>
     /// <param name="cancellationToken">取消令牌</param>
     /// <returns>用户通知详情</returns>
-    [PermissionAuthorize(SaasPermissionCodes.Message.Read)]
+    [PermissionAuthorize(SaasPermissionCodes.Notification.Read)]
     public async Task<UserNotificationDetailDto?> GetUserNotificationDetailAsync(long id, CancellationToken cancellationToken = default)
     {
         if (id <= 0)
@@ -170,7 +168,7 @@ public sealed class NotificationQueryService
     /// <summary>
     /// 获取通知阅读统计（发 N / 已读 M / 已确认 K）
     /// </summary>
-    [PermissionAuthorize(SaasPermissionCodes.Message.Read)]
+    [PermissionAuthorize(SaasPermissionCodes.Notification.Read)]
     public async Task<NotificationReadStatsDto> GetNotificationReadStatsAsync(long id, CancellationToken cancellationToken = default)
     {
         if (id <= 0)
@@ -200,7 +198,7 @@ public sealed class NotificationQueryService
     /// <summary>
     /// 获取通知未读人员分页（前端可经导出机制导 CSV）
     /// </summary>
-    [PermissionAuthorize(SaasPermissionCodes.Message.Read)]
+    [PermissionAuthorize(SaasPermissionCodes.Notification.Read)]
     [HttpPost]
     public async Task<PageResultDtoBase<NotificationUnreadUserDto>> GetNotificationUnreadUserPageAsync(NotificationUnreadUserPageQueryDto input, CancellationToken cancellationToken = default)
     {
@@ -228,7 +226,8 @@ public sealed class NotificationQueryService
         }
 
         var userIds = paged.Items.Select(item => item.UserId).Distinct().ToArray();
-        var users = await _userRepository.GetListAsync(user => SqlFunc.ContainsArray(userIds, user.BasicId), cancellationToken);
+        // 收件人可能是注册在别处的成员，按主键跨租户取来展示
+        var users = await _userRepository.GetListByIdsIgnoreTenantAsync(userIds, cancellationToken);
         var userMap = users.ToDictionary(user => user.BasicId);
         var items = paged.Items.Select(item =>
         {

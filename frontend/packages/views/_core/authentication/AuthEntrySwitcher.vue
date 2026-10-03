@@ -1,101 +1,98 @@
 <script lang="ts" setup>
-import { useResizeObserver } from '@vueuse/core'
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import type { TabsValueChangeDetails } from '@xihan-ui/headless'
+import { useElementSize } from '@vueuse/core'
+import { XhTabsContent, XhTabsIndicator, XhTabsList, XhTabsRoot, XhTabsTrigger } from '@xihan-ui/vue'
+import { computed, useTemplateRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { XSegmented } from '~/components'
 import { CODE_LOGIN_PATH, EMAIL_LOGIN_PATH, LOGIN_PATH, QRCODE_LOGIN_PATH } from '~/constants'
 
 /**
- * 登录方式切换。四种入口互斥、各自是一条路由，没有面板，
- * 所以用分段控制器而不是标签页——tablist 却没有 tabpanel 是错的语义。
+ * 登录方式切换。四种入口互斥、各自是一条路由，走线形标签页：
+ * 表单由路由渲染，这里把它接进当前标签的面板里——只摆一条 tablist 而没有 tabpanel 是错的语义，
+ * 触发器上的 aria-controls 会指向一个不存在的区域。
  * 标签用 page.auth.entry.* 短说法，不借页面标题键：登录卡片右栏固定宽，长标题会把扫码入口挤出容器。
  */
 defineOptions({ name: 'AuthEntrySwitcher' })
 
-const route = useRoute()
-const router = useRouter()
-const { t, locale } = useI18n()
-
-const entryList = computed(() => [
-  { value: LOGIN_PATH, label: t('page.auth.entry.account'), icon: 'lucide:user' },
-  { value: CODE_LOGIN_PATH, label: t('page.auth.entry.mobile'), icon: 'lucide:smartphone' },
-  { value: EMAIL_LOGIN_PATH, label: t('page.auth.entry.email'), icon: 'lucide:mail' },
-  { value: QRCODE_LOGIN_PATH, label: t('page.auth.entry.qrcode'), icon: 'lucide:qr-code' },
-])
+const props = defineProps<{
+  /** 关掉时只渲染插槽内容：忘记密码、注册这类页面不出切换器 */
+  enabled?: boolean
+}>()
 
 /**
- * 窄屏（手机）放不下四段文字时改成只显示图标，文字留给屏幕阅读器。
- * 组件库的分段控制器不支持横向滚动，文字又不能折行，只能换形态。
- * 是否放得下按「纯文字形态实际要的宽度」量，而不是写死断点：德文 / 印地文标签比中文长，断点各语言不同。
- * 宽屏只显示文字不加图标：桌面右栏宽度刚好容下四段文字，再加图标反而会挤不下。
+ * 档位按标签带实际拿到的宽度选，不按视口是否小屏：表单栏在宽屏与平板竖屏上都是 460，
+ * 手机上随视口在 250–360 之间，按「是否小屏」一刀切会让 375–767 这一大段都挤在 sm。
+ * 放得下就取 lg，与下面 lg 档的表单控件同档，作为卡片的一级导航不被表单压过。
+ * 阈值按各语言里最宽的一组（日文）四条合计量出：lg 359、md 294，各留一两像素余量
  */
-const root = ref<HTMLElement | null>(null)
-const iconOnly = ref(false)
-/** 纯文字形态需要的宽度；在文字形态溢出的那一刻量下来，之后容器够宽了才切回文字 */
-let textWidth = 0
+const LG_MIN_WIDTH = 360
+const MD_MIN_WIDTH = 296
 
-function measure() {
-  const container = root.value
-  const segmented = container?.firstElementChild as HTMLElement | null | undefined
-  if (!container || !segmented) {
-    return
-  }
-  if (!iconOnly.value) {
-    if (segmented.scrollWidth > segmented.clientWidth + 1) {
-      // scrollWidth 不含边框，而下面拿来比的是容器宽度（含分段控制器的边框）；
-      // 不补上边框，会在「只差边框那一两像素」的宽度切回文字、立刻又溢出切回图标，来回闪一下
-      textWidth = segmented.scrollWidth + (segmented.offsetWidth - segmented.clientWidth)
-      iconOnly.value = true
-    }
-  }
-  else if (container.clientWidth >= textWidth) {
-    iconOnly.value = false
+const route = useRoute()
+const router = useRouter()
+const { t } = useI18n()
+
+const rootRef = useTemplateRef('root')
+const { width } = useElementSize(computed(() => rootRef.value?.$el as HTMLElement | undefined))
+const entrySize = computed(() => {
+  if (width.value >= LG_MIN_WIDTH)
+    return 'lg'
+  return width.value >= MD_MIN_WIDTH ? 'md' : 'sm'
+})
+
+/** 标签值用短键而不是路由路径：它要进 id / aria-controls，短键读起来也干净 */
+const entryList = computed(() => [
+  { value: 'account', path: LOGIN_PATH, label: t('page.auth.entry.account') },
+  { value: 'mobile', path: CODE_LOGIN_PATH, label: t('page.auth.entry.mobile') },
+  { value: 'email', path: EMAIL_LOGIN_PATH, label: t('page.auth.entry.email') },
+  { value: 'qrcode', path: QRCODE_LOGIN_PATH, label: t('page.auth.entry.qrcode') },
+])
+
+/** 选中项取自当前路由，不另存一份状态 */
+const activeEntry = computed(
+  () => entryList.value.find(entry => entry.path === route.path)?.value ?? 'account',
+)
+
+function onEntryChange(details: TabsValueChangeDetails) {
+  const target = entryList.value.find(entry => entry.value === details.value)
+  if (target && route.path !== target.path) {
+    router.push(target.path)
   }
 }
-
-/** 文字形态不带图标（见上），图标形态才带 */
-const shownEntries = computed(() => iconOnly.value ? entryList.value : entryList.value.map(({ icon: _icon, ...entry }) => entry))
-
-useResizeObserver(root, measure)
-onMounted(() => nextTick(measure))
-// 切回文字后若仍放不下（容器宽度没变、观察器不会再触发）要立刻再量一次
-watch(iconOnly, (next) => {
-  if (!next) {
-    nextTick(measure)
-  }
-})
-// 换语言后标签长度变了，旧的量测作废
-watch(locale, () => {
-  textWidth = 0
-  iconOnly.value = false
-  nextTick(measure)
-})
-
-/** 选中项取自当前路由；选中即跳转，不另存一份状态 */
-const activeEntry = computed({
-  get: () => {
-    const path = route.path
-    return entryList.value.some(item => item.value === path) ? path : LOGIN_PATH
-  },
-  set: (next: string) => {
-    if (route.path !== next) {
-      router.push(next)
-    }
-  },
-})
 </script>
 
 <template>
-  <!-- 外包一层给观察器量容器宽度：分段控制器自身宽度会随形态变，量它判断不了「够不够宽」 -->
-  <div ref="root">
-    <XSegmented
-      v-model:value="activeEntry"
-      block
-      size="lg"
-      :options="shownEntries"
-      :icon-only="iconOnly"
-      :aria-label="t('page.auth.login_method')"
-    />
-  </div>
+  <XhTabsRoot
+    v-if="props.enabled"
+    ref="root"
+    class="auth-entry-switcher"
+    :value="activeEntry"
+    variant="line"
+    :size="entrySize"
+    @value-change="onEntryChange"
+  >
+    <XhTabsList :aria-label="t('page.auth.login_method')">
+      <XhTabsTrigger v-for="entry in entryList" :key="entry.value" :value="entry.value">
+        {{ entry.label }}
+      </XhTabsTrigger>
+      <XhTabsIndicator />
+    </XhTabsList>
+    <!-- 面板只摆当前这一份：内容归路由渲染，值跟着选中走，aria-controls 才落得到实处 -->
+    <XhTabsContent :value="activeEntry">
+      <slot />
+    </XhTabsContent>
+  </XhTabsRoot>
+  <slot v-else />
 </template>
+
+<style scoped>
+/* 标签带与表单之间留一档间距；面板本身不加内衬，表单自己带 */
+.auth-entry-switcher :deep([data-scope='tabs'][data-part='list']) {
+  margin-block-end: var(--xh-space-6);
+}
+
+.auth-entry-switcher :deep([data-scope='tabs'][data-part='content']) {
+  padding: 0;
+}
+</style>

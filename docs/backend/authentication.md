@@ -35,7 +35,7 @@ RBAC 的核心实体都落在 `Saas` 模块的 `Domain/Entities` 下，均为 `s
 - `Status`（启用/禁用）与 `IsActive`（是否激活，邮箱/手机验证）**正交**：未激活或被禁用都不可登录。
 - `IsSystemAccount=true` 的内置账号禁止改用户名、禁止软删。
 - 平台账号约定 `TenantId=0`（如超管），恒落平台运维态。
-- 用户级数据范围可用 `DataScopeOverride` 覆盖角色默认（细节见权限模型）。
+- 成员在某个租户的数据范围可用成员关系上的 `DataScopeOverride` 覆盖角色（按租户各自设置，细节见权限模型）。
 
 敏感安全字段刻意拆到一对一的 `SysUserSecurity`（`Password`/`TwoFactorSecret`/`SecurityStamp` 均 `[JsonIgnore]`，不出接口），避免污染用户主表、便于单独脱敏与访问控制。
 
@@ -93,7 +93,7 @@ RBAC 的核心实体都落在 `Saas` 模块的 `Domain/Entities` 下，均为 `s
 
 ::: warning 两份清单必须对齐
 **能不能登**由 `XiHan:Authentication:OAuth:Providers` 决定（它注册出 AuthenticationScheme）；
-**登录页画几个按钮**由运行时配置 `saas.auth.oauth.providers`（存库）决定。
+**登录页画几个按钮**由参数 `saas.auth.login` 的 `oauthProviders`（存库）决定。
 两边的 `Name` / `name` 对不上就会点出一个不存在的方案，回跳 `error=challenge_failed`。
 :::
 
@@ -140,9 +140,9 @@ OAuth 走**独立的 Web 端点**（不是动态 API），落在 `Infrastructure
 
 当密码/邮箱登录判定 `RequiresTwoFactor`：
 
-1. 未提交验证码 → 返回 `LoginResponseDto { RequiresTwoFactor=true, AvailableTwoFactorMethods, TwoFactorMethod, CodeSent }`；对 email/phone 方式会**先下发验证码**（TOTP 由认证器本地生成，无需下发）。
+1. 未提交验证码 → 返回 `LoginResponseDto { RequiresTwoFactor=true, AvailableTwoFactorMethods, TwoFactorMethod, CodeSent, TwoFactorTicket }`；对 email/phone 方式会**先下发验证码**（TOTP 由认证器本地生成，无需下发）。`TwoFactorTicket` 由 `ITwoFactorTicketService` 签发（分布式缓存、绑定用户主键与首段规范化后的登录名、10 分钟），代表「本次登录已通过图形验证码」：后续阶段带票即跳过图形验证码（图形码一次性消费，第二段起无法重校验），票据先于密码认证查存在性并比对签发时的登录名（去空白、不区分大小写），认证后再与认证用户主键比对；不存在 / 过期 / 登录名或用户不匹配一律抛「两步验证已过期，请重新登录。」，不匹配的票据同时作废，持自己合法票据的人也不能借免图形码去试探他人账号的密码；不带票的后续阶段仍照旧消费图形验证码。
 2. 提交验证码 → 按方式校验：`totp` 走 `IOtpService.VerifyTotpCode`；`email` 走一次性验证码消费；`phone` 走个人中心验证服务消费。校验失败发布失败事件并抛错。
-3. 通过 → 继续签发令牌。
+3. 通过 → 继续签发令牌，并作废本次的两步验证票据。
 
 TOTP 遵循 RFC 6238：HMAC-SHA1、Base32 密钥、6 位、30 秒步长、±1 窗口容差；provisioning URI 形如 `otpauth://totp/{issuer}:{account}?secret=...&period=30&digits=6`。用户在[个人中心](#个人中心)开启/关闭各方式。
 

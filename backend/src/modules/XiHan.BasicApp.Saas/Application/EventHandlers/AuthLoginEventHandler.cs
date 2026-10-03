@@ -7,9 +7,11 @@ using XiHan.BasicApp.Saas.Application.Services;
 using XiHan.BasicApp.Saas.Domain.Entities;
 using XiHan.BasicApp.Saas.Domain.Events;
 using XiHan.Framework.Data.SqlSugar.Clients;
+using XiHan.Framework.Data.SqlSugar.Extensions;
 using XiHan.Framework.EventBus.Abstractions.Local;
 using XiHan.Framework.Auditing;
 using XiHan.Framework.Auditing.Pipelines;
+using XiHan.Framework.MultiTenancy.Abstractions;
 
 namespace XiHan.BasicApp.Saas.Application.EventHandlers;
 
@@ -30,6 +32,8 @@ public sealed class AuthLoginEventHandler
 
     private readonly ILogger<AuthLoginEventHandler> _logger;
 
+    private readonly ICurrentTenant _currentTenant;
+
     /// <summary>
     /// 构造函数
     /// </summary>
@@ -37,12 +41,14 @@ public sealed class AuthLoginEventHandler
         ILoginLogPipeline loginLogPipeline,
         IUserNotificationDispatchService notificationDispatchService,
         ISqlSugarClientResolver clientResolver,
-        ILogger<AuthLoginEventHandler> logger)
+        ILogger<AuthLoginEventHandler> logger,
+        ICurrentTenant currentTenant)
     {
         _loginLogPipeline = loginLogPipeline;
         _notificationDispatchService = notificationDispatchService;
         _clientResolver = clientResolver;
         _logger = logger;
+        _currentTenant = currentTenant;
     }
 
     /// <summary>
@@ -228,9 +234,11 @@ public sealed class AuthLoginEventHandler
     {
         try
         {
-            var db = _clientResolver.GetCurrentClient();
+            var db = _clientResolver.GetClientForEntity<SysUserSession>();
 
+            // 会话行带各自登录落点的租户戳，同一账号在别的租户/平台的会话也算「其它设备」，须跨租户查找
             var otherActiveCount = await db.Queryable<SysUserSession>()
+                .ClearTenantFilter()
                 // 过期会话仍留在 Active（无扫描任务把它们置 Expired），不排掉会把过期会话误报成「另一台设备在线」
                 .Where(session => session.UserId == eventData.UserId
                     && session.Status == SessionStatus.Active
@@ -244,11 +252,13 @@ public sealed class AuthLoginEventHandler
 
             // 设备识别：本次会话的 DeviceId 此前出现过 → 已知设备
             var currentDeviceId = await db.Queryable<SysUserSession>()
+                .ClearTenantFilter()
                 .Where(session => session.BasicId == eventData.SessionRecordId)
                 .Select(session => session.DeviceId)
                 .FirstAsync();
             var isKnownDevice = !string.IsNullOrWhiteSpace(currentDeviceId)
                 && await db.Queryable<SysUserSession>()
+                    .ClearTenantFilter()
                     .Where(session => session.UserId == eventData.UserId
                         && session.BasicId != eventData.SessionRecordId
                         && session.DeviceId == currentDeviceId)
@@ -270,7 +280,7 @@ public sealed class AuthLoginEventHandler
     {
         try
         {
-            var db = _clientResolver.GetCurrentClient();
+            var db = _clientResolver.GetClientForEntity<SysUserSession>();
             return await db.Queryable<SysUserSession>()
                 .Where(session => session.BasicId == sessionRecordId)
                 .FirstAsync();
@@ -300,6 +310,8 @@ public sealed class AuthLoginEventHandler
             {
                 TraceId = traceId,
                 UserId = userId,
+                // 事件总线执行处理器时已切入事件所属的租户（登录落点），在此定格
+                TenantId = _currentTenant.Id,
                 UserName = userName,
                 SessionId = sessionId,
                 LoginResult = (int)loginResult,

@@ -7,7 +7,7 @@ import type {
   PermissionRequestListItemDto,
 } from '@/api'
 import type { ListFieldSchema, PageSchema, SchemaActionPayload } from '~/components'
-import { XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFormFieldGroup, XhFormRoot, XhTabsContent, XhTabsList, XhTabsRoot, XhTabsTrigger, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
+import { XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFormFieldGroup, XhFormRoot, XhTabsContent, XhTabsIndicator, XhTabsList, XhTabsRoot, XhTabsTrigger, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
 import { computed, h, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
@@ -21,7 +21,7 @@ import {
   userManagementApi,
 } from '@/api'
 import { DELEGATION_STATUS_OPTIONS, PERMISSION_REQUEST_STATUS_OPTIONS } from '@/constants'
-import { SchemaPage, XDatePicker, XEditModal, XInput, XSegmented, XSelect } from '~/components'
+import { actionConfirmText, deleteConfirmText, SchemaPage, XDatePicker, XEditModal, XInput, XSegmented, XSelect } from '~/components'
 import { toast } from '~/composables'
 import { useEnumOptions } from '~/hooks'
 import { formatDate, getOptionLabel } from '~/utils'
@@ -121,7 +121,7 @@ async function loadUserOptions(keyword = '') {
     )
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('identity.authorization.msg_load_user_failed'))
+    toast.danger((error as Error)?.message || t('identity.authorization.msg_load_user_failed'))
   }
   finally {
     userLoading.value = false
@@ -135,7 +135,7 @@ async function loadRoleOptions(keyword = '') {
     roleOptions.value = mergeOptions(roleOptions.value, roles.map(r => ({ label: `${r.roleName} (${r.roleCode})`, value: r.basicId })))
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('identity.authorization.msg_load_role_failed'))
+    toast.danger((error as Error)?.message || t('identity.authorization.msg_load_role_failed'))
   }
   finally {
     roleLoading.value = false
@@ -149,7 +149,7 @@ async function loadPermissionOptions(keyword = '') {
     permissionOptions.value = mergeOptions(permissionOptions.value, perms.map(p => ({ label: `${p.permissionName} (${p.permissionCode})`, value: p.basicId })))
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('identity.authorization.msg_load_permission_failed'))
+    toast.danger((error as Error)?.message || t('identity.authorization.msg_load_permission_failed'))
   }
   finally {
     permissionLoading.value = false
@@ -194,7 +194,7 @@ const requestFields = computed<ListFieldSchema[]>(() => [
     order: 4,
     render: (row) => {
       const r = row as unknown as PermissionRequestListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: REQUEST_STATUS_TYPE[r.requestStatus] ?? 'neutral' }, () => h(XhTagLabel, () => getOptionLabel(requestStatusOptions.value, r.requestStatus)))
+      return h(XhTagRoot, { variant: 'subtle', tone: REQUEST_STATUS_TYPE[r.requestStatus] ?? 'neutral' }, () => h(XhTagLabel, () => getOptionLabel(requestStatusOptions.value, r.requestStatus)))
     },
   },
   {
@@ -211,12 +211,18 @@ const requestFields = computed<ListFieldSchema[]>(() => [
   { key: 'createdTime', title: t('identity.authorization.req_col_create_time'), dataType: 'datetime', sortable: true, minWidth: 170, order: 6 },
 ])
 
+/** 确认框里的申请名：申请人 · 申请的角色或权限 */
+function requestName(row: unknown) {
+  const request = row as PermissionRequestListItemDto
+  return [request.requestUserDisplayName, request.roleName || request.permissionName].filter(Boolean).join(' · ')
+}
+
 function isPending(row: unknown) {
   return (row as PermissionRequestListItemDto).requestStatus === PermissionRequestStatus.Pending
 }
 
 const requestSchema = computed<PageSchema>(() => ({
-  pageCode: 'system.authorization.request',
+  pageCode: 'identity.authorization.request',
   exportPermission: 'identity.authorization.export',
   pageName: t('identity.authorization.req_page_name'),
   rowKey: 'basicId',
@@ -233,9 +239,9 @@ const requestSchema = computed<PageSchema>(() => ({
     remove: id => permissionRequestApi.delete(id),
   },
   actions: [
-    { key: 'approve', title: t('identity.authorization.req_action_approve'), scope: 'row', type: 'primary', visible: isPending },
-    { key: 'reject', title: t('identity.authorization.req_action_reject'), scope: 'row', visible: isPending },
-    { key: 'delete', title: t('identity.authorization.req_action_delete'), scope: 'row' },
+    { key: 'approve', title: t('identity.authorization.req_action_approve'), scope: 'row', icon: 'lucide:check', type: 'primary', confirm: true, confirmText: row => actionConfirmText(t, t('identity.authorization.req_action_approve'), requestName(row)), visible: isPending, permission: 'identity.authorization.audit' },
+    { key: 'reject', title: t('identity.authorization.req_action_reject'), scope: 'row', icon: 'lucide:x', type: 'error', confirm: true, confirmText: row => actionConfirmText(t, t('identity.authorization.req_action_reject'), requestName(row)), visible: isPending, permission: 'identity.authorization.audit' },
+    { key: 'delete', title: t('identity.authorization.req_action_delete'), scope: 'row', icon: 'lucide:trash-2', type: 'error', confirm: true, confirmText: row => deleteConfirmText(t, requestName(row)), permission: 'identity.authorization.withdraw' },
   ],
 }))
 
@@ -252,7 +258,7 @@ async function reviewRequest(row: PermissionRequestListItemDto, approved: boolea
     reloadRequest()
   }
   catch (e: unknown) {
-    toast.error((e as Error)?.message || t('common.messages.operation_failed'))
+    toast.danger((e as Error)?.message || t('common.messages.operation_failed'))
   }
 }
 
@@ -331,7 +337,7 @@ const delegationFields = computed<ListFieldSchema[]>(() => [
     order: 4,
     render: (row) => {
       const r = row as unknown as PermissionDelegationListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: DELEGATION_STATUS_TYPE[r.delegationStatus] ?? 'neutral' }, () => h(XhTagLabel, () => getOptionLabel(delegationStatusOptions.value, r.delegationStatus)))
+      return h(XhTagRoot, { variant: 'subtle', tone: DELEGATION_STATUS_TYPE[r.delegationStatus] ?? 'neutral' }, () => h(XhTagLabel, () => getOptionLabel(delegationStatusOptions.value, r.delegationStatus)))
     },
   },
   {
@@ -348,13 +354,20 @@ const delegationFields = computed<ListFieldSchema[]>(() => [
   { key: 'createdTime', title: t('identity.authorization.del_col_create_time'), dataType: 'datetime', sortable: true, minWidth: 170, order: 6 },
 ])
 
+/** 确认框里的委托名：委托人 → 受托人 · 委托的角色或权限 */
+function delegationName(row: unknown) {
+  const delegation = row as PermissionDelegationListItemDto
+  const parties = [delegation.delegatorDisplayName, delegation.delegateeDisplayName].filter(Boolean).join(' → ')
+  return [parties, delegation.roleName || delegation.permissionName].filter(Boolean).join(' · ')
+}
+
 function canRevoke(row: unknown) {
   const status = (row as PermissionDelegationListItemDto).delegationStatus
   return status === DelegationStatus.Active || status === DelegationStatus.Pending
 }
 
 const delegationSchema = computed<PageSchema>(() => ({
-  pageCode: 'system.authorization.delegation',
+  pageCode: 'identity.authorization.delegation',
   pageName: t('identity.authorization.del_page_name'),
   rowKey: 'basicId',
   fields: delegationFields.value,
@@ -370,9 +383,9 @@ const delegationSchema = computed<PageSchema>(() => ({
     remove: id => permissionDelegationApi.delete(id),
   },
   actions: [
-    { key: 'create', title: t('identity.authorization.del_action_create'), scope: 'page', type: 'primary', icon: 'lucide:plus' },
-    { key: 'revoke', title: t('identity.authorization.del_action_revoke'), scope: 'row', visible: canRevoke },
-    { key: 'delete', title: t('identity.authorization.del_action_delete'), scope: 'row' },
+    { key: 'create', title: t('identity.authorization.del_action_create'), scope: 'page', type: 'primary', icon: 'lucide:plus', permission: 'identity.authorization.delegation-create' },
+    { key: 'revoke', title: t('identity.authorization.del_action_revoke'), scope: 'row', icon: 'lucide:undo-2', type: 'error', confirm: true, confirmText: row => actionConfirmText(t, t('identity.authorization.del_action_revoke'), delegationName(row)), visible: canRevoke, permission: 'identity.authorization.delegation-revoke' },
+    { key: 'delete', title: t('identity.authorization.del_action_delete'), scope: 'row', icon: 'lucide:trash-2', type: 'error', confirm: true, confirmText: row => deleteConfirmText(t, delegationName(row)), permission: 'identity.authorization.delegation-delete' },
   ],
 }))
 
@@ -431,7 +444,7 @@ async function revokeDelegation(row: PermissionDelegationListItemDto) {
     reloadDelegation()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('identity.authorization.del_revoke_failed'))
+    toast.danger((error as Error)?.message || t('identity.authorization.del_revoke_failed'))
   }
 }
 
@@ -488,7 +501,7 @@ async function submitDelegation() {
     reloadDelegation()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('identity.authorization.msg_create_failed'))
+    toast.danger((error as Error)?.message || t('identity.authorization.msg_create_failed'))
   }
   finally {
     delegationSubmitting.value = false
@@ -507,6 +520,7 @@ async function submitDelegation() {
         <XhTabsTrigger value="delegation">
           {{ t('identity.authorization.tab_delegation') }}
         </XhTabsTrigger>
+        <XhTabsIndicator />
       </XhTabsList>
       <XhTabsContent value="request">
         <SchemaPage ref="requestPageRef" :schema="requestSchema" @action="onRequestAction" />
@@ -526,7 +540,7 @@ async function submitDelegation() {
               class="xh-edit-form-grid"
               @submit="submitDelegation"
             >
-              <XhFormFieldGroup value="delegatorUserId">
+              <XhFormFieldGroup name="delegatorUserId">
                 <XhFieldRoot>
                   <XhFieldLabel>{{ t('identity.authorization.label_delegator') }}</XhFieldLabel>
                   <XhFieldControl>
@@ -541,7 +555,7 @@ async function submitDelegation() {
                   <XhFieldErrorText />
                 </XhFieldRoot>
               </XhFormFieldGroup>
-              <XhFormFieldGroup value="delegateeUserId">
+              <XhFormFieldGroup name="delegateeUserId">
                 <XhFieldRoot>
                   <XhFieldLabel>{{ t('identity.authorization.label_delegatee') }}</XhFieldLabel>
                   <XhFieldControl>
@@ -556,7 +570,7 @@ async function submitDelegation() {
                   <XhFieldErrorText />
                 </XhFieldRoot>
               </XhFormFieldGroup>
-              <XhFormFieldGroup value="targetKind">
+              <XhFormFieldGroup name="targetKind">
                 <XhFieldRoot>
                   <XhFieldLabel>{{ t('identity.authorization.label_target_kind') }}</XhFieldLabel>
                   <XhFieldControl>
@@ -565,7 +579,7 @@ async function submitDelegation() {
                   <XhFieldErrorText />
                 </XhFieldRoot>
               </XhFormFieldGroup>
-              <XhFormFieldGroup v-if="delegationForm.targetKind === 'role'" value="roleId">
+              <XhFormFieldGroup v-if="delegationForm.targetKind === 'role'" name="roleId">
                 <XhFieldRoot>
                   <XhFieldLabel>{{ t('identity.authorization.label_role') }}</XhFieldLabel>
                   <XhFieldControl>
@@ -580,7 +594,7 @@ async function submitDelegation() {
                   <XhFieldErrorText />
                 </XhFieldRoot>
               </XhFormFieldGroup>
-              <XhFormFieldGroup v-else value="permissionId">
+              <XhFormFieldGroup v-else name="permissionId">
                 <XhFieldRoot>
                   <XhFieldLabel>{{ t('identity.authorization.label_permission') }}</XhFieldLabel>
                   <XhFieldControl>
@@ -595,25 +609,25 @@ async function submitDelegation() {
                   <XhFieldErrorText />
                 </XhFieldRoot>
               </XhFormFieldGroup>
-              <XhFormFieldGroup value="effectiveTime">
+              <XhFormFieldGroup name="effectiveTime">
                 <XhFieldRoot>
                   <XhFieldLabel>{{ t('identity.authorization.label_effective_time') }}</XhFieldLabel>
                   <XhFieldControl>
-                    <XDatePicker v-model:value="delegationForm.effectiveTime" clearable type="datetime" />
+                    <XDatePicker v-model:value="delegationForm.effectiveTime" clearable show-time />
                   </XhFieldControl>
                   <XhFieldErrorText />
                 </XhFieldRoot>
               </XhFormFieldGroup>
-              <XhFormFieldGroup value="expirationTime">
+              <XhFormFieldGroup name="expirationTime">
                 <XhFieldRoot>
                   <XhFieldLabel>{{ t('identity.authorization.label_expiration_time') }}</XhFieldLabel>
                   <XhFieldControl>
-                    <XDatePicker v-model:value="delegationForm.expirationTime" clearable type="datetime" />
+                    <XDatePicker v-model:value="delegationForm.expirationTime" clearable show-time />
                   </XhFieldControl>
                   <XhFieldErrorText />
                 </XhFieldRoot>
               </XhFormFieldGroup>
-              <XhFormFieldGroup value="delegationReason" class="xh-span-2">
+              <XhFormFieldGroup name="delegationReason" class="xh-span-2">
                 <XhFieldRoot>
                   <XhFieldLabel>{{ t('identity.authorization.label_reason') }}</XhFieldLabel>
                   <XhFieldControl>

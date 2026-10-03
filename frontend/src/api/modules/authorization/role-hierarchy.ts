@@ -1,44 +1,29 @@
-import type { DynamicApiParams } from '../../base'
 import type { ApiId } from '../../types'
 import type {
-  RoleHierarchyCreateDto,
-  RoleHierarchyDetailDto,
-  RoleHierarchyListItemDto,
+  RoleHierarchyBatchUpdateDto,
+  RoleInheritanceItemDto,
+  RoleInheritedPermissionDto,
 } from './role-hierarchy.types'
-import { appendDynamicApiParam, createDynamicApiClient } from '../../base'
+import { createDynamicApiClient } from '../../base'
 
 const roleHierarchyQueryApi = createDynamicApiClient('RoleHierarchyQuery')
 const roleHierarchyCommandApi = createDynamicApiClient('Role')
 
-function buildIncludeSelfParams(includeSelf: boolean) {
-  const params: DynamicApiParams = {}
-  appendDynamicApiParam(params, 'IncludeSelf', includeSelf)
-  return params
-}
-
 export const roleHierarchyApi = {
-  ancestors(roleId: ApiId, includeSelf = true) {
-    return roleHierarchyQueryApi.get<RoleHierarchyListItemDto[]>(
-      'RoleAncestors',
-      { ...buildIncludeSelfParams(includeSelf), roleId },
-    )
+  /** 角色的全部上级（不含自身），按继承深度排列 */
+  ancestors(roleId: ApiId) {
+    return roleHierarchyQueryApi.get<RoleInheritanceItemDto[]>('RoleAncestors', { roleId })
   },
-  create(input: RoleHierarchyCreateDto) {
-    return roleHierarchyCommandApi.post<RoleHierarchyDetailDto, RoleHierarchyCreateDto>('RoleHierarchy', input)
+  /** 一次提交本角色直接上级的新增与解除（单事务，先解除后新增） */
+  batchUpdateParents(input: RoleHierarchyBatchUpdateDto) {
+    return roleHierarchyCommandApi.post<void, RoleHierarchyBatchUpdateDto>('BatchUpdateRoleParents', input)
   },
-  delete(id: ApiId) {
-    return roleHierarchyCommandApi.delete('RoleHierarchy', { id })
+  /** 角色的全部下级（不含自身），按继承深度排列 */
+  descendants(roleId: ApiId) {
+    return roleHierarchyQueryApi.get<RoleInheritanceItemDto[]>('RoleDescendants', { roleId })
   },
-  descendants(roleId: ApiId, includeSelf = true) {
-    return roleHierarchyQueryApi.get<RoleHierarchyListItemDto[]>(
-      'RoleDescendants',
-      { ...buildIncludeSelfParams(includeSelf), roleId },
-    )
-  },
-  detail(id: ApiId) {
-    return roleHierarchyQueryApi.get<RoleHierarchyDetailDto | null>(
-      'RoleHierarchyDetail',
-      { id },
-    )
+  /** 角色从生效的上级继承来的权限绑定 */
+  inheritedPermissions(roleId: ApiId) {
+    return roleHierarchyQueryApi.get<RoleInheritedPermissionDto[]>('RoleInheritedPermissions', { roleId })
   },
 }

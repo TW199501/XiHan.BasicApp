@@ -54,11 +54,11 @@ function onAlignChange(align: LoginFormAlign) {
     <!-- 颜色 -->
     <XhPopoverRoot v-model:open="showColorPicker" placement="bottom-end">
       <!-- 触发器本身就是那颗按钮：浮层触发器渲染成 button，不能再往里套一颗 -->
-      <XhPopoverTrigger class="toolbar-btn xh-icon-btn">
+      <XhPopoverTrigger class="toolbar-btn xh-icon-btn" :aria-label="t('preference.appearance.color.title')">
         <Icon width="16" height="16" icon="lucide:palette" />
       </XhPopoverTrigger>
       <XhPopoverPositioner>
-        <XhPopoverContent>
+        <XhPopoverContent :aria-label="t('preference.appearance.color.title')">
           <div class="color-grid">
             <button
               v-for="preset in colorPresets"
@@ -68,6 +68,8 @@ function onAlignChange(align: LoginFormAlign) {
               :class="{ 'is-active': appStore.themeColor === preset.color }"
               :style="{ backgroundColor: preset.color }"
               :title="preset.label"
+              :aria-label="preset.label"
+              :aria-pressed="appStore.themeColor === preset.color"
               @click="
                 () => {
                   setThemeColor(preset.color)
@@ -82,30 +84,31 @@ function onAlignChange(align: LoginFormAlign) {
 
     <!-- 布局位置（封装组件，当前项高亮） -->
     <LayoutAlignSwitcher :value="currentAlign" placement="bottom-end" @change="onAlignChange">
-      <XhButton variant="ghost" size="sm" class="toolbar-btn xh-icon-btn">
+      <XhButton variant="ghost" size="sm" icon-only class="toolbar-btn xh-icon-btn" :aria-label="t('preference.layout.title')">
         <Icon width="16" height="16" :icon="getLayoutIcon(currentAlign)" />
       </XhButton>
     </LayoutAlignSwitcher>
 
     <!-- 语言 -->
     <LocaleSwitcher
-      v-if="appStore.widgetLanguageToggle"
+      v-if="appStore.widgetLanguagePlacement !== 'hidden'"
       variant="dropdown"
       apply
       placement="bottom-end"
     >
-      <XhButton variant="ghost" size="sm" class="toolbar-btn xh-icon-btn">
+      <XhButton variant="ghost" size="sm" icon-only class="toolbar-btn xh-icon-btn" :aria-label="t('header.toolbar.switch_language')">
         <Icon width="16" height="16" icon="lucide:languages" />
       </XhButton>
     </LocaleSwitcher>
 
     <!-- 主题 -->
     <XhButton
-      v-if="appStore.widgetThemeToggle"
+      v-if="appStore.widgetThemePlacement !== 'hidden'"
       variant="ghost"
-      data-circle
       size="sm"
+      icon-only
       class="toolbar-btn"
+      :aria-label="isDark ? t('header.toolbar.theme_to_light') : t('header.toolbar.theme_to_dark')"
       @click="(e: MouseEvent) => toggleThemeWithTransition(e)"
     >
       <Icon width="16" height="16" :icon="isDark ? 'lucide:sun' : 'lucide:moon'" />
@@ -153,7 +156,7 @@ function onAlignChange(align: LoginFormAlign) {
   border: 2px solid transparent;
   cursor: pointer;
   transition:
-    transform var(--xh-motion-duration-micro) var(--xh-motion-ease-enter),
+    transform var(--xh-motion-duration-nudge) var(--xh-motion-ease-enter),
     box-shadow var(--xh-motion-duration-micro) var(--xh-motion-ease-enter);
   flex-shrink: 0;
 }

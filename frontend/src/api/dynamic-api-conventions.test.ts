@@ -8,6 +8,7 @@
 import type { AxiosRequestConfig } from '~/request'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { permissionChangeLogApi } from './modules/audit'
+import { DataPermissionScope, roleDataScopeApi, roleHierarchyApi, userDataScopeApi, userRoleApi } from './modules/authorization'
 import { cacheApi } from './modules/cache'
 import { dictApi } from './modules/configuration'
 import { exportTaskApi } from './modules/export'
@@ -223,6 +224,13 @@ describe('非 CRUD 前缀的动作保留完整方法名', () => {
     })
   })
 
+  it('库隔离租户初始化管理员走 POST /Tenant/InitializeTenantAdmin，参数走 body', async () => {
+    const input = { adminEmail: 'owner@example.com', adminPassword: 'Owner@2026', adminUserName: 'owner', tenantId: '7' }
+    await tenantApi.initializeTenantAdmin(input)
+
+    expect(only()).toMatchObject({ method: 'POST', url: '/Tenant/InitializeTenantAdmin', body: input })
+  })
+
   it('机器人配置设为默认保留 SetDefaultBotConfig 全名', async () => {
     await botConfigApi.setDefault({ basicId: '1' } as never)
 
@@ -246,12 +254,30 @@ describe('易写错的控制器归属', () => {
   })
 
   it('用户部门归属的命令端是 UserDepartment 控制器（曾误写成 User 直接 404）', async () => {
-    await userDepartmentApi.assign({ userId: '1', departmentId: '2' } as never)
-    await userDepartmentApi.revoke('3')
+    await userDepartmentApi.batchUpdate({ userId: '1', assigns: [], revokeUserDepartmentIds: [] })
+
+    expect(only()).toMatchObject({ method: 'POST', url: '/UserDepartment/BatchUpdateUserDepartments' })
+  })
+
+  it('角色成员的批量变更与成员列表落在用户角色的命令 / 查询控制器', async () => {
+    await userRoleApi.batchUpdateRoleMembers({ roleId: '1', grantUserIds: [], revokeUserRoleIds: [] })
+    await userRoleApi.roleMembers('1')
 
     expect(calls.map(item => `${item.method} ${item.url}`)).toEqual([
-      'POST /UserDepartment/UserDepartment',
-      'DELETE /UserDepartment/UserDepartment',
+      'POST /UserRole/BatchUpdateRoleMembers',
+      'GET /UserRoleQuery/RoleMembers',
+    ])
+  })
+
+  it('数据范围设置与角色继承的批量变更分别落在各自的命令控制器', async () => {
+    await roleDataScopeApi.set({ roleId: '1', dataScope: DataPermissionScope.All, departments: [] })
+    await userDataScopeApi.set({ userId: '1', dataScope: null, departments: [] })
+    await roleHierarchyApi.batchUpdateParents({ roleId: '1', addParentRoleIds: [], removeParentRoleIds: [] })
+
+    expect(calls.map(item => `${item.method} ${item.url}`)).toEqual([
+      'POST /Role/SetRoleDataScope',
+      'POST /UserDataScope/SetUserDataScope',
+      'POST /Role/BatchUpdateRoleParents',
     ])
   })
 
@@ -271,6 +297,30 @@ describe('易写错的控制器归属', () => {
       'POST /Tenant/InviteTenantMember',
       'GET /TenantMemberQuery/TenantMemberDetail',
     ])
+  })
+
+  it('支持人员入驻与移除挂在 Tenant 控制器下，移除的两个主键走查询串——框架的 DELETE 不收请求体', async () => {
+    await tenantMemberApi.addSupport({ tenantId: '7', userId: '1' })
+    await tenantMemberApi.removeSupport('7', '9')
+
+    expect(calls.map(item => `${item.method} ${item.url}`)).toEqual([
+      'POST /Tenant/TenantSupportMember',
+      'DELETE /Tenant/TenantSupportMember',
+    ])
+    expect(calls[1]?.config?.params).toEqual({ tenantId: '7', memberId: '9' })
+  })
+
+  it('所有权转移挂在 Tenant 控制器下、方法名整体作路由，参数走 body', async () => {
+    const input = { tenantId: '7', memberId: '9' }
+    await tenantMemberApi.transferOwner(input)
+
+    expect(only()).toMatchObject({ method: 'POST', url: '/Tenant/TransferTenantOwner', body: input })
+  })
+
+  it('租户看自己的订阅走 TenantQuery 的只读 GET，不带租户参数', async () => {
+    await tenantApi.mySubscription()
+
+    expect(only()).toMatchObject({ method: 'GET', url: '/TenantQuery/MySubscription' })
   })
 })
 

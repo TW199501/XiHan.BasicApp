@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Tone } from '@xihan-ui/kernel'
+import type { Tone } from '@xihan-ui/core'
 import type {
   PageResult,
   TaskCreateDto,
@@ -10,15 +10,15 @@ import type {
   TaskUpdateDto,
 } from '@/api'
 import type { ListFieldSchema, PageSchema, SchemaActionPayload, XDataTableColumn } from '~/components'
-import { XhButton, XhDescriptionsItem, XhDescriptionsLabel, XhDescriptionsRoot, XhDescriptionsValue, XhDialogCloseTrigger, XhDialogContent, XhDialogRoot, XhDialogTitle, XhDrawerCloseTrigger, XhDrawerContent, XhDrawerRoot, XhDrawerTitle, XhEmptyStateDescription, XhEmptyStateIcon, XhEmptyStateRoot, XhEmptyStateTitle, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFlex, XhFormFieldGroup, XhFormRoot, XhSpinner, XhSwitch, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
+import { XhButton, XhDescriptionsItem, XhDescriptionsLabel, XhDescriptionsRoot, XhDescriptionsValue, XhDialogCloseTrigger, XhDialogContent, XhDialogRoot, XhDialogTitle, XhDrawerCloseTrigger, XhDrawerContent, XhDrawerRoot, XhDrawerTitle, XhEmptyStateDescription, XhEmptyStateIndicator, XhEmptyStateRoot, XhEmptyStateTitle, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFlex, XhFormFieldGroup, XhFormRoot, XhSpinner, XhSwitch, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
 import { computed, h, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { createPageRequest, EnableStatus, jobManagementApi, RunTaskStatus, taskLogApi, TriggerType } from '@/api'
 import { STATUS_OPTIONS } from '@/constants'
-import { Icon, SchemaPage, XDataTable, XEditModal, XInput, XNumberInput, XSelect } from '~/components'
+import { actionConfirmText, deleteConfirmText, Icon, SchemaPage, statusConfirmText, XDataTable, XEditModal, XInput, XNumberInput, XSelect } from '~/components'
 import CronExpression from '~/components/common/CronExpression.vue'
-import { toast } from '~/composables'
-import { useEnumOptions } from '~/hooks'
+import { dialog, toast } from '~/composables'
+import { useEnumOptions, usePermission } from '~/hooks'
 import { formatDate, getOptionLabel } from '~/utils'
 
 defineOptions({ name: 'PlatformJobPage' })
@@ -47,6 +47,7 @@ interface JobFormModel {
 }
 
 const { t } = useI18n()
+const { hasPermission } = usePermission()
 
 /** 编辑弹窗的保存钮靠这个 id 关联到表单，点它才会走整表校验 */
 const editFormId = useId()
@@ -156,7 +157,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 5,
     render: (row) => {
       const r = row as unknown as TaskListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: runStatusTag(r.runTaskStatus) }, () => h(XhTagLabel, () => getOptionLabel(runTaskStatusOptions.value, r.runTaskStatus)))
+      return h(XhTagRoot, { variant: 'subtle', tone: runStatusTag(r.runTaskStatus) }, () => h(XhTagLabel, () => getOptionLabel(runTaskStatusOptions.value, r.runTaskStatus)))
     },
   },
   {
@@ -171,7 +172,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 6,
     render: (row) => {
       const r = row as unknown as TaskListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: statusTag(r.status) }, () => h(XhTagLabel, () => getOptionLabel(statusOptions.value, r.status)))
+      return h(XhTagRoot, { variant: 'subtle', tone: statusTag(r.status) }, () => h(XhTagLabel, () => getOptionLabel(statusOptions.value, r.status)))
     },
   },
   {
@@ -185,7 +186,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 7,
     render: (row) => {
       const r = row as unknown as TaskListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: r.allowConcurrent ? 'warning' : 'info' }, () => h(XhTagLabel, () => (r.allowConcurrent ? t('common.statuses.allow') : t('common.statuses.forbid'))))
+      return h(XhTagRoot, { variant: 'subtle', tone: r.allowConcurrent ? 'warning' : 'info' }, () => h(XhTagLabel, () => (r.allowConcurrent ? t('common.statuses.allow') : t('common.statuses.forbid'))))
     },
   },
   { key: 'executedCount', title: t('setting.job.executed_count'), dataType: 'number', minWidth: 100, order: 8 },
@@ -197,7 +198,7 @@ const fields = computed<ListFieldSchema[]>(() => [
 ])
 
 const schema = computed<PageSchema>(() => ({
-  pageCode: 'platform.job',
+  pageCode: 'setting.job',
   exportPermission: 'setting.job.export',
   pageName: t('setting.job.page_name'),
   batchRemovable: true,
@@ -223,13 +224,13 @@ const schema = computed<PageSchema>(() => ({
     updateStatus: (id, enabled) => jobManagementApi.updateStatus({ basicId: id, status: enabled ? EnableStatus.Enabled : EnableStatus.Disabled }),
   },
   actions: [
-    { key: 'create', title: t('setting.job.add'), scope: 'page', type: 'primary', icon: 'lucide:plus' },
+    { key: 'create', title: t('setting.job.add'), scope: 'page', type: 'primary', icon: 'lucide:plus', permission: 'setting.job.create' },
     { key: 'view', title: t('setting.job.view'), scope: 'row', icon: 'lucide:eye' },
     { key: 'logs', title: t('setting.job.logs'), scope: 'row', icon: 'lucide:history', permission: 'setting.job.logs' },
-    { key: 'edit', title: t('common.actions.edit'), scope: 'row', icon: 'lucide:pencil' },
-    { key: 'trigger', title: t('setting.job.trigger_immediate'), scope: 'row', icon: 'lucide:play', disabled: row => triggerDisabled(row as unknown as TaskListItemDto) },
-    { key: 'toggle', title: t('setting.job.toggle'), scope: 'row', icon: 'lucide:power', disabled: row => (row as unknown as TaskListItemDto).runTaskStatus === RunTaskStatus.Running },
-    { key: 'delete', title: t('common.actions.delete'), scope: 'row', icon: 'lucide:trash-2', disabled: row => (row as unknown as TaskListItemDto).runTaskStatus === RunTaskStatus.Running },
+    { key: 'edit', title: t('common.actions.edit'), scope: 'row', icon: 'lucide:pencil', permission: 'setting.job.update' },
+    { key: 'trigger', title: t('setting.job.trigger_immediate'), scope: 'row', icon: 'lucide:play', disabled: row => triggerDisabled(row as unknown as TaskListItemDto), permission: 'setting.job.run' },
+    { key: 'toggle', title: t('setting.job.toggle'), scope: 'row', icon: 'lucide:power', disabled: row => (row as unknown as TaskListItemDto).runTaskStatus === RunTaskStatus.Running, permission: 'setting.job.status' },
+    { key: 'delete', title: t('common.actions.delete'), scope: 'row', type: 'error', icon: 'lucide:trash-2', confirm: true, confirmText: row => deleteConfirmText(t, (row as unknown as TaskListItemDto).taskName), disabled: row => (row as unknown as TaskListItemDto).runTaskStatus === RunTaskStatus.Running, permission: 'setting.job.delete' },
   ],
 }))
 
@@ -290,7 +291,7 @@ async function handleDetail(row: TaskListItemDto) {
     detailData.value = await jobManagementApi.detail(row.basicId) ?? null
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('setting.job.load_detail_failed'))
+    toast.danger((error as Error)?.message || t('setting.job.load_detail_failed'))
   }
   finally {
     detailLoading.value = false
@@ -318,7 +319,7 @@ const taskLogColumns = computed<XDataTableColumn<TaskLogListItemDto>[]>(() => [
   { ellipsis: true, key: 'batchNumber', render: row => row.batchNumber || '-', title: t('setting.job.batch_number'), width: 150 },
   {
     key: 'taskStatus',
-    render: row => h(XhTagRoot, { variant: 'outline', tone: runStatusTag(row.taskStatus) }, () => h(XhTagLabel, () => getOptionLabel(runTaskStatusOptions.value, row.taskStatus))),
+    render: row => h(XhTagRoot, { variant: 'subtle', tone: runStatusTag(row.taskStatus) }, () => h(XhTagLabel, () => getOptionLabel(runTaskStatusOptions.value, row.taskStatus))),
     title: t('setting.job.log_status'),
     width: 96,
   },
@@ -364,7 +365,7 @@ async function loadTaskLogs(page?: number) {
     logPagination.value.itemCount = result.page.totalCount
   }
   catch (e) {
-    toast.error((e as Error).message || t('setting.job.load_logs_failed'))
+    toast.danger((e as Error).message || t('setting.job.load_logs_failed'))
   }
   finally {
     logLoading.value = false
@@ -384,7 +385,7 @@ async function handleLogDetail(row: TaskLogListItemDto) {
     logDetail.value = await taskLogApi.detail(row.basicId) ?? null
   }
   catch (e) {
-    toast.error((e as Error).message || t('setting.job.load_log_detail_failed'))
+    toast.danger((e as Error).message || t('setting.job.load_log_detail_failed'))
   }
   finally {
     logDetailLoading.value = false
@@ -392,7 +393,7 @@ async function handleLogDetail(row: TaskLogListItemDto) {
 }
 
 // ── 行操作：立即执行 / 启停 / 删除 ──────────────────────────────
-async function handleTrigger(row: TaskListItemDto) {
+function handleTrigger(row: TaskListItemDto) {
   if (row.status !== EnableStatus.Enabled) {
     toast.warning(t('setting.job.disabled_cannot_trigger'))
     return
@@ -401,34 +402,54 @@ async function handleTrigger(row: TaskListItemDto) {
     toast.warning(t('setting.job.running_cannot_trigger'))
     return
   }
-  try {
-    // 经调度器真正触发一次执行（旧实现仅改写运行状态字段，不会执行任务）
-    await jobManagementApi.run(row.basicId)
-    toast.success(t('setting.job.triggered'))
-    reloadJob()
-  }
-  catch (e) {
-    toast.error((e as Error)?.message || t('setting.job.trigger_failed'))
-  }
+  // 行内动作与详情抽屉都走这里，确认放在处理函数里才两处都覆盖
+  void dialog.confirm({
+    badge: 'warning',
+    title: t('setting.job.trigger_immediate'),
+    content: actionConfirmText(t, t('setting.job.trigger_immediate'), row.taskName),
+    okText: t('common.actions.confirm'),
+    cancelText: t('common.actions.cancel'),
+    onOk: async () => {
+      try {
+        // 经调度器真正触发一次执行（旧实现仅改写运行状态字段，不会执行任务）
+        await jobManagementApi.run(row.basicId)
+        toast.success(t('setting.job.triggered'))
+        reloadJob()
+      }
+      catch (e) {
+        toast.danger((e as Error)?.message || t('setting.job.trigger_failed'))
+      }
+    },
+  })
 }
 
-async function handleToggleStatus(row: TaskListItemDto) {
+function handleToggleStatus(row: TaskListItemDto) {
   if (row.runTaskStatus === RunTaskStatus.Running) {
     toast.warning(t('setting.job.running_cannot_toggle'))
     return
   }
-  const newStatus = row.status === EnableStatus.Enabled ? EnableStatus.Disabled : EnableStatus.Enabled
-  try {
-    await jobManagementApi.updateStatus({
-      basicId: row.basicId,
-      status: newStatus,
-    })
-    toast.success(newStatus === EnableStatus.Enabled ? t('setting.job.task_enabled') : t('setting.job.task_disabled'))
-    reloadJob()
-  }
-  catch (error) {
-    toast.error((error as Error)?.message || t('setting.job.toggle_failed'))
-  }
+  const enabled = row.status === EnableStatus.Enabled
+  const newStatus = enabled ? EnableStatus.Disabled : EnableStatus.Enabled
+  void dialog.confirm({
+    badge: 'warning',
+    title: t('setting.job.toggle'),
+    content: statusConfirmText(t, enabled, row.taskName),
+    okText: t('common.actions.confirm'),
+    cancelText: t('common.actions.cancel'),
+    onOk: async () => {
+      try {
+        await jobManagementApi.updateStatus({
+          basicId: row.basicId,
+          status: newStatus,
+        })
+        toast.success(newStatus === EnableStatus.Enabled ? t('setting.job.task_enabled') : t('setting.job.task_disabled'))
+        reloadJob()
+      }
+      catch (error) {
+        toast.danger((error as Error)?.message || t('setting.job.toggle_failed'))
+      }
+    },
+  })
 }
 
 async function handleDelete(row: TaskListItemDto) {
@@ -442,7 +463,7 @@ async function handleDelete(row: TaskListItemDto) {
     reloadJob()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('setting.job.delete_failed'))
+    toast.danger((error as Error)?.message || t('setting.job.delete_failed'))
   }
 }
 
@@ -488,7 +509,7 @@ async function handleEdit(row: TaskListItemDto) {
     detail = await jobManagementApi.detail(row.basicId) ?? null
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('setting.job.load_detail_failed'))
+    toast.danger((error as Error)?.message || t('setting.job.load_detail_failed'))
     return
   }
   const src = detail ?? (row as unknown as TaskDetailDto)
@@ -593,7 +614,7 @@ async function handleSubmit() {
     reloadJob()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('common.messages.save_failed'))
+    toast.danger((error as Error)?.message || t('common.messages.save_failed'))
   }
   finally {
     submitLoading.value = false
@@ -610,7 +631,7 @@ async function handleSubmit() {
     <!-- 行下拉展开：触发器信息（触发类型 / Cron / 间隔 / 运行态 / 上下次执行 / 起止 / 执行统计） -->
     <template #expand="{ row }">
       <div class="xh-trigger-expand">
-        <XhDescriptionsRoot :columns="3" bordered placement="left" size="sm">
+        <XhDescriptionsRoot :columns="3" variant="outline" placement="left" size="sm">
           <XhDescriptionsItem>
             <XhDescriptionsLabel>{{ t('setting.job.trigger_type') }}</XhDescriptionsLabel>
             <XhDescriptionsValue>
@@ -683,14 +704,14 @@ async function handleSubmit() {
             <XhSpinner />
           </div>
           <XhEmptyStateRoot v-if="!detailLoading && !detailData" class="xh-detail-empty">
-            <XhEmptyStateIcon>
+            <XhEmptyStateIndicator>
               <Icon icon="lucide:inbox" />
-            </XhEmptyStateIcon>
+            </XhEmptyStateIndicator>
             <XhEmptyStateTitle>{{ t('common.empty') }}</XhEmptyStateTitle>
             <XhEmptyStateDescription>{{ t('setting.job.detail_empty') }}</XhEmptyStateDescription>
           </XhEmptyStateRoot>
           <div v-else-if="detailData" class="xh-scroll-area" style="max-height: calc(100vh - 120px)">
-            <XhDescriptionsRoot :columns="1" bordered placement="left" size="sm">
+            <XhDescriptionsRoot :columns="1" variant="outline" placement="left" size="sm">
               <XhDescriptionsItem>
                 <XhDescriptionsLabel>{{ t('setting.job.task_name') }}</XhDescriptionsLabel>
                 <XhDescriptionsValue>
@@ -842,11 +863,14 @@ async function handleSubmit() {
         </div>
         <div v-if="detailData" class="xh-dialog-footer">
           <XhFlex justify="end" gap="md">
-            <XhButton @click="handleLogs(detailData); detailVisible = false">
+            <!-- 与行内动作同一套按钮码：详情里的入口不能绕过门控 -->
+            <XhButton v-if="hasPermission('setting.job.logs')" variant="subtle" @click="handleLogs(detailData); detailVisible = false">
               <span><Icon icon="lucide:history" /></span>
               {{ t('setting.job.logs') }}
             </XhButton>
             <XhButton
+              v-if="hasPermission('setting.job.run')"
+              variant="subtle"
               tone="brand"
               :disabled="triggerDisabled(detailData)"
               @click="handleTrigger(detailData); detailVisible = false"
@@ -855,6 +879,8 @@ async function handleSubmit() {
               {{ t('setting.job.trigger_immediate') }}
             </XhButton>
             <XhButton
+              v-if="hasPermission('setting.job.status')"
+              variant="subtle"
               :tone="detailData.status === EnableStatus.Enabled ? 'warning' : 'success'"
               :disabled="detailData.runTaskStatus === RunTaskStatus.Running"
               @click="handleToggleStatus(detailData); detailVisible = false"
@@ -889,9 +915,9 @@ async function handleSubmit() {
             size="sm"
             style="width: 180px"
             @clear="loadTaskLogs(1)"
-            @keyup.enter="loadTaskLogs(1)"
+            @enter="loadTaskLogs(1)"
           />
-          <XhButton size="sm" @click="loadTaskLogs(1)">
+          <XhButton variant="subtle" size="sm" @click="loadTaskLogs(1)">
             <span><Icon icon="lucide:refresh-cw" /></span>
             {{ t('common.actions.refresh') }}
           </XhButton>
@@ -901,6 +927,7 @@ async function handleSubmit() {
           <XDataTable
             class="xh-task-log-table"
             :columns="taskLogColumns"
+            max-height="100%"
             :data="logItems"
             :loading="logLoading"
             :pagination="{
@@ -910,7 +937,6 @@ async function handleSubmit() {
               onUpdatePage: (p: number) => loadTaskLogs(p) }"
             :row-key="(row: TaskLogListItemDto) => row.basicId"
             :row-props="taskLogRowProps"
-            size="sm"
           />
         </div>
       </XhDrawerContent>
@@ -926,14 +952,14 @@ async function handleSubmit() {
             <XhSpinner />
           </div>
           <XhEmptyStateRoot v-if="!logDetailLoading && !logDetail" class="xh-detail-empty">
-            <XhEmptyStateIcon>
+            <XhEmptyStateIndicator>
               <Icon icon="lucide:inbox" />
-            </XhEmptyStateIcon>
+            </XhEmptyStateIndicator>
             <XhEmptyStateTitle>{{ t('common.empty') }}</XhEmptyStateTitle>
             <XhEmptyStateDescription>{{ t('setting.job.log_detail_empty') }}</XhEmptyStateDescription>
           </XhEmptyStateRoot>
           <div v-else-if="logDetail" class="xh-scroll-area" style="max-height: 70vh">
-            <XhDescriptionsRoot :columns="2" bordered placement="left" size="sm">
+            <XhDescriptionsRoot :columns="2" variant="outline" placement="left" size="sm">
               <XhDescriptionsItem>
                 <XhDescriptionsLabel>{{ t('setting.job.task_name') }}</XhDescriptionsLabel>
                 <XhDescriptionsValue>
@@ -1042,7 +1068,7 @@ async function handleSubmit() {
         class="xh-edit-form-grid"
         @submit="handleSubmit"
       >
-        <XhFormFieldGroup value="taskCode">
+        <XhFormFieldGroup name="taskCode">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.job.task_code') }}</XhFieldLabel>
             <XhFieldControl>
@@ -1056,7 +1082,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="taskName">
+        <XhFormFieldGroup name="taskName">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.job.task_name') }}</XhFieldLabel>
             <XhFieldControl>
@@ -1065,7 +1091,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="taskGroup">
+        <XhFormFieldGroup name="taskGroup">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.job.task_group') }}</XhFieldLabel>
             <XhFieldControl>
@@ -1074,7 +1100,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="triggerType">
+        <XhFormFieldGroup name="triggerType">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.job.trigger_type') }}</XhFieldLabel>
             <XhFieldControl>
@@ -1083,7 +1109,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="taskClass">
+        <XhFormFieldGroup name="taskClass">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.job.task_class') }}</XhFieldLabel>
             <XhFieldControl>
@@ -1092,7 +1118,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="taskMethod">
+        <XhFormFieldGroup name="taskMethod">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.job.task_method') }}</XhFieldLabel>
             <XhFieldControl>
@@ -1101,7 +1127,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="cronExpression" class="xh-span-2">
+        <XhFormFieldGroup name="cronExpression" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.job.cron_expression') }}</XhFieldLabel>
             <XhFieldControl :as-child="false">
@@ -1110,16 +1136,16 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="intervalSeconds">
+        <XhFormFieldGroup name="intervalSeconds">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.job.interval_label') }}</XhFieldLabel>
             <XhFieldControl>
-              <XNumberInput v-model:value="jobForm.intervalSeconds" :min="0" clearable />
+              <XNumberInput v-model:value="jobForm.intervalSeconds" :min="0" />
             </XhFieldControl>
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="priority">
+        <XhFormFieldGroup name="priority">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.job.priority') }}</XhFieldLabel>
             <XhFieldControl>
@@ -1128,7 +1154,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="timeoutSeconds">
+        <XhFormFieldGroup name="timeoutSeconds">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.job.timeout_label') }}</XhFieldLabel>
             <XhFieldControl>
@@ -1137,7 +1163,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="maxRetryCount">
+        <XhFormFieldGroup name="maxRetryCount">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.job.max_retry_count') }}</XhFieldLabel>
             <XhFieldControl>
@@ -1146,7 +1172,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="allowConcurrent">
+        <XhFormFieldGroup name="allowConcurrent">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.job.allow_concurrent') }}</XhFieldLabel>
             <XhFieldControl>
@@ -1155,7 +1181,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="taskParams" class="xh-span-2">
+        <XhFormFieldGroup name="taskParams" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.job.task_params') }}</XhFieldLabel>
             <XhFieldControl>
@@ -1170,7 +1196,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="taskDescription" class="xh-span-2">
+        <XhFormFieldGroup name="taskDescription" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.job.task_description') }}</XhFieldLabel>
             <XhFieldControl>
@@ -1185,7 +1211,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="remark" class="xh-span-2">
+        <XhFormFieldGroup name="remark" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.job.remark') }}</XhFieldLabel>
             <XhFieldControl>

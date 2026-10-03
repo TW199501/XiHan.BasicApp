@@ -4,8 +4,9 @@
 export default {
   chat: {
     bell: 'Chat',
+    unread_label: '{n} unread chat messages',
     island_new_message_fallback: 'New message',
-    drawer: {
+    panel: {
       title: 'Chat',
       open_page: 'Open full page',
     },
@@ -61,6 +62,7 @@ export default {
       assistant_thinking: 'Generating…',
       assistant_dismiss: 'Dismiss',
       voice_unplayed: 'Unplayed',
+      view_image: 'View image',
       recalled: 'Message recalled',
       recall: 'Recall',
       recall_failed: 'Failed to recall message',
@@ -106,6 +108,7 @@ export default {
       send_key_enter: 'Send with Enter',
       send_key_ctrl_enter: 'Send with Ctrl + Enter',
       emoji: 'Emoji',
+      mention: 'Mention a member',
       image: 'Send image',
       file: 'Send file',
       voice: 'Voice input',

@@ -10,6 +10,7 @@ import { createPageRequest, DeviceType, logManagementApi, querySortsFromSchema }
 import { SchemaPage } from '~/components'
 import { toast } from '~/composables'
 import { getOptionLabel } from '~/utils'
+import { renderHttpMethod } from '../_components/http-method'
 import { exceptionLogDetailFields } from '../_components/log-detail-fields'
 import LogDetailDrawer from '../_components/LogDetailDrawer.vue'
 import { decorateTraceFields, gotoTrace } from '../_components/trace-nav'
@@ -67,8 +68,8 @@ const fields = computed<ListFieldSchema[]>(() => [
   { key: 'userId', title: t('log.common.user_id'), dataType: 'string', advancedSearch: true, minWidth: 90, order: 10 },
   { key: 'userName', title: t('log.common.user_name'), dataType: 'string', advancedSearch: true, sortable: true, minWidth: 100, order: 11 },
   { key: 'sessionId', title: t('log.common.session_id'), dataType: 'string', advancedSearch: true, minWidth: 160, order: 12 },
-  { key: 'requestId', title: t('log.common.request_id'), dataType: 'string', advancedSearch: true, minWidth: 160, order: 13 },
-  { key: 'traceId', title: t('log.common.trace_id'), dataType: 'string', advancedSearch: true, minWidth: 160, order: 14 },
+  { key: 'traceId', title: t('log.common.trace_id'), dataType: 'string', advancedSearch: true, minWidth: 160, order: 13 },
+  { key: 'requestId', title: t('log.common.request_id'), dataType: 'string', advancedSearch: true, minWidth: 160, order: 14 },
   { key: 'exceptionType', title: t('log.exception.exception_type'), dataType: 'string', advancedSearch: true, sortable: true, minWidth: 160, order: 15 },
   { key: 'exceptionMessage', title: t('log.exception.exception_message'), dataType: 'string', minWidth: 260, order: 16 },
   { key: 'exceptionSource', title: t('log.exception.exception_source'), dataType: 'string', advancedSearch: true, minWidth: 140, order: 17 },
@@ -84,10 +85,10 @@ const fields = computed<ListFieldSchema[]>(() => [
     searchPlaceholder: t('log.exception.severity_level_placeholder'),
     width: 90,
     order: 19,
-    render: row => h(XhTagRoot, { variant: 'outline', tone: severityType((row as unknown as ExceptionLogListItemDto).severityLevel) }, () => h(XhTagLabel, () => getOptionLabel(severityOptions.value, (row as unknown as ExceptionLogListItemDto).severityLevel))),
+    render: row => h(XhTagRoot, { variant: 'subtle', tone: severityType((row as unknown as ExceptionLogListItemDto).severityLevel) }, () => h(XhTagLabel, () => getOptionLabel(severityOptions.value, (row as unknown as ExceptionLogListItemDto).severityLevel))),
   },
   { key: 'requestPath', title: t('log.exception.request_path'), dataType: 'string', advancedSearch: true, minWidth: 200, order: 20 },
-  { key: 'requestMethod', title: t('log.exception.request_method'), dataType: 'string', advancedSearch: true, sortable: true, width: 90, order: 21 },
+  { key: 'requestMethod', title: t('log.exception.request_method'), dataType: 'string', advancedSearch: true, sortable: true, width: 90, order: 21, render: row => renderHttpMethod((row as unknown as ExceptionLogListItemDto).requestMethod) },
   { key: 'controllerName', title: t('log.common.controller_name'), dataType: 'string', minWidth: 140, order: 22 },
   { key: 'actionName', title: t('log.common.action_name'), dataType: 'string', minWidth: 140, order: 23 },
   { key: 'statusCode', title: t('log.common.status_code'), dataType: 'number', advancedSearch: true, sortable: true, width: 100, order: 24 },
@@ -125,7 +126,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     searchPlaceholder: t('log.exception.is_handled_placeholder'),
     width: 100,
     order: 37,
-    render: row => h(XhTagRoot, { variant: 'outline', tone: (row as unknown as ExceptionLogListItemDto).isHandled ? 'success' : 'warning' }, () => h(XhTagLabel, () => (row as unknown as ExceptionLogListItemDto).isHandled ? t('log.exception.handled') : t('log.exception.unhandled'))),
+    render: row => h(XhTagRoot, { variant: 'subtle', tone: (row as unknown as ExceptionLogListItemDto).isHandled ? 'success' : 'warning' }, () => h(XhTagLabel, () => (row as unknown as ExceptionLogListItemDto).isHandled ? t('log.exception.handled') : t('log.exception.unhandled'))),
   },
   { key: 'handledTime', title: t('log.exception.handled_time'), dataType: 'datetime', sortable: true, minWidth: 170, order: 38 },
   { key: 'errorCode', title: t('log.exception.error_code'), dataType: 'string', advancedSearch: true, sortable: true, minWidth: 100, order: 39 },
@@ -212,7 +213,7 @@ async function handleDetail(row: ExceptionLogListItemDto) {
   }
   catch (error) {
     detailData.value = row
-    toast.error((error as Error)?.message || t('log.exception.detail_load_failed'))
+    toast.danger((error as Error)?.message || t('log.exception.detail_load_failed'))
   }
   finally {
     detailLoading.value = false

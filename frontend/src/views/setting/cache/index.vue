@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { XhButton, XhEmptyStateDescription, XhEmptyStateIcon, XhEmptyStateRoot, XhEmptyStateTitle, XhSpinner, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
+import { XhButton, XhButtonIndicator, XhButtonLabel, XhButtonPrefix, XhEmptyStateDescription, XhEmptyStateIndicator, XhEmptyStateRoot, XhEmptyStateTitle, XhSpinner, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
 import { computed, h, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { cacheApi } from '@/api'
@@ -136,7 +136,7 @@ async function loadKeys() {
     expandedKeys.value = cacheKeys.value.length <= 100 ? collectGroupKeys(treeData.value) : []
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('setting.cache.query_keys_failed'))
+    toast.danger((error as Error)?.message || t('setting.cache.query_keys_failed'))
   }
   finally {
     loadingKeys.value = false
@@ -182,7 +182,7 @@ async function loadValue(key: string) {
     format.value = isJson(value ?? '') ? 'json' : 'text'
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('setting.cache.get_value_failed'))
+    toast.danger((error as Error)?.message || t('setting.cache.get_value_failed'))
     rawValue.value = null
   }
   finally {
@@ -249,7 +249,7 @@ async function handleCopy() {
     toast.success(t('setting.cache.copied'))
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('setting.cache.copy_failed'))
+    toast.danger((error as Error)?.message || t('setting.cache.copy_failed'))
   }
 }
 
@@ -276,7 +276,7 @@ async function handleSave() {
     reloadValue()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('setting.cache.save_failed_key_protected'))
+    toast.danger((error as Error)?.message || t('setting.cache.save_failed_key_protected'))
   }
   finally {
     saving.value = false
@@ -303,7 +303,7 @@ function handleDeleteCurrent() {
         await loadKeys()
       }
       catch (error) {
-        toast.error((error as Error)?.message || t('common.messages.delete_failed'))
+        toast.danger((error as Error)?.message || t('common.messages.delete_failed'))
       }
     },
   })
@@ -359,7 +359,7 @@ function handleDeleteByPattern() {
         await loadKeys()
       }
       catch (error) {
-        toast.error((error as Error)?.message || t('setting.cache.delete_by_pattern_failed'))
+        toast.danger((error as Error)?.message || t('setting.cache.delete_by_pattern_failed'))
       }
     },
   })
@@ -384,22 +384,23 @@ onMounted(loadKeys)
             </XhTagRoot>
           </div>
         </XhCardHeader>
-        <XhCardBody :style="cardContentStyle">
+        <XhCardContent :style="cardContentStyle">
           <div class="cache-tree-toolbar">
             <XInput
               v-model:value="keyPattern"
               size="sm"
               :placeholder="t('setting.cache.key_pattern_placeholder')"
               clearable
-              @keydown.enter="handleSearch"
+              @enter="handleSearch"
             >
               <template #prefix>
                 <Icon width="14" height="14" icon="lucide:search" />
               </template>
             </XInput>
             <XTooltip :content="t('setting.cache.search_by_pattern')">
-              <XhButton size="sm" tone="brand" :loading="loadingKeys" @click="handleSearch">
-                <span><Icon icon="lucide:search" /></span>
+              <XhButton icon-only variant="subtle" size="sm" tone="brand" :aria-label="t('setting.cache.search_by_pattern')" :loading="loadingKeys" @click="handleSearch">
+                <XhButtonIndicator />
+                <XhButtonPrefix><Icon icon="lucide:search" /></XhButtonPrefix>
               </XhButton>
             </XTooltip>
           </div>
@@ -413,23 +414,23 @@ onMounted(loadKeys)
                 </div>
                 <div v-if="cacheKeys.length === 0 && !loadingKeys" class="cache-empty">
                   <XhEmptyStateRoot size="sm">
-                    <XhEmptyStateIcon>
+                    <XhEmptyStateIndicator>
                       <Icon icon="lucide:inbox" width="28" height="28" />
-                    </XhEmptyStateIcon>
+                    </XhEmptyStateIndicator>
                     <XhEmptyStateTitle>{{ t('common.no_data') }}</XhEmptyStateTitle>
                     <XhEmptyStateDescription>{{ t('setting.cache.empty_keys') }}</XhEmptyStateDescription>
                   </XhEmptyStateRoot>
                 </div>
-                <!-- 管理档点目录名即勾整枝、展开归箭头；只读档没有勾选，点目录名照常展开 -->
+                <!-- 点行只管选中（管理档勾目录即连同整枝），展开一律交给箭头 -->
                 <XTree
                   v-else
                   v-model:expanded-keys="expandedKeys"
                   :selected-keys="selectedKeys"
                   :data="treeData"
-                  :selection-mode="canManage ? 'multiple' : 'single'"
+                  :aria-label="t('setting.cache.cache_keys')"
+                  :multiple="canManage"
                   :cascade="canManage"
                   checked-strategy="child"
-                  :expand-on-click="!canManage"
                   :render-label="renderTreeLabel"
                   @update:selected-keys="handleSelect"
                 />
@@ -447,7 +448,7 @@ onMounted(loadKeys)
               <XhButton v-if="selectedCount > 0" size="sm" variant="ghost" @click="clearSelection">
                 {{ t('setting.cache.clear') }}
               </XhButton>
-              <XhButton v-if="selectedCount > 0" size="sm" tone="danger" @click="handleBatchDelete">
+              <XhButton v-if="selectedCount > 0" variant="subtle" size="sm" tone="danger" @click="handleBatchDelete">
                 {{ t('setting.cache.delete_selected') }}
               </XhButton>
               <XhButton v-else size="sm" variant="ghost" tone="warning" @click="handleDeleteByPattern">
@@ -455,7 +456,7 @@ onMounted(loadKeys)
               </XhButton>
             </div>
           </div>
-        </XhCardBody>
+        </XhCardContent>
       </XhCardRoot>
 
       <!-- 右侧：键值 -->
@@ -469,23 +470,23 @@ onMounted(loadKeys)
                   {{ sizeText }}
                 </XhTagLabel>
               </XhTagRoot>
-              <XSegmented v-if="!editing" v-model:value="format" :options="[{ value: 'text', label: 'Text' }, { value: 'json', label: 'Json' }]" size="sm" />
+              <XSegmented v-if="!editing" v-model:value="format" :options="[{ value: 'text', label: 'Text' }, { value: 'json', label: 'Json' }]" size="sm" :aria-label="t('setting.cache.cache_content')" />
               <XTooltip :content="t('common.actions.copy')">
-                <XhButton size="sm" variant="ghost" @click="handleCopy">
+                <XhButton icon-only size="sm" variant="ghost" :aria-label="t('common.actions.copy')" @click="handleCopy">
                   <span><Icon icon="lucide:copy" /></span>
                 </XhButton>
               </XTooltip>
               <XTooltip :content="t('common.actions.refresh')">
-                <XhButton size="sm" variant="ghost" @click="reloadValue">
+                <XhButton icon-only size="sm" variant="ghost" :aria-label="t('common.actions.refresh')" @click="reloadValue">
                   <span><Icon icon="lucide:refresh-cw" /></span>
                 </XhButton>
               </XTooltip>
-              <XhButton v-if="canManage && !editing" size="sm" @click="startEdit">
+              <XhButton v-if="canManage && !editing" variant="subtle" size="sm" @click="startEdit">
                 <span><Icon icon="lucide:pencil-line" /></span>
                 {{ t('setting.cache.edit') }}
               </XhButton>
               <XTooltip :content="t('setting.cache.delete_this_key')">
-                <XhButton v-if="canManage" size="sm" variant="ghost" tone="danger" @click="handleDeleteCurrent">
+                <XhButton v-if="canManage" icon-only size="sm" variant="ghost" tone="danger" :aria-label="t('setting.cache.delete_this_key')" @click="handleDeleteCurrent">
                   <span><Icon icon="lucide:trash-2" /></span>
                 </XhButton>
               </XTooltip>
@@ -496,7 +497,7 @@ onMounted(loadKeys)
             <span>{{ t('setting.cache.cache_content') }}</span>
           </div>
         </XhCardHeader>
-        <XhCardBody :style="cardContentStyle">
+        <XhCardContent :style="cardContentStyle">
           <!-- 滚动区：相对壳 + 绝对内胆，详情在内部滚动 -->
           <div class="cache-scroll-host">
             <div class="cache-scroll-body">
@@ -506,18 +507,18 @@ onMounted(loadKeys)
                 </div>
                 <div v-if="!detailKey" class="cache-empty">
                   <XhEmptyStateRoot>
-                    <XhEmptyStateIcon>
+                    <XhEmptyStateIndicator>
                       <Icon icon="lucide:mouse-pointer-click" width="28" height="28" />
-                    </XhEmptyStateIcon>
+                    </XhEmptyStateIndicator>
                     <XhEmptyStateTitle>{{ t('setting.cache.select_key_hint_title') }}</XhEmptyStateTitle>
                     <XhEmptyStateDescription>{{ t('setting.cache.select_key_hint') }}</XhEmptyStateDescription>
                   </XhEmptyStateRoot>
                 </div>
                 <div v-else-if="rawValue === null" class="cache-empty">
                   <XhEmptyStateRoot>
-                    <XhEmptyStateIcon>
+                    <XhEmptyStateIndicator>
                       <Icon icon="lucide:search-x" width="28" height="28" />
-                    </XhEmptyStateIcon>
+                    </XhEmptyStateIndicator>
                     <XhEmptyStateTitle>{{ t('common.no_data') }}</XhEmptyStateTitle>
                     <XhEmptyStateDescription>{{ t('setting.cache.key_not_exist') }}</XhEmptyStateDescription>
                   </XhEmptyStateRoot>
@@ -532,11 +533,12 @@ onMounted(loadKeys)
                       :placeholder="t('setting.cache.value_placeholder')"
                     />
                     <div class="cache-edit-actions">
-                      <XhButton size="sm" @click="cancelEdit">
+                      <XhButton variant="subtle" size="sm" @click="cancelEdit">
                         {{ t('common.actions.cancel') }}
                       </XhButton>
-                      <XhButton size="sm" tone="brand" :loading="saving" @click="handleSave">
-                        {{ t('common.actions.save') }}
+                      <XhButton variant="subtle" size="sm" tone="brand" :loading="saving" @click="handleSave">
+                        <XhButtonIndicator />
+                        <XhButtonLabel>{{ t('common.actions.save') }}</XhButtonLabel>
                       </XhButton>
                     </div>
                   </template>
@@ -546,7 +548,7 @@ onMounted(loadKeys)
               </div>
             </div>
           </div>
-        </XhCardBody>
+        </XhCardContent>
       </XhCardRoot>
     </div>
   </div>
@@ -632,12 +634,12 @@ onMounted(loadKeys)
   min-block-size: 0;
 }
 
-.cache-tree-leaf {
+:deep(.cache-tree-leaf) {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
 }
 
-.cache-tree-group {
+:deep(.cache-tree-group) {
   display: inline-flex;
   gap: 4px;
   align-items: center;
@@ -734,16 +736,19 @@ onMounted(loadKeys)
   min-height: 0;
 }
 
-.cache-value-editor :deep(.x-input__box) {
+/* 视觉盒是组件库的 control 部件：吃掉编辑区的余量，并当 textarea 的定位参照 */
+.cache-value-editor :deep([data-scope='text-field'][data-part='control']) {
+  position: relative;
   flex: 1;
   min-block-size: 0;
 }
 
 /* textarea 的高由 rows 定死，百分比和 align-items: stretch 都拿不动它；
-   输入盒本身是定位参照，直接把 textarea 铺满它 */
+   直接把 textarea 铺满盒子，行内衬补回盒子自己那份，字不贴着描边 */
 .cache-value-editor :deep(textarea) {
   position: absolute;
   inset: 0;
+  padding-inline: var(--xh-control-px-sm);
   resize: none;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }

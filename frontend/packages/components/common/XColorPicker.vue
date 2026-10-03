@@ -1,17 +1,15 @@
 <script setup lang="ts">
+import type { Size } from '@xihan-ui/core'
 import {
-  XhColorPickerArea,
   XhColorPickerAreaThumb,
-  XhColorPickerChannelSlider,
-  XhColorPickerChannelSliderThumb,
-  XhColorPickerChannelSliderTrack,
   XhColorPickerContent,
   XhColorPickerControl,
+  XhColorPickerHueSlider,
   XhColorPickerPositioner,
   XhColorPickerRoot,
+  XhColorPickerSaturationArea,
   XhColorPickerSwatch,
-  XhColorPickerSwatchGroup,
-  XhColorPickerSwatchItem,
+  XhColorPickerSwatchPicker,
   XhColorPickerTrigger,
   XhColorPickerValueText,
 } from '@xihan-ui/vue'
@@ -19,7 +17,8 @@ import {
 /**
  * 取色器：值为 hex 串。
  *
- * 十来个部件摆一遍才是一个完整取色面板，收在这里；预设色板由调用方给。
+ * 部件摆一遍才是一个完整取色面板，收在这里；预设色板由调用方给。
+ * 色相滑块与色板都是内嵌的子组件，挂载点不写子节点即自动铺开。
  */
 defineOptions({ name: 'XColorPicker' })
 
@@ -27,16 +26,27 @@ withDefaults(defineProps<{
   value?: string | null
   /** 预设色板 */
   swatches?: string[]
+  /** 不写时随外层 Field / Form 的 disabled 走；写了以本处为准 */
   disabled?: boolean
+  /** 与表单里的其它字段同一档：缺省 sm，与 XInput / XSelect 一致 */
+  size?: Size
 }>(), {
   value: undefined,
   swatches: undefined,
-  disabled: false,
+  disabled: undefined,
+  size: 'sm',
 })
 
 const emit = defineEmits<{
   'update:value': [value: string]
 }>()
+
+// 库内取色器的值恒为颜色串数组，单选恒为一项；对外仍只交出那一个 hex 串
+function onValueUpdate(next: string[]) {
+  const color = next[0]
+  if (color !== undefined)
+    emit('update:value', color)
+}
 </script>
 
 <template>
@@ -44,7 +54,8 @@ const emit = defineEmits<{
     :value="value ?? undefined"
     :swatches="swatches"
     :disabled="disabled"
-    @update:value="(next: string) => emit('update:value', next)"
+    :size="size"
+    @update:value="onValueUpdate"
   >
     <!-- 视觉盒（边框/高度/内边距/聚焦环）在 Control 上，少这层触发钮就退回裸按钮 -->
     <XhColorPickerControl>
@@ -55,16 +66,11 @@ const emit = defineEmits<{
     </XhColorPickerControl>
     <XhColorPickerPositioner>
       <XhColorPickerContent>
-        <XhColorPickerArea>
+        <XhColorPickerSaturationArea>
           <XhColorPickerAreaThumb />
-        </XhColorPickerArea>
-        <XhColorPickerChannelSlider channel="hue">
-          <XhColorPickerChannelSliderTrack />
-          <XhColorPickerChannelSliderThumb />
-        </XhColorPickerChannelSlider>
-        <XhColorPickerSwatchGroup v-if="swatches?.length">
-          <XhColorPickerSwatchItem v-for="color in swatches" :key="color" :value="color" />
-        </XhColorPickerSwatchGroup>
+        </XhColorPickerSaturationArea>
+        <XhColorPickerHueSlider />
+        <XhColorPickerSwatchPicker v-if="swatches?.length" />
       </XhColorPickerContent>
     </XhColorPickerPositioner>
   </XhColorPickerRoot>

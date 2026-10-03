@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import type { AppTenantSwitcherItem } from '~/types'
-import { XhButton, XhEmptyStateDescription, XhEmptyStateIcon, XhEmptyStateRoot, XhEmptyStateTitle, XhSpinner, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
+import { XhButton, XhButtonIndicator, XhButtonLabel, XhEmptyStateDescription, XhEmptyStateIndicator, XhEmptyStateRoot, XhEmptyStateTitle, XhSpinner, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { XUserAvatar } from '~/components'
@@ -8,14 +8,14 @@ import { toast } from '~/composables'
 import { MEMBER_TYPE_OPTIONS } from '~/constants'
 import { useEnumOptions } from '~/hooks'
 import { Icon } from '~/iconify'
-import { useAccessStore, useAppContext } from '~/stores'
+import { useAppContext, useAuthStore } from '~/stores'
 import { TenantMemberType } from '~/types/enums'
 import { formatDate, getOptionLabel } from '~/utils'
 
 defineOptions({ name: 'ProfileTabTenants' })
 
 const { apis } = useAppContext()
-const accessStore = useAccessStore()
+const authStore = useAuthStore()
 const { t } = useI18n()
 
 // 成员类型走后端枚举元数据（本地化、切语言响应式重取），未加载/未部署时回退静态 MEMBER_TYPE_OPTIONS
@@ -36,29 +36,24 @@ async function loadTenants() {
     loaded.value = true
   }
   catch (e: unknown) {
-    toast.error((e as Error)?.message || t('component.profile.tenants.err_load_failed'))
+    toast.danger((e as Error)?.message || t('component.profile.tenants.err_load_failed'))
   }
   finally {
     loading.value = false
   }
 }
 
-/** 切换租户：重签发令牌后重载应用以加载新上下文 */
-async function switchTo(tenantId: string, label: string) {
+/** 切换租户：服务端在目标租户续接会话，本地按新上下文整页重建 */
+async function switchTo(tenantId: string) {
   if (switching.value) {
     return
   }
   switching.value = true
   try {
-    const token = await apis.tenantApi.switchTenant({ tenantId })
-    accessStore.setAccessToken(token.accessToken)
-    accessStore.setRefreshToken(token.refreshToken)
-    toast.success(t('component.profile.tenants.msg_switched_to', { label }))
-    // 新上下文的权限/菜单需重新引导，直接重载以确保一致
-    window.location.reload()
+    await authStore.switchContext(tenantId)
   }
   catch (e: unknown) {
-    toast.error((e as Error)?.message || t('component.profile.tenants.err_switch_failed'))
+    toast.danger((e as Error)?.message || t('component.profile.tenants.err_switch_failed'))
     switching.value = false
   }
 }
@@ -91,7 +86,7 @@ onMounted(loadTenants)
           </div>
         </div>
         <div class="pf-section__extra">
-          <XhButton size="sm" variant="ghost" @click="loadTenants">
+          <XhButton size="sm" variant="ghost" icon-only :aria-label="t('common.actions.refresh')" @click="loadTenants">
             <Icon icon="lucide:refresh-cw" />
           </XhButton>
         </div>
@@ -103,9 +98,9 @@ onMounted(loadTenants)
           </div>
           <div class="pf-list">
             <XhEmptyStateRoot v-if="tenants.length === 0 && loaded">
-              <XhEmptyStateIcon>
+              <XhEmptyStateIndicator>
                 <Icon icon="lucide:inbox" width="28" height="28" />
-              </XhEmptyStateIcon>
+              </XhEmptyStateIndicator>
               <XhEmptyStateTitle>{{ t('common.no_data') }}</XhEmptyStateTitle>
               <XhEmptyStateDescription>{{ t('component.profile.tenants.empty') }}</XhEmptyStateDescription>
             </XhEmptyStateRoot>
@@ -157,9 +152,10 @@ onMounted(loadTenants)
                   size="sm"
                   variant="subtle"
                   :loading="switching"
-                  @click="switchTo(String(tenant.tenantId), tenant.tenantName)"
+                  @click="switchTo(String(tenant.tenantId))"
                 >
-                  {{ t('component.profile.tenants.btn_switch') }}
+                  <XhButtonIndicator />
+                  <XhButtonLabel>{{ t('component.profile.tenants.btn_switch') }}</XhButtonLabel>
                 </XhButton>
               </div>
             </div>

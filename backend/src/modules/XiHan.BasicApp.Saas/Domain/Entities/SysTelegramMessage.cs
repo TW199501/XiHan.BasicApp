@@ -3,6 +3,7 @@
 
 using SqlSugar;
 using XiHan.BasicApp.Core.Entities;
+using XiHan.Framework.Data.SqlSugar.Routing;
 using XiHan.Framework.Domain.Entities.Abstracts;
 
 namespace XiHan.BasicApp.Saas.Domain.Entities;
@@ -40,7 +41,8 @@ namespace XiHan.BasicApp.Saas.Domain.Entities;
 [SugarIndex("IX_{split_table}_BoNa", nameof(BotName), OrderByType.Asc)]
 [SugarIndex("IX_{split_table}_ChId", nameof(ChatId), OrderByType.Asc)]
 [SugarIndex("IX_{split_table}_Su", nameof(Success), OrderByType.Asc)]
-public partial class SysTelegramMessage : BasicAppCreationEntity, ISplitTableEntity
+[PlatformDataSource]
+public partial class SysTelegramMessage : BasicAppCreationEntity, ISplitTableEntity, IStrictMultiTenantEntity
 {
     /// <summary>
     /// 机器人名称

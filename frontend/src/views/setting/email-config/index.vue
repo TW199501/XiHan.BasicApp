@@ -76,7 +76,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     render: (row) => {
       const isDefault = (row as unknown as EmailConfigListItemDto).isDefault
       return isDefault
-        ? h(XhTagRoot, { variant: 'outline', tone: 'warning' }, () => h(XhTagLabel, () => t('message.email_config.tag.default')))
+        ? h(XhTagRoot, { variant: 'subtle', tone: 'warning' }, () => h(XhTagLabel, () => t('message.email_config.tag.default')))
         : h('span', { style: 'opacity:.45' }, '—')
     },
   },
@@ -92,7 +92,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 8,
     render: (row) => {
       const enabled = (row as unknown as EmailConfigListItemDto).isEnabled
-      return h(XhTagRoot, { variant: 'outline', tone: enabled ? 'success' : 'danger' }, () => h(XhTagLabel, () => enabled ? t('message.email_config.tag.enabled') : t('message.email_config.tag.disabled')))
+      return h(XhTagRoot, { variant: 'subtle', tone: enabled ? 'success' : 'danger' }, () => h(XhTagLabel, () => enabled ? t('message.email_config.tag.enabled') : t('message.email_config.tag.disabled')))
     },
   },
   { key: 'sort', title: t('message.email_config.columns.sort'), dataType: 'number', sortable: true, width: 80, order: 9 },
@@ -242,7 +242,7 @@ async function handleEdit(row: EmailConfigListItemDto) {
     modalVisible.value = true
   }
   catch (e) {
-    toast.error((e as Error).message || t('message.email_config.message.load_detail_failed'))
+    toast.danger((e as Error).message || t('message.email_config.message.load_detail_failed'))
   }
 }
 
@@ -325,7 +325,7 @@ async function handleSubmit() {
     reloadList()
   }
   catch (e) {
-    toast.error((e as Error).message || t('message.email_config.message.save_failed'))
+    toast.danger((e as Error).message || t('message.email_config.message.save_failed'))
   }
   finally {
     submitLoading.value = false
@@ -349,7 +349,7 @@ function handleToggleStatus(row: EmailConfigListItemDto) {
         reloadList()
       }
       catch (e) {
-        toast.error((e as Error).message || t('message.email_config.message.status_update_failed'))
+        toast.danger((e as Error).message || t('message.email_config.message.status_update_failed'))
       }
     },
   })
@@ -369,7 +369,7 @@ function handleSetDefault(row: EmailConfigListItemDto) {
         reloadList()
       }
       catch (e) {
-        toast.error((e as Error).message || t('message.email_config.message.set_default_failed'))
+        toast.danger((e as Error).message || t('message.email_config.message.set_default_failed'))
       }
     },
   })
@@ -390,7 +390,7 @@ function handleDelete(row: EmailConfigListItemDto) {
         reloadList()
       }
       catch (e) {
-        toast.error((e as Error).message || t('message.email_config.message.delete_failed'))
+        toast.danger((e as Error).message || t('message.email_config.message.delete_failed'))
       }
     },
   })
@@ -416,7 +416,7 @@ function handleDelete(row: EmailConfigListItemDto) {
         class="xh-edit-form-grid"
         @submit="handleSubmit"
       >
-        <XhFormFieldGroup value="configCode">
+        <XhFormFieldGroup name="configCode">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.email_config.form.config_code') }}</XhFieldLabel>
             <XhFieldControl>
@@ -430,7 +430,7 @@ function handleDelete(row: EmailConfigListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="configName">
+        <XhFormFieldGroup name="configName">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.email_config.form.config_name') }}</XhFieldLabel>
             <XhFieldControl>
@@ -439,7 +439,7 @@ function handleDelete(row: EmailConfigListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="smtpHost">
+        <XhFormFieldGroup name="smtpHost">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.email_config.form.smtp_host') }}</XhFieldLabel>
             <XhFieldControl>
@@ -448,7 +448,7 @@ function handleDelete(row: EmailConfigListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="smtpPort">
+        <XhFormFieldGroup name="smtpPort">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.email_config.form.smtp_port') }}</XhFieldLabel>
             <XhFieldControl>
@@ -457,7 +457,7 @@ function handleDelete(row: EmailConfigListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="fromEmail">
+        <XhFormFieldGroup name="fromEmail">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.email_config.form.from_email') }}</XhFieldLabel>
             <XhFieldControl>
@@ -466,7 +466,7 @@ function handleDelete(row: EmailConfigListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="fromName">
+        <XhFormFieldGroup name="fromName">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.email_config.form.from_name') }}</XhFieldLabel>
             <XhFieldControl>
@@ -475,7 +475,7 @@ function handleDelete(row: EmailConfigListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="userName">
+        <XhFormFieldGroup name="userName">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.email_config.form.user_name') }}</XhFieldLabel>
             <XhFieldControl>
@@ -484,7 +484,7 @@ function handleDelete(row: EmailConfigListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="password">
+        <XhFormFieldGroup name="password">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.email_config.form.password') }}</XhFieldLabel>
             <XhFieldControl>
@@ -498,7 +498,7 @@ function handleDelete(row: EmailConfigListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="useSsl">
+        <XhFormFieldGroup name="useSsl">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.email_config.form.use_ssl') }}</XhFieldLabel>
             <XhFieldControl>
@@ -507,7 +507,7 @@ function handleDelete(row: EmailConfigListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="acceptInvalidCertificate">
+        <XhFormFieldGroup name="acceptInvalidCertificate">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.email_config.form.accept_invalid_certificate') }}</XhFieldLabel>
             <XhFieldControl>
@@ -516,7 +516,7 @@ function handleDelete(row: EmailConfigListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="isBodyHtml">
+        <XhFormFieldGroup name="isBodyHtml">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.email_config.form.is_body_html') }}</XhFieldLabel>
             <XhFieldControl>
@@ -525,7 +525,7 @@ function handleDelete(row: EmailConfigListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="sort">
+        <XhFormFieldGroup name="sort">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.email_config.form.sort') }}</XhFieldLabel>
             <XhFieldControl>
@@ -536,7 +536,7 @@ function handleDelete(row: EmailConfigListItemDto) {
         </XhFormFieldGroup>
 
         <template v-if="!form.basicId">
-          <XhFormFieldGroup value="isEnabled">
+          <XhFormFieldGroup name="isEnabled">
             <XhFieldRoot>
               <XhFieldLabel>{{ t('message.email_config.form.is_enabled') }}</XhFieldLabel>
               <XhFieldControl>
@@ -545,7 +545,7 @@ function handleDelete(row: EmailConfigListItemDto) {
               <XhFieldErrorText />
             </XhFieldRoot>
           </XhFormFieldGroup>
-          <XhFormFieldGroup value="isDefault">
+          <XhFormFieldGroup name="isDefault">
             <XhFieldRoot>
               <XhFieldLabel>{{ t('message.email_config.form.is_default') }}</XhFieldLabel>
               <XhFieldControl>
@@ -556,7 +556,7 @@ function handleDelete(row: EmailConfigListItemDto) {
           </XhFormFieldGroup>
         </template>
 
-        <XhFormFieldGroup value="remark" class="xh-span-2">
+        <XhFormFieldGroup name="remark" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.email_config.form.remark') }}</XhFieldLabel>
             <XhFieldControl>

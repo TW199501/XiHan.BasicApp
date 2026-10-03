@@ -1,5 +1,5 @@
-import type { AlertOptions, ConfirmOptions, DialogService, LoadingBarService, NotificationMessageOptions, NotificationService, ToastMessageOptions, ToastService } from '@xihan-ui/vue'
-import { createDialogService, createLoadingBarService, createNotificationService, createToastService } from '@xihan-ui/vue'
+import type { AlertOptions, ConfirmOptions, DialogService, LoadingBarService, NotificationMessageOptions, NotificationService } from '@xihan-ui/vue'
+import { createDialogService, createLoadingBarService, createNotificationService } from '@xihan-ui/vue'
 import { $t } from '~/locales'
 import { xhConfigValue, xhTranslationsOfCurrentLocale } from './xh-config'
 
@@ -14,18 +14,23 @@ import { xhConfigValue, xhTranslationsOfCurrentLocale } from './xh-config'
  * 服务实例懒建：createXxxService 需要 document，模块被 node 侧的测试引到时不能当场炸。
  */
 
-let toastInstance: ToastService | null = null
+let toastInstance: NotificationService | null = null
 let notificationInstance: NotificationService | null = null
 let dialogInstance: DialogService | null = null
 let loadingBarInstance: LoadingBarService | null = null
 
-function toastService(): ToastService {
-  // 顶部居中：与旧版轻提示的落位一致。落位是整个服务的口径，不逐条各去一处
-  toastInstance ??= createToastService({
+/**
+ * 轻提示服务：通知服务取 toast 预设，一行操作结果、同位叠成一摞。
+ * 预设缺省落底部居中、最多 3 条；这里写回顶部居中、5 条，与旧版轻提示的落位一致。
+ * 落位是整个服务的口径，不逐条各去一处。
+ */
+function toastService(): NotificationService {
+  toastInstance ??= createNotificationService({
+    preset: 'toast',
     placement: 'top',
     max: 5,
     config: xhConfigValue,
-    toastTranslations: () => xhTranslationsOfCurrentLocale().toast ?? {},
+    translations: () => xhTranslationsOfCurrentLocale().notification ?? {},
   })
   return toastInstance
 }
@@ -41,12 +46,19 @@ function notificationService(): NotificationService {
   return notificationInstance
 }
 
-/** 确认框服务；确定/取消的兜底文案按当前语言取，调用点显式给了就以调用点为准。 */
+/**
+ * 确认框服务；确定/取消的兜底文案按当前语言取，调用点显式给了就以调用点为准。
+ *
+ * onOk 抛错或 Promise 拒绝不再被吞成 false：服务把它记进 actionError、弹窗保持打开，
+ * 并在正文下方用 actionErrorText 给一句可见提示。这句兜底文案也按当前语言取，
+ * 调用点在 onOk 里自己 toast 过的场景仍然会看到这条，属于服务的固定行为。
+ */
 export function dialogService(): DialogService {
   dialogInstance ??= createDialogService({
     config: xhConfigValue,
     okText: () => $t('common.actions.confirm'),
     cancelText: () => $t('common.actions.cancel'),
+    actionErrorText: () => $t('common.messages.operation_failed'),
   })
   return dialogInstance
 }
@@ -64,27 +76,28 @@ function loadingBarService(): LoadingBarService {
 
 /**
  * 轻提示。用法与位置同旧版：`toast.success('保存成功')`。
- * loading 返回 id，收尾用 `toast.update(id, { type: 'success', title: '完成' })`。
+ * loading 返回 id，收尾用 `toast.update(id, { loading: false, tone: 'success', title: '完成' })`。
+ * 失败语气叫 danger，与 XiHan.UI 的 tone 轴同名。
  */
 export const toast = {
-  create: (options?: Parameters<ToastService['create']>[0]) => toastService().create(options),
-  update: (id: string, options: Parameters<ToastService['update']>[1]) => toastService().update(id, options),
+  create: (options?: Parameters<NotificationService['create']>[0]) => toastService().create(options),
+  update: (id: string, options: Parameters<NotificationService['update']>[1]) => toastService().update(id, options),
   dismiss: (id: string) => toastService().dismiss(id),
   dismissAll: () => toastService().dismissAll(),
-  info: (msg: string, options?: ToastMessageOptions) => toastService().info(msg, options),
-  success: (msg: string, options?: ToastMessageOptions) => toastService().success(msg, options),
-  warning: (msg: string, options?: ToastMessageOptions) => toastService().warning(msg, options),
-  error: (msg: string, options?: ToastMessageOptions) => toastService().error(msg, options),
+  info: (msg: string, options?: NotificationMessageOptions) => toastService().info(msg, options),
+  success: (msg: string, options?: NotificationMessageOptions) => toastService().success(msg, options),
+  warning: (msg: string, options?: NotificationMessageOptions) => toastService().warning(msg, options),
+  danger: (msg: string, options?: NotificationMessageOptions) => toastService().danger(msg, options),
   /**
    * 返回带收尾方法的句柄：等待期的提示要么改写成结果、要么撤掉，
    * 拿着 id 再调一次服务不如把两个动作挂在句柄上顺手。
    */
-  loading: (msg: string, options?: ToastMessageOptions) => {
+  loading: (msg: string, options?: NotificationMessageOptions) => {
     const id = toastService().loading(msg, options)
     return {
       id,
       destroy: () => toastService().dismiss(id),
-      update: (patch: Parameters<ToastService['update']>[1]) => toastService().update(id, patch),
+      update: (patch: Parameters<NotificationService['update']>[1]) => toastService().update(id, patch),
     }
   },
 }
@@ -102,14 +115,16 @@ export const notification = {
   info: (title: string, options?: NotificationMessageOptions) => notificationService().info(title, options),
   success: (title: string, options?: NotificationMessageOptions) => notificationService().success(title, options),
   warning: (title: string, options?: NotificationMessageOptions) => notificationService().warning(title, options),
-  error: (title: string, options?: NotificationMessageOptions) => notificationService().error(title, options),
+  danger: (title: string, options?: NotificationMessageOptions) => notificationService().danger(title, options),
 }
 
 /**
  * 确认框与告知框。
  *
  * confirm 返回 Promise<boolean>：确认走完 onOk 才 resolve(true)，取消/Esc resolve(false)。
- * onOk 返回 Promise 时确认钮自动进入 pending 并拦住关闭，拒绝则保持打开以便重试。
+ * onOk 返回 Promise 时确认钮自动进入 pending 并拦住关闭；返回 false 只阻止关闭，抛错或拒绝
+ * 进入服务的 actionError、弹窗保持打开并显示兜底提示，可换值重试或经 onActionError 自行处理。
+ * 宿主挂载失败时这几个 Promise 会明确拒绝，调用点用 void 丢弃返回值的要接受这一点。
  * 删除这类不可逆操作传 `tone: 'danger'`，确认钮即转危险色。
  */
 export const dialog = {
@@ -147,4 +162,15 @@ export function disposeUiServices(): void {
   dialogInstance = null
   loadingBarInstance?.dispose()
   loadingBarInstance = null
+}
+
+/*
+ * 热更新时先把四个宿主拆掉。本模块的实例是模块级单例，而接受热更的是引用它的那些 SFC：
+ * 模块一换新，它们拿到的是一份全新的单例，旧那份的宿主应用还挂在门户根上没人管。
+ * 顶部进度条最容易看出来——两条并存，各走各的进度，屏幕上就是一段粗一段细。
+ */
+if (import.meta.hot) {
+  import.meta.hot.dispose(() => {
+    disposeUiServices()
+  })
 }

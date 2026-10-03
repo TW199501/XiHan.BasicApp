@@ -56,7 +56,7 @@ public sealed class LoginSessionDomainService
     /// <param name="deviceId">设备标识</param>
     /// <param name="client">客户端信息</param>
     /// <param name="now">当前时间</param>
-    /// <param name="initialLockReason">初始锁定原因（如默认密码登录的强制改密）；null 表示不锁定</param>
+    /// <param name="initialLockReason">初始锁定原因（如强制改密）；null 表示不锁定</param>
     /// <param name="cancellationToken">取消令牌</param>
     /// <returns>登录会话签发结果</returns>
     public async Task<LoginSessionIssueResult> IssuePasswordLoginAsync(
@@ -133,32 +133,14 @@ public sealed class LoginSessionDomainService
             LoginTime = now,
             LastActivityTime = now,
             Status = SessionStatus.Active,
-            // 默认密码登录等场景：会话创建即锁定，仅放行改密/登出/刷新等白名单端点
+            // 强制改密等场景：会话创建即锁定，仅放行改密/登出/刷新等白名单端点
             IsLocked = initialLockReason is not null,
             LockReason = initialLockReason,
             ExpirationTime = ToDateTimeOffset(tokenResult.RefreshTokenExpiresAt)
         };
 
         session = await _userSessionRepository.AddAsync(session, cancellationToken);
-
-        var oauthToken = new SysOAuthToken
-        {
-            SessionId = session.BasicId,
-            AccessTokenJti = accessTokenJti,
-            AccessToken = null,
-            RefreshToken = tokenResult.RefreshToken,
-            TokenType = tokenResult.TokenType,
-            ClientId = SaasOAuthClientIds.Web,
-            UserId = user.BasicId,
-            GrantType = GrantType.Password,
-            Scopes = SaasOAuthClientIds.DefaultScope,
-            Status = EnableStatus.Enabled,
-            AccessTokenExpirationTime = ToDateTimeOffset(tokenResult.ExpiresAt),
-            RefreshTokenExpirationTime = ToDateTimeOffset(tokenResult.RefreshTokenExpiresAt),
-            IsRevoked = false
-        };
-
-        _ = await _oauthTokenRepository.AddAsync(oauthToken, cancellationToken);
+        _ = await _oauthTokenRepository.AddAsync(CreateOAuthToken(session, accessTokenJti, tokenResult), cancellationToken);
 
         // 用户主体数据自有行写入：回写当前登录用户自己的 LastLoginIp（平台归属用户行 TenantId=0，租户态直写会被写边界拒绝）
         using (TenantWriteGuard.Suppress())
@@ -166,36 +148,109 @@ public sealed class LoginSessionDomainService
             _ = await _userRepository.UpdateAsync(user, cancellationToken);
         }
 
-        if (tenantId.HasValue)
+        if (tenantId is > 0)
         {
-            var membership = await _tenantUserRepository.GetMembershipAsync(user.BasicId, cancellationToken);
-            if (membership is not null)
-            {
-                membership.LastActiveTime = now;
-                _ = await _tenantUserRepository.UpdateAsync(membership, cancellationToken);
-            }
+            await TouchMembershipAsync(tenantId.Value, user.BasicId, now, cancellationToken);
         }
 
         return new LoginSessionIssueResult(session, supersededSessionBusinessIds);
     }
 
     /// <summary>
-    /// 切换租户：复用当前登录会话，轮换访问令牌并把会话行租户戳迁移到目标上下文
+    /// 切换租户：吊销当前会话，在目标上下文里新建一条续接会话并落令牌台账
     /// </summary>
     /// <remarks>
-    /// 切换租户是同一登录会话的上下文迁移，不是一次新登录：不新建会话行（避免设备列表每切一次多一台「设备」），
-    /// 也不发布登录成功事件（避免每切一次误报「账号在新设备登录」）。
+    /// 会话行属于它所在的上下文（租户戳只插入不更新），换上下文就换会话：旧会话吊销后，
+    /// 旧访问令牌与刷新令牌经会话闸门一并失效。续接会话沿用同一设备与登录时间，
+    /// 不是一次新登录，不发布登录成功事件。须在目标上下文内调用。
     /// </remarks>
-    /// <param name="session">当前登录会话</param>
-    /// <param name="targetTenantId">目标租户标识；空表示平台运维态（租户戳落 0）</param>
+    /// <param name="currentSession">当前登录会话</param>
+    /// <param name="sessionBusinessId">续接会话的业务标识</param>
     /// <param name="accessTokenJti">新访问令牌 JTI</param>
     /// <param name="tokenResult">新令牌结果</param>
     /// <param name="now">当前时间</param>
     /// <param name="cancellationToken">取消令牌</param>
-    /// <returns>更新后的用户会话</returns>
+    /// <returns>续接会话</returns>
     public async Task<SysUserSession> SwitchTenantAsync(
+        SysUserSession currentSession,
+        string sessionBusinessId,
+        string accessTokenJti,
+        JwtTokenResult tokenResult,
+        DateTimeOffset now,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(currentSession);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sessionBusinessId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(accessTokenJti);
+        ArgumentNullException.ThrowIfNull(tokenResult);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (currentSession.Status != SessionStatus.Active)
+        {
+            throw new InvalidOperationException("会话已失效，请重新登录。");
+        }
+
+        // 锁定的会话只放行解锁 / 改密 / 登出，换上下文也不例外
+        if (currentSession.IsLocked)
+        {
+            throw new InvalidOperationException("会话已锁定，解锁后再切换。");
+        }
+
+        currentSession.Status = SessionStatus.Revoked;
+        currentSession.RevokedTime = now;
+        currentSession.RevokedReason = "切换租户，由续接会话接替";
+        currentSession.LogoutTime = now;
+
+        // 旧会话行在切换前的上下文里，写路径租户边界须显式豁免（行归属键是 UserId / SessionId）
+        using (TenantWriteGuard.Suppress())
+        {
+            _ = await _userSessionRepository.UpdateAsync(currentSession, cancellationToken);
+        }
+
+        _ = await _oauthTokenRepository.RevokeBySessionIdsAsync([currentSession.BasicId], now, cancellationToken);
+
+        var session = new SysUserSession
+        {
+            UserId = currentSession.UserId,
+            CurrentAccessTokenJti = accessTokenJti,
+            UserSessionId = sessionBusinessId,
+            DeviceType = currentSession.DeviceType,
+            DeviceName = currentSession.DeviceName,
+            DeviceId = currentSession.DeviceId,
+            Browser = currentSession.Browser,
+            OperatingSystem = currentSession.OperatingSystem,
+            IpAddress = currentSession.IpAddress,
+            Location = currentSession.Location,
+            LoginTime = currentSession.LoginTime,
+            LastActivityTime = now,
+            Status = SessionStatus.Active,
+            ExpirationTime = ToDateTimeOffset(tokenResult.RefreshTokenExpiresAt)
+        };
+
+        session = await _userSessionRepository.AddAsync(session, cancellationToken);
+        _ = await _oauthTokenRepository.AddAsync(CreateOAuthToken(session, accessTokenJti, tokenResult), cancellationToken);
+
+        // 进入租户：成员关系的最近进入时间决定下次登录落点（会话行的租户戳由写入时的上下文决定）
+        if (session.TenantId > 0)
+        {
+            await TouchMembershipAsync(session.TenantId, session.UserId, now, cancellationToken);
+        }
+
+        return session;
+    }
+
+    /// <summary>
+    /// 在同一会话上重签令牌：轮换访问令牌、落新令牌台账，会话所在上下文不变
+    /// </summary>
+    /// <remarks>结束模仿时回到发起人的原会话用它；须在会话所在上下文内调用。</remarks>
+    /// <param name="session">要重签令牌的会话</param>
+    /// <param name="accessTokenJti">新访问令牌 JTI</param>
+    /// <param name="tokenResult">新令牌结果</param>
+    /// <param name="now">当前时间</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>更新后的会话</returns>
+    public async Task<SysUserSession> ReissueAsync(
         SysUserSession session,
-        long? targetTenantId,
         string accessTokenJti,
         JwtTokenResult tokenResult,
         DateTimeOffset now,
@@ -206,22 +261,23 @@ public sealed class LoginSessionDomainService
         ArgumentNullException.ThrowIfNull(tokenResult);
         cancellationToken.ThrowIfCancellationRequested();
 
-        // 会话行租户戳迁移到目标上下文（平台态戳 0）：在线用户等按租户查会话的视图以「用户当前所在上下文」为准
-        session.TenantId = targetTenantId ?? 0;
         session.CurrentAccessTokenJti = accessTokenJti;
         session.LastActivityTime = now;
         session.ExpirationTime = ToDateTimeOffset(tokenResult.RefreshTokenExpiresAt);
+        _ = await _userSessionRepository.UpdateAsync(session, cancellationToken);
 
-        // 用户主体数据自有行写入：行归属键是 UserId，租户戳只是上下文元数据，写路径租户边界须显式豁免
-        using (TenantWriteGuard.Suppress())
-        {
-            _ = await _userSessionRepository.UpdateAsync(session, cancellationToken);
-        }
-
-        // 令牌台账与登录同构：旧令牌记录吊销、落新令牌记录（刷新链无状态，此处仅维护台账）
         _ = await _oauthTokenRepository.RevokeBySessionIdsAsync([session.BasicId], now, cancellationToken);
+        _ = await _oauthTokenRepository.AddAsync(CreateOAuthToken(session, accessTokenJti, tokenResult), cancellationToken);
 
-        var oauthToken = new SysOAuthToken
+        return session;
+    }
+
+    /// <summary>
+    /// 会话对应的令牌台账记录
+    /// </summary>
+    private static SysOAuthToken CreateOAuthToken(SysUserSession session, string accessTokenJti, JwtTokenResult tokenResult)
+    {
+        return new SysOAuthToken
         {
             SessionId = session.BasicId,
             AccessTokenJti = accessTokenJti,
@@ -237,10 +293,21 @@ public sealed class LoginSessionDomainService
             RefreshTokenExpirationTime = ToDateTimeOffset(tokenResult.RefreshTokenExpiresAt),
             IsRevoked = false
         };
+    }
 
-        _ = await _oauthTokenRepository.AddAsync(oauthToken, cancellationToken);
+    /// <summary>
+    /// 回写成员关系的最近进入时间
+    /// </summary>
+    private async Task TouchMembershipAsync(long tenantId, long userId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var membership = await _tenantUserRepository.GetMembershipAsync(tenantId, userId, cancellationToken);
+        if (membership is null)
+        {
+            return;
+        }
 
-        return session;
+        membership.LastActiveTime = now;
+        _ = await _tenantUserRepository.UpdateAsync(membership, cancellationToken);
     }
 
     /// <summary>
@@ -373,21 +440,10 @@ public sealed class LoginSessionDomainService
         using (TenantWriteGuard.Suppress())
         {
             _ = await _userSessionRepository.UpdateAsync(impersonationSession, cancellationToken);
-
-            var tokens = await _oauthTokenRepository.GetListAsync(
-                item => item.SessionId == impersonationSession.BasicId && !item.IsRevoked,
-                cancellationToken);
-            foreach (var token in tokens)
-            {
-                token.IsRevoked = true;
-                token.RevokedTime = now;
-            }
-
-            if (tokens.Count > 0)
-            {
-                _ = await _oauthTokenRepository.UpdateRangeAsync(tokens, cancellationToken);
-            }
         }
+
+        // 令牌台账跨租户吊销（令牌行带签发时的租户戳）
+        _ = await _oauthTokenRepository.RevokeBySessionIdsAsync([impersonationSession.BasicId], now, cancellationToken);
 
         return impersonationSession;
     }
@@ -418,11 +474,10 @@ public sealed class LoginSessionDomainService
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        // 会话业务标识全局唯一，会话行带登录落点的租户戳：跨租户定位后校验归属，不依赖当前作用域
         var normalizedSessionBusinessId = sessionBusinessId.Trim();
-        var session = await _userSessionRepository.GetFirstAsync(
-            item => item.UserId == userId && item.UserSessionId == normalizedSessionBusinessId,
-            cancellationToken);
-        if (session is null)
+        var session = await _userSessionRepository.GetByUserSessionIdAsync(normalizedSessionBusinessId, cancellationToken);
+        if (session is null || session.UserId != userId)
         {
             return null;
         }
@@ -437,19 +492,10 @@ public sealed class LoginSessionDomainService
         using (TenantWriteGuard.Suppress())
         {
             _ = await _userSessionRepository.UpdateAsync(session, cancellationToken);
-
-            var tokens = await _oauthTokenRepository.GetListAsync(item => item.SessionId == session.BasicId && !item.IsRevoked, cancellationToken);
-            foreach (var token in tokens)
-            {
-                token.IsRevoked = true;
-                token.RevokedTime = now;
-            }
-
-            if (tokens.Count > 0)
-            {
-                _ = await _oauthTokenRepository.UpdateRangeAsync(tokens, cancellationToken);
-            }
         }
+
+        // 令牌台账跨租户吊销（令牌行带签发时的租户戳）
+        _ = await _oauthTokenRepository.RevokeBySessionIdsAsync([session.BasicId], now, cancellationToken);
 
         return session;
     }

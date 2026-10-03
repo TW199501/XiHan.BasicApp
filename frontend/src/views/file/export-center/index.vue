@@ -13,7 +13,7 @@ import {
   fileApi,
   querySortsFromSchema,
 } from '@/api'
-import { SchemaPage } from '~/components'
+import { actionConfirmText, SchemaPage } from '~/components'
 import { dialog, toast } from '~/composables'
 import { downloadBlob, getOptionLabel } from '~/utils'
 
@@ -73,7 +73,7 @@ const businessTypeOptions = computed(() => [
   { label: t('file.export_center.business_type.exception_log'), value: 'log.exception' },
   { label: t('file.export_center.business_type.diff_log'), value: 'log.diff' },
   { label: t('file.export_center.business_type.operation_log'), value: 'log.operation' },
-  { label: t('file.export_center.business_type.user'), value: 'system.user' },
+  { label: t('file.export_center.business_type.user'), value: 'identity.user' },
 ])
 
 /** 过滤值清洗：空串/空白按未填处理 */
@@ -133,7 +133,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     searchPlaceholder: t('file.export_center.columns.status_placeholder'),
     width: 100,
     order: 12,
-    render: row => h(XhTagRoot, { variant: 'outline', tone: statusTagType((row as unknown as ExportTaskDto).status) }, () => h(XhTagLabel, () => getOptionLabel(statusOptions.value, (row as unknown as ExportTaskDto).status))),
+    render: row => h(XhTagRoot, { variant: 'subtle', tone: statusTagType((row as unknown as ExportTaskDto).status) }, () => h(XhTagLabel, () => getOptionLabel(statusOptions.value, (row as unknown as ExportTaskDto).status))),
   },
   {
     key: 'progress',
@@ -144,13 +144,18 @@ const fields = computed<ListFieldSchema[]>(() => [
     render: (row) => {
       const r = row as unknown as ExportTaskDto
       if (r.status === ExportTaskStatus.Processing) {
-        return h(XhProgress, {
-          type: 'line',
-          percentage: r.progress,
-          height: 8,
-          processing: true,
-          indicatorPlacement: 'inside',
-        })
+        // 进度条只画轨道与填充，百分比由使用者自己放在旁边；进行中铺流动条纹（减弱动效下静止）。
+        // 可及名写在根上，读屏才知道这是哪一项的进度
+        return h('div', { style: 'display:flex;align-items:center;gap:var(--xh-space-2)' }, [
+          h(XhProgress, {
+            'value': r.progress,
+            'size': 'sm',
+            'striped': true,
+            'aria-label': t('file.export_center.columns.progress'),
+            'style': 'flex:1;min-inline-size:0',
+          }),
+          h('span', { style: 'font-variant-numeric:tabular-nums' }, `${r.progress}%`),
+        ])
       }
       if (r.status === ExportTaskStatus.Success) {
         return h('span', t('file.export_center.rows', { count: r.totalCount }))
@@ -185,7 +190,7 @@ const schema = computed<PageSchema>(() => ({
   },
   actions: [
     { key: 'download', title: t('file.export_center.actions.download'), scope: 'row', icon: 'lucide:download', type: 'primary', visible: row => (row as unknown as ExportTaskDto).status === ExportTaskStatus.Success && !!(row as unknown as ExportTaskDto).fileId },
-    { key: 'cancel', title: t('file.export_center.actions.cancel'), scope: 'row', icon: 'lucide:circle-x', type: 'warning', visible: row => (row as unknown as ExportTaskDto).status === ExportTaskStatus.Pending },
+    { key: 'cancel', title: t('file.export_center.actions.cancel'), scope: 'row', icon: 'lucide:circle-x', type: 'warning', confirm: true, confirmText: row => actionConfirmText(t, t('file.export_center.actions.cancel'), (row as unknown as ExportTaskDto).taskName), visible: row => (row as unknown as ExportTaskDto).status === ExportTaskStatus.Pending },
     { key: 'delete', title: t('file.export_center.actions.delete'), scope: 'row', icon: 'lucide:trash-2', type: 'error' },
   ],
 }))
@@ -216,7 +221,7 @@ async function handleDownload(row: ExportTaskDto) {
     downloadBlob(blob, row.fileName || `${row.taskName}.csv`)
   }
   catch (e) {
-    toast.error((e as Error).message || t('file.export_center.download_failed'))
+    toast.danger((e as Error).message || t('file.export_center.download_failed'))
   }
 }
 
@@ -227,7 +232,7 @@ async function handleCancel(row: ExportTaskDto) {
     reload()
   }
   catch (e) {
-    toast.error((e as Error).message || t('file.export_center.cancel_failed'))
+    toast.danger((e as Error).message || t('file.export_center.cancel_failed'))
   }
 }
 
@@ -246,7 +251,7 @@ function handleDelete(row: ExportTaskDto) {
         reload()
       }
       catch (e) {
-        toast.error((e as Error).message || t('file.export_center.delete_failed'))
+        toast.danger((e as Error).message || t('file.export_center.delete_failed'))
       }
     },
   })

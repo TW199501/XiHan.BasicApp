@@ -32,13 +32,30 @@ export interface UserRoleDetailDto extends UserRoleListItemDto {
   roleDescription?: string | null
 }
 
-export interface UserRoleGrantDto {
+/** 批量变更用户角色（一次性提交授予与撤销） */
+export interface UserRoleBatchUpdateDto {
+  grantRoleIds: ApiId[]
+  revokeUserRoleIds: ApiId[]
+  userId: ApiId
+}
+
+/** 以角色为中心批量维护成员：加入按用户主键，移出按绑定主键 */
+export interface RoleMemberBatchUpdateDto {
+  grantUserIds: ApiId[]
+  revokeUserRoleIds: ApiId[]
+  roleId: ApiId
+}
+
+/** 角色在本租户此刻生效的成员 */
+export interface RoleMemberDto {
   effectiveTime?: DateTimeString | null
   expirationTime?: DateTimeString | null
-  grantReason?: string | null
-  remark?: string | null
-  roleId: ApiId
+  isExternalMember: boolean
+  nickName?: string | null
+  realName?: string | null
   userId: ApiId
+  userName: string
+  userRoleId: ApiId
 }
 
 export interface UserRoleUpdateDto extends BasicUpdateDto {

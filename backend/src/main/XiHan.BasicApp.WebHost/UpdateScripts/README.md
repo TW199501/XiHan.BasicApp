@@ -1,6 +1,16 @@
 ﻿# 数据库升级脚本
 
-由 `UpgradeEngine` 在应用初始化阶段执行，执行台账记入 `sys_migration_history`。
+由 `UpgradeEngine` 执行，执行台账记入 `sys_migration_history`。
+
+## 执行时机
+
+数据库初始化分三段：**全部连接建库建表 → 升级脚本 → 播种**（`SaasSchemaUpgrader` 接在框架 `IDbSchemaUpgrader` 上）。
+
+- 建表只建缺失的表、**不改已存在的表**，存量表的新列、新索引只能由脚本补。
+- 脚本先于种子执行：种子按最新实体读写，存量表的新列要在种子之前补齐，否则种子一查就撞上不存在的列。
+- **新库不跑脚本**：本次启动从零建出全部实体表的平台库、`InitializeDatabase` 新建的库隔离租户独立库，建好即登记为最新脚本版本（`IUpgradeEngine.BaselineAsync`）。
+  脚本只在它所属版本之前建的库上执行，按当时的表结构写即可；**不要在脚本里依赖种子数据**。
+- 关闭 `XiHan:Upgrade:EnableAutoCheckOnStartup` 时启动不执行脚本，须先手工升级再启动。
 
 ## 约定
 
@@ -10,8 +20,24 @@
   同一版本目录内可以放多个 .sql，按文件名升序执行。
 - **只有版本号高于库中 `db_version` 的脚本会执行**（记在 `sys_version`，随脚本执行推进）。
   与程序版本 `props/version.props` **无关**——`UpgradeEngine.ExecuteMigrationsAsync` 只比库版本，
-  不比较 AppVersion。新库的 `db_version` 初始为 `0.0.0`，因此会把全部脚本走一遍，
-  **每个脚本都必须在最新结构上也能安全空转**。
+  不比较 AppVersion。
+- **每个库各跑一遍**：平台库，加上每个已配置完成的库隔离租户的独立库（`SaasUpgradeTenantProvider`）。
+  新建的独立库同样登记为最新版本，之后发版的脚本会在它上面执行。
+- **独立库只有租户库实体的表**：平台目录、账号与授权、会话令牌、读共享模板等标了 `[PlatformDataSource]` 的实体只在平台库建表。
+  改这些表的语句必须先判表存在，否则在独立库上报 `42P01`、中断启动：
+
+  ```sql
+  DO $$
+  BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.tables
+                  WHERE table_schema = current_schema() AND table_name = 'sys_user') THEN
+          -- 改 sys_user 的语句
+      END IF;
+  END
+  $$;
+  ```
+- **公共列一律带下划线**：`basic_id`、`tenant_id`、`created_time`、`is_deleted` 等，所有实体基类（含聚合根）同名；
+  5.3.0 之前聚合根的公共列没有声明列名、落库成 `basicid` / `tenantid`，5.3.0 已把存量库改名。
 - **标识符一律小写、不加引号。** SqlSugar 建表时未加引号，PostgreSQL 将未加引号的标识符折叠为小写，
   所以库里的实际名是 `sys_oauth_code`、`basic_id`，而不是实体上声明的 `Sys_OAuth_Code`、`Basic_Id`。
   写成 `"Sys_OAuth_Code"` 会因引号带来大小写敏感而报 `42P01 relation does not exist`。

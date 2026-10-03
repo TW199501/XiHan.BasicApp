@@ -4,8 +4,9 @@
 export default {
   chat: {
     bell: 'ऑनलाइन चैट',
+    unread_label: '{n} अपठित चैट संदेश',
     island_new_message_fallback: 'नया संदेश आया',
-    drawer: {
+    panel: {
       title: 'ऑनलाइन चैट',
       open_page: 'अलग पेज खोलें',
     },
@@ -62,6 +63,7 @@ export default {
       assistant_thinking: 'तैयार किया जा रहा है…',
       assistant_dismiss: 'समझ गया',
       voice_unplayed: 'नहीं सुना',
+      view_image: 'चित्र देखें',
       recalled: 'संदेश वापस लिया गया',
       recall: 'वापस लें',
       recall_failed: 'वापस लेना विफल',
@@ -107,6 +109,7 @@ export default {
       send_key_enter: 'Enter कुंजी से संदेश भेजें',
       send_key_ctrl_enter: 'Ctrl + Enter कुंजी से संदेश भेजें',
       emoji: 'इमोजी',
+      mention: 'सदस्य का उल्लेख करें',
       image: 'छवि भेजें',
       file: 'फ़ाइल भेजें',
       voice: 'वॉइस इनपुट',

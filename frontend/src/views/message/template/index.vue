@@ -16,7 +16,7 @@ import {
   messageTemplateApi,
   querySortsFromSchema,
 } from '@/api'
-import { SchemaPage, XContentEditorField, XEditModal, XInput, XNumberInput, XSelect } from '~/components'
+import { SchemaPage, statusConfirmText, XContentEditorField, XEditModal, XInput, XNumberInput, XSelect } from '~/components'
 import { toast } from '~/composables'
 import { useUserStore } from '~/stores'
 import { getOptionLabel } from '~/utils'
@@ -115,7 +115,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 14,
     render: (row) => {
       const isGlobal = (row as unknown as MessageTemplateListItemDto).isGlobal
-      return h(XhTagRoot, { variant: 'outline', tone: isGlobal ? 'info' : 'neutral' }, () => h(XhTagLabel, () => isGlobal ? t('message.template.scope_global') : t('message.template.scope_tenant')))
+      return h(XhTagRoot, { variant: 'subtle', tone: isGlobal ? 'info' : 'neutral' }, () => h(XhTagLabel, () => isGlobal ? t('message.template.scope_global') : t('message.template.scope_tenant')))
     },
   },
   {
@@ -140,7 +140,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     searchPlaceholder: t('message.template.search_status_placeholder'),
     width: 90,
     order: 17,
-    render: row => h(XhTagRoot, { variant: 'outline', tone: (row as unknown as MessageTemplateListItemDto).status === EnableStatus.Enabled ? 'success' : 'danger' }, () => h(XhTagLabel, () => (row as unknown as MessageTemplateListItemDto).status === EnableStatus.Enabled ? t('message.template.status_enabled') : t('message.template.status_disabled'))),
+    render: row => h(XhTagRoot, { variant: 'subtle', tone: (row as unknown as MessageTemplateListItemDto).status === EnableStatus.Enabled ? 'success' : 'danger' }, () => h(XhTagLabel, () => (row as unknown as MessageTemplateListItemDto).status === EnableStatus.Enabled ? t('message.template.status_enabled') : t('message.template.status_disabled'))),
   },
   { key: 'sort', title: t('message.template.col_sort'), dataType: 'number', width: 80, order: 18, sortable: true },
 ])
@@ -172,11 +172,11 @@ const schema = computed<PageSchema>(() => ({
     updateStatus: (id, enabled) => messageTemplateApi.updateStatus({ basicId: id, status: enabled ? EnableStatus.Enabled : EnableStatus.Disabled }),
   },
   actions: [
-    { key: 'create', title: t('message.template.action_create'), scope: 'page', type: 'primary', icon: 'lucide:plus' },
+    { key: 'create', title: t('message.template.action_create'), scope: 'page', type: 'primary', icon: 'lucide:plus', permission: 'message.template.create' },
     { key: 'view', title: t('message.template.action_view'), scope: 'row', icon: 'lucide:eye' },
-    { key: 'edit', title: t('message.template.action_edit'), scope: 'row', icon: 'lucide:pen', visible: canMaintainTemplate },
-    { key: 'toggle', title: t('message.template.action_toggle'), scope: 'row', icon: 'lucide:power', visible: canMaintainTemplate },
-    { key: 'delete', title: t('message.template.action_delete'), scope: 'row', type: 'error', icon: 'lucide:trash-2', confirm: true, confirmText: t('message.template.confirm_delete'), visible: canMaintainTemplate },
+    { key: 'edit', title: t('message.template.action_edit'), scope: 'row', icon: 'lucide:pen', visible: canMaintainTemplate, permission: 'message.template.update' },
+    { key: 'toggle', title: t('message.template.action_toggle'), scope: 'row', icon: 'lucide:power', confirm: true, confirmText: row => statusConfirmText(t, (row as unknown as MessageTemplateListItemDto).status === EnableStatus.Enabled, (row as unknown as MessageTemplateListItemDto).templateName), visible: canMaintainTemplate, permission: 'message.template.status' },
+    { key: 'delete', title: t('message.template.action_delete'), scope: 'row', type: 'error', icon: 'lucide:trash-2', confirm: true, confirmText: t('message.template.confirm_delete'), visible: canMaintainTemplate, permission: 'message.template.delete' },
   ],
 }))
 
@@ -205,7 +205,7 @@ async function openDetail(row: MessageTemplateListItemDto) {
     detailVisible.value = true
   }
   catch (e: unknown) {
-    toast.error((e as Error)?.message || t('message.template.msg_load_detail_failed'))
+    toast.danger((e as Error)?.message || t('message.template.msg_load_detail_failed'))
   }
 }
 
@@ -213,7 +213,7 @@ async function openEdit(row: MessageTemplateListItemDto) {
   try {
     const detail = await messageTemplateApi.detail(row.basicId)
     if (!detail) {
-      toast.error(t('message.template.msg_not_found'))
+      toast.danger(t('message.template.msg_not_found'))
       return
     }
     templateForm.value = {
@@ -232,7 +232,7 @@ async function openEdit(row: MessageTemplateListItemDto) {
     modalVisible.value = true
   }
   catch (e: unknown) {
-    toast.error((e as Error)?.message || t('message.template.msg_load_failed'))
+    toast.danger((e as Error)?.message || t('message.template.msg_load_failed'))
   }
 }
 
@@ -246,7 +246,7 @@ async function toggleStatus(row: MessageTemplateListItemDto) {
     schemaPageRef.value?.reload()
   }
   catch (e: unknown) {
-    toast.error((e as Error)?.message || t('message.template.msg_status_update_failed'))
+    toast.danger((e as Error)?.message || t('message.template.msg_status_update_failed'))
   }
 }
 
@@ -257,7 +257,7 @@ async function removeRow(row: MessageTemplateListItemDto) {
     schemaPageRef.value?.reload()
   }
   catch (e: unknown) {
-    toast.error((e as Error)?.message || t('message.template.msg_delete_failed'))
+    toast.danger((e as Error)?.message || t('message.template.msg_delete_failed'))
   }
 }
 
@@ -310,7 +310,7 @@ async function handleSubmit() {
     schemaPageRef.value?.reload()
   }
   catch (e: unknown) {
-    toast.error((e as Error)?.message || t('message.template.msg_save_failed'))
+    toast.danger((e as Error)?.message || t('message.template.msg_save_failed'))
   }
   finally {
     submitLoading.value = false
@@ -334,7 +334,7 @@ async function handleSubmit() {
         class="xh-edit-form-grid"
         @submit="handleSubmit"
       >
-        <XhFormFieldGroup value="templateCode">
+        <XhFormFieldGroup name="templateCode">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.template.form_template_code') }}</XhFieldLabel>
             <XhFieldControl>
@@ -348,7 +348,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="channel">
+        <XhFormFieldGroup name="channel">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.template.form_channel') }}</XhFieldLabel>
             <XhFieldControl>
@@ -361,7 +361,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="templateName">
+        <XhFormFieldGroup name="templateName">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.template.form_template_name') }}</XhFieldLabel>
             <XhFieldControl>
@@ -370,7 +370,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="sort">
+        <XhFormFieldGroup name="sort">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.template.form_sort') }}</XhFieldLabel>
             <XhFieldControl>
@@ -379,7 +379,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="subject" class="xh-span-2">
+        <XhFormFieldGroup name="subject" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.template.form_subject') }}</XhFieldLabel>
             <XhFieldControl>
@@ -388,7 +388,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="content" class="xh-span-2">
+        <XhFormFieldGroup name="content" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.template.form_content') }}</XhFieldLabel>
             <XhFieldControl :as-child="false">
@@ -414,7 +414,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="isHtml">
+        <XhFormFieldGroup name="isHtml">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.template.form_is_html') }}</XhFieldLabel>
             <XhFieldControl>
@@ -423,7 +423,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup v-if="!templateForm.basicId" value="status">
+        <XhFormFieldGroup v-if="!templateForm.basicId" name="status">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.template.form_status') }}</XhFieldLabel>
             <XhFieldControl>
@@ -432,7 +432,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="description" class="xh-span-2">
+        <XhFormFieldGroup name="description" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.template.form_description') }}</XhFieldLabel>
             <XhFieldControl>
@@ -441,7 +441,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="remark" class="xh-span-2">
+        <XhFormFieldGroup name="remark" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.template.form_remark') }}</XhFieldLabel>
             <XhFieldControl>
@@ -459,7 +459,7 @@ async function handleSubmit() {
         <XhDialogTitle>{{ t('message.template.detail_title') }}</XhDialogTitle>
         <XhDialogCloseTrigger />
         <template v-if="currentDetail">
-          <XhDescriptionsRoot :columns="2" bordered placement="left" size="sm">
+          <XhDescriptionsRoot :columns="2" variant="outline" placement="left" size="sm">
             <XhDescriptionsItem>
               <XhDescriptionsLabel>{{ t('message.template.detail_template_code') }}</XhDescriptionsLabel>
               <XhDescriptionsValue>
@@ -485,7 +485,7 @@ async function handleSubmit() {
               </XhDescriptionsValue>
             </XhDescriptionsItem>
           </XhDescriptionsRoot>
-          <XhDescriptionsRoot :columns="1" bordered placement="left" size="sm">
+          <XhDescriptionsRoot :columns="1" variant="outline" placement="left" size="sm">
             <XhDescriptionsItem>
               <XhDescriptionsLabel>{{ t('message.template.detail_subject') }}</XhDescriptionsLabel>
               <XhDescriptionsValue>

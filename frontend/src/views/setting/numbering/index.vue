@@ -10,8 +10,8 @@ import type {
 } from '@/api'
 import type { ListFieldSchema, PageSchema, SchemaActionPayload } from '~/components'
 import type { EnumOptionItem } from '~/hooks'
-import { XhAlertDescription, XhAlertIcon, XhAlertRoot, XhButton, XhDescriptionsItem, XhDescriptionsLabel, XhDescriptionsRoot, XhDescriptionsValue, XhDialogCloseTrigger, XhDialogContent, XhDialogRoot, XhDialogTitle, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFormRoot, XhSpinner, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
-import { computed, h, onMounted, ref, useId, watch } from 'vue'
+import { XhAlertContent, XhAlertDescription, XhAlertIndicator, XhAlertRoot, XhButton, XhDescriptionsItem, XhDescriptionsLabel, XhDescriptionsRoot, XhDescriptionsValue, XhDialogCloseTrigger, XhDialogContent, XhDialogRoot, XhDialogTitle, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFormRoot, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
+import { computed, h, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   createPageRequest,
@@ -21,13 +21,12 @@ import {
   NumberingResetCycle,
   NumberingScope,
   querySortsFromSchema,
-  tenantApi,
 } from '@/api'
-import { SchemaPage, XEditModal, XInput, XTooltip } from '~/components'
+import { SchemaPage, statusConfirmText, XEditModal, XInput, XTooltip } from '~/components'
 import { dialog, toast } from '~/composables'
 import { useEnumOptions } from '~/hooks'
 import { Icon } from '~/iconify'
-import { useUserStore } from '~/stores'
+import { useAccessStore, useUserStore } from '~/stores'
 import NumberingAllocationDrawer from './components/NumberingAllocationDrawer.vue'
 import NumberingPreviewModal from './components/NumberingPreviewModal.vue'
 import NumberingRuleEditor from './components/NumberingRuleEditor.vue'
@@ -39,14 +38,15 @@ const { t } = useI18n()
 /** 编辑弹窗的保存钮靠这个 id 关联到表单，点它才会走整表校验 */
 const editFormId = useId()
 const userStore = useUserStore()
+const accessStore = useAccessStore()
 const schemaPageRef = ref<InstanceType<typeof SchemaPage> | null>(null)
-const isPlatform = ref(!userStore.userInfo?.tenantId)
-const contextResolved = ref(false)
+/** 当前是否在平台：取用户信息（守卫每次整页加载都会重取，切换上下文会整页重载） */
+const isPlatform = computed(() => userStore.userInfo?.isPlatform ?? false)
 const activeScope = ref<NumberingScope>(isPlatform.value ? NumberingScope.Global : NumberingScope.Tenant)
 const actionLoading = ref(false)
 
 const canMaintain = computed(() => activeScope.value === NumberingScope.Tenant
-  || (isPlatform.value && userStore.hasPermission('setting.numbering.global-manage')))
+  || (isPlatform.value && accessStore.hasCode('setting.numbering.global-manage')))
 
 /** 当前租户视图的作用域名称，用于让紧凑工具栏按钮仍具备明确的无障碍语义。 */
 const currentScopeLabel = computed(() => activeScope.value === NumberingScope.Tenant
@@ -87,30 +87,6 @@ function switchScope(): void {
     : NumberingScope.Tenant
 }
 
-/**
- * 从租户切换列表解析当前运行上下文。
- *
- * 平台管理员切换租户后，历史 `isPlatform` 用户字段可能仍保留登录时状态；后端返回的
- * `TenantSwitcherDto.isCurrent` 按当前令牌实时计算，因此与控制中心共用它作为事实源。
- * 查询失败时回退到用户信息中的租户标识，权限校验仍由后端最终兜底。
- */
-async function resolveCurrentContext(): Promise<void> {
-  try {
-    const tenants = await tenantApi.myAvailableTenants()
-    isPlatform.value = !tenants.some(tenant => tenant.isCurrent)
-  }
-  catch {
-    isPlatform.value = !userStore.userInfo?.tenantId
-  }
-  finally {
-    contextResolved.value = true
-  }
-}
-
-onMounted(() => {
-  void resolveCurrentContext()
-})
-
 // 枚举标签一律取自后端枚举元数据，切语言时随之响应式刷新；这里只把选项列表转成按枚举值查找的映射。
 const dateFormatOptions = useEnumOptions('NumberingDateFormat', [
   { label: 'yyyyMMdd', value: NumberingDateFormat.YyyyMMdd },
@@ -150,7 +126,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     width: 110,
     order: 8,
     visible: activeScope.value === NumberingScope.Global,
-    render: row => h(XhTagRoot, { variant: 'outline', tone: (row as unknown as NumberingRuleListItemDto).allowTenantUse ? 'success' : 'neutral' }, () => h(XhTagLabel, () => (row as unknown as NumberingRuleListItemDto).allowTenantUse ? t('common.statuses.yes') : t('common.statuses.no'))),
+    render: row => h(XhTagRoot, { variant: 'subtle', tone: (row as unknown as NumberingRuleListItemDto).allowTenantUse ? 'success' : 'neutral' }, () => h(XhTagLabel, () => (row as unknown as NumberingRuleListItemDto).allowTenantUse ? t('common.statuses.yes') : t('common.statuses.no'))),
   },
   {
     key: 'status',
@@ -160,7 +136,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     sortable: true,
     order: 9,
     dictionaryCode: 'EnableStatus',
-    render: row => h(XhTagRoot, { variant: 'outline', tone: (row as unknown as NumberingRuleListItemDto).status === EnableStatus.Enabled ? 'success' : 'danger' }, () => h(XhTagLabel, () => (row as unknown as NumberingRuleListItemDto).status === EnableStatus.Enabled ? t('common.statuses.enabled') : t('common.statuses.disabled'))),
+    render: row => h(XhTagRoot, { variant: 'subtle', tone: (row as unknown as NumberingRuleListItemDto).status === EnableStatus.Enabled ? 'success' : 'danger' }, () => h(XhTagLabel, () => (row as unknown as NumberingRuleListItemDto).status === EnableStatus.Enabled ? t('common.statuses.enabled') : t('common.statuses.disabled'))),
   },
 ])
 
@@ -193,8 +169,8 @@ const schema = computed<PageSchema>(() => ({
     { key: 'preview', title: t('setting.numbering.action_preview'), scope: 'row', icon: 'lucide:scan-eye', permission: 'setting.numbering.read' },
     { key: 'view', title: t('setting.numbering.action_view'), scope: 'row', icon: 'lucide:eye' },
     { key: 'edit', title: t('setting.numbering.action_edit'), scope: 'row', icon: 'lucide:pen', permission: 'setting.numbering.update', visible: () => canMaintain.value },
-    { key: 'toggle', title: t('setting.numbering.action_toggle'), scope: 'row', icon: 'lucide:power', permission: 'setting.numbering.status', visible: () => canMaintain.value },
-    { key: 'reset', title: t('setting.numbering.action_reset'), scope: 'row', icon: 'lucide:rotate-ccw', permission: 'setting.numbering.reset', visible: () => canMaintain.value },
+    { key: 'toggle', title: t('setting.numbering.action_toggle'), scope: 'row', icon: 'lucide:power', confirm: true, confirmText: row => statusConfirmText(t, (row as unknown as NumberingRuleListItemDto).status === EnableStatus.Enabled, (row as unknown as NumberingRuleListItemDto).ruleName), permission: 'setting.numbering.status', visible: () => canMaintain.value },
+    { key: 'reset', title: t('setting.numbering.action_reset'), scope: 'row', type: 'warning', icon: 'lucide:rotate-ccw', permission: 'setting.numbering.reset', visible: () => canMaintain.value },
     { key: 'allocations', title: t('setting.numbering.action_allocations'), scope: 'row', icon: 'lucide:history', permission: 'setting.numbering.allocations' },
     { key: 'delete', title: t('setting.numbering.action_delete'), scope: 'row', type: 'error', icon: 'lucide:trash-2', permission: 'setting.numbering.delete', visible: () => canMaintain.value, disabled: row => (row as unknown as NumberingRuleListItemDto).hasAllocated },
   ],
@@ -263,13 +239,13 @@ async function openDetail(row: NumberingRuleListItemDto): Promise<void> {
   try {
     detail.value = await numberingApi.detail(row.basicId, activeScope.value)
     if (!detail.value) {
-      toast.error(t('setting.numbering.not_found'))
+      toast.danger(t('setting.numbering.not_found'))
       return
     }
     detailVisible.value = true
   }
   catch (error) {
-    toast.error((error as Error).message || t('setting.numbering.not_found'))
+    toast.danger((error as Error).message || t('setting.numbering.not_found'))
   }
 }
 
@@ -278,13 +254,13 @@ async function openEditor(row: NumberingRuleListItemDto): Promise<void> {
   try {
     editorDetail.value = await numberingApi.detail(row.basicId, activeScope.value)
     if (!editorDetail.value) {
-      toast.error(t('setting.numbering.not_found'))
+      toast.danger(t('setting.numbering.not_found'))
       return
     }
     editorVisible.value = true
   }
   catch (error) {
-    toast.error((error as Error).message || t('setting.numbering.not_found'))
+    toast.danger((error as Error).message || t('setting.numbering.not_found'))
   }
 }
 
@@ -299,7 +275,7 @@ async function toggleStatus(row: NumberingRuleListItemDto): Promise<void> {
     void schemaPageRef.value?.reload()
   }
   catch (error) {
-    toast.error((error as Error).message || t('setting.numbering.status_failed'))
+    toast.danger((error as Error).message || t('setting.numbering.status_failed'))
   }
   finally {
     actionLoading.value = false
@@ -335,7 +311,7 @@ async function submitReset(): Promise<void> {
     void schemaPageRef.value?.reload()
   }
   catch (error) {
-    toast.error((error as Error).message || t('setting.numbering.reset_failed'))
+    toast.danger((error as Error).message || t('setting.numbering.reset_failed'))
   }
   finally {
     actionLoading.value = false
@@ -362,7 +338,7 @@ function remove(row: NumberingRuleListItemDto): void {
         return true
       }
       catch (error) {
-        toast.error((error as Error).message || t('setting.numbering.delete_failed'))
+        toast.danger((error as Error).message || t('setting.numbering.delete_failed'))
         return false
       }
       finally {
@@ -375,30 +351,26 @@ function remove(row: NumberingRuleListItemDto): void {
 
 <template>
   <div class="flex h-full min-h-0 flex-col gap-3">
-    <XhSpinner v-if="!contextResolved" class="flex-1 py-12" />
-    <template v-else>
-      <!--
-        SchemaPage 内部表格依赖确定高度；flex-1 + min-h-0 将剩余视口高度正确传递给表格滚动区。
-        activeScope 作为 key 会在切换时重建列表并自动加载一次，既重置上一作用域的筛选状态，也避免额外重复请求。
-      -->
-      <SchemaPage ref="schemaPageRef" :key="activeScope" class="min-h-0 flex-1" :schema="schema" @action="onAction">
-        <template v-if="!isPlatform" #toolbar>
-          <XTooltip :content="scopeSwitchLabel">
-            <XhButton
-
-              data-circle
-              variant="ghost"
-              size="sm"
-              :aria-label="scopeSwitchLabel"
-              @click="switchScope"
-            >
-              <!-- 图标表示点击后进入的目标作用域，Tooltip 同时补充当前状态和完整动作语义。 -->
-              <span><Icon :icon="activeScope === NumberingScope.Tenant ? 'lucide:globe-2' : 'lucide:building-2'" /></span>
-            </XhButton>
-          </XTooltip>
-        </template>
-      </SchemaPage>
-    </template>
+    <!--
+      SchemaPage 内部表格依赖确定高度；flex-1 + min-h-0 将剩余视口高度正确传递给表格滚动区。
+      activeScope 作为 key 会在切换时重建列表并自动加载一次，既重置上一作用域的筛选状态，也避免额外重复请求。
+    -->
+    <SchemaPage ref="schemaPageRef" :key="activeScope" class="min-h-0 flex-1" :schema="schema" @action="onAction">
+      <template v-if="!isPlatform" #toolbar>
+        <XTooltip :content="scopeSwitchLabel">
+          <XhButton
+            icon-only
+            variant="ghost"
+            size="sm"
+            :aria-label="scopeSwitchLabel"
+            @click="switchScope"
+          >
+            <!-- 图标表示点击后进入的目标作用域，Tooltip 同时补充当前状态和完整动作语义。 -->
+            <span><Icon :icon="activeScope === NumberingScope.Tenant ? 'lucide:globe-2' : 'lucide:building-2'" /></span>
+          </XhButton>
+        </XTooltip>
+      </template>
+    </SchemaPage>
 
     <NumberingRuleEditor
       v-model:show="editorVisible"
@@ -414,7 +386,7 @@ function remove(row: NumberingRuleListItemDto): void {
       <XhDialogContent style="--xh-dialog-max-w: 680px">
         <XhDialogTitle>{{ t('setting.numbering.detail_title') }}</XhDialogTitle>
         <XhDialogCloseTrigger />
-        <XhDescriptionsRoot v-if="detail" :columns="2" bordered placement="left">
+        <XhDescriptionsRoot v-if="detail" :columns="2" variant="outline" placement="left">
           <XhDescriptionsItem>
             <XhDescriptionsLabel>{{ t('setting.numbering.rule_code') }}</XhDescriptionsLabel>
             <XhDescriptionsValue>
@@ -463,12 +435,14 @@ function remove(row: NumberingRuleListItemDto): void {
 
     <XEditModal v-model:show="resetVisible" :title="t('setting.numbering.reset_title')" :loading="actionLoading" :form-id="editFormId">
       <XhAlertRoot tone="warning" class="mb-3">
-        <XhAlertIcon>
+        <XhAlertIndicator>
           <Icon icon="lucide:triangle-alert" width="16" />
-        </XhAlertIcon>
-        <XhAlertDescription>
-          {{ t('setting.numbering.reset_tip') }}
-        </XhAlertDescription>
+        </XhAlertIndicator>
+        <XhAlertContent>
+          <XhAlertDescription>
+            {{ t('setting.numbering.reset_tip') }}
+          </XhAlertDescription>
+        </XhAlertContent>
       </XhAlertRoot>
       <XhFormRoot
         :id="editFormId"

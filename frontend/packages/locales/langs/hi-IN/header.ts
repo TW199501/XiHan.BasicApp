@@ -1,4 +1,8 @@
 export default {
+  context: {
+    platform: 'प्लेटफ़ॉर्म',
+    switch: 'वर्तमान: {name}, बदलने के लिए क्लिक करें',
+  },
   user: {
     profile: 'मेरा प्रोफ़ाइल',
     lock: 'स्क्रीन लॉक करें',
@@ -8,6 +12,8 @@ export default {
     entry: 'दूसरे के रूप में लॉगिन',
     title: 'किसी अन्य उपयोगकर्ता के रूप में लॉगिन करें',
     hint: 'उस उपयोगकर्ता की समस्या जाँचने के लिए। इस दौरान की गतिविधियाँ ऑडिट में दर्ज होती हैं और संवेदनशील कार्य अक्षम रहते हैं।',
+    scope_label: 'प्रतिरूपण का दायरा',
+    scope_platform: 'प्लेटफ़ॉर्म खाते',
     search_placeholder: 'उपयोगकर्ता नाम / उपनाम / नाम खोजें',
     reason_placeholder: 'कारण (वैकल्पिक, ऑडिट में दर्ज होगा)',
     empty_title: 'कोई उपयोगकर्ता उपलब्ध नहीं',
@@ -37,6 +43,7 @@ export default {
   },
   timezone: {
     switch_success: 'समय क्षेत्र बदला गया: {timezone}',
+    search: 'समय क्षेत्र खोजें',
   },
   notification: {
     bell: 'सूचनाएँ',
@@ -79,9 +86,12 @@ export default {
     fullscreen_enter: 'फ़ुल स्क्रीन',
     fullscreen_exit: 'फ़ुल स्क्रीन बंद करें',
     preferences: 'प्राथमिकताएँ',
+    float_tools: 'त्वरित टूल',
     refresh_page: 'पेज ताज़ा करें',
     nav_back: 'पीछे',
     nav_forward: 'आगे',
+    menu_scroll_prev: 'पिछले मेनू आइटम',
+    menu_scroll_next: 'अगले मेनू आइटम',
     sidebar_collapse: 'साइडबार समेटें',
     sidebar_expand: 'साइडबार फैलाएँ',
   },

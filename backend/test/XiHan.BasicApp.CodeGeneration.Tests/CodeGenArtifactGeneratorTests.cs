@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using XiHan.BasicApp.CodeGeneration.Domain.Enums;
+using XiHan.BasicApp.CodeGeneration.Domain.Generation;
 using XiHan.BasicApp.CodeGeneration.Infrastructure.Generation;
 
 namespace XiHan.BasicApp.CodeGeneration.Tests;
@@ -31,7 +32,7 @@ public sealed class CodeGenArtifactGeneratorTests
         Assert.Equal(2, artifacts.Count);
         Assert.Equal("SysProductPermissionCodes.cs", artifacts[0].FileName, StringComparer.Ordinal);
         Assert.Equal(
-            CodeGenerationTestHelper.OutputFolder + "/SysProductPermissionCodes.cs",
+            "Domain/Permissions/SysProductPermissionCodes.cs",
             artifacts[0].RelativePath,
             StringComparer.Ordinal);
         Assert.Equal("README.md", artifacts[1].FileName, StringComparer.Ordinal);
@@ -104,6 +105,53 @@ public sealed class CodeGenArtifactGeneratorTests
     }
 
     /// <summary>
+    /// 状态切换派生独立权限码；打印不是权限动作，跟读取权限走，不出权限码。
+    /// </summary>
+    [Fact]
+    public void PermissionCodes_StatusShouldDeriveCodeButPrintShouldNot()
+    {
+        var context = CodeGenerationTestHelper.CreateContext(enabledActions: ["status", "print"]);
+
+        var codes = MenuPermissionArtifactGenerator.Build(context, [])[0].Content;
+        var definitions = CodeGenerationTestHelper.BuildPermissionDefinitions(context).Content;
+
+        Assert.Contains("public const string Status = \"sys_product:status\";", codes, StringComparison.Ordinal);
+        Assert.DoesNotContain("Print", codes, StringComparison.Ordinal);
+        Assert.Contains("new(\"status\",", definitions, StringComparison.Ordinal);
+        Assert.DoesNotContain("new(\"print\",", definitions, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 状态与打印按钮随包含操作登记：状态按钮挂状态权限，打印按钮挂读取权限。
+    /// </summary>
+    [Fact]
+    public void Buttons_StatusAndPrintShouldBeRegisteredWithTheirPermissions()
+    {
+        var context = CodeGenerationTestHelper.CreateContext(enabledActions: ["create", "status", "print"]);
+
+        var snippet = CodeGenerationTestHelper.BuildPageRegistrySnippet(context).Content;
+        var menuPages = CodeGenerationTestHelper.BuildSeeders(context).Single(artifact => artifact.FileName.EndsWith("MenuPages.cs", StringComparison.Ordinal)).Content;
+
+        foreach (var content in new[] { snippet, menuPages })
+        {
+            Assert.Contains("\"catalog.sys-product.status\", \"状态\", \"catalog.sys-product\", SysProductPermissionCodes.Status,", content, StringComparison.Ordinal);
+            Assert.Contains("\"catalog.sys-product.print\", \"打印\", \"catalog.sys-product\", SysProductPermissionCodes.Read,", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("catalog.sys-product.query", content, StringComparison.Ordinal);
+        }
+    }
+
+    /// <summary>
+    /// 没勾打印时不登记打印按钮。
+    /// </summary>
+    [Fact]
+    public void Buttons_PrintShouldNotBeRegisteredWhenNotEnabled()
+    {
+        var snippet = CodeGenerationTestHelper.BuildPageRegistrySnippet(CodeGenerationTestHelper.CreateContext()).Content;
+
+        Assert.DoesNotContain("catalog.sys-product.print", snippet, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 一个写操作都没启用时，读取基线常量仍必须存在——否则生成的查询接口引用不到权限码。
     /// </summary>
     [Fact]
@@ -170,8 +218,8 @@ public sealed class CodeGenArtifactGeneratorTests
 
         Assert.Contains("`SysProductPermissionCodes.cs`", content, StringComparison.Ordinal);
         Assert.Contains("`SysProductPermissionDefinitions.cs`", content, StringComparison.Ordinal);
-        Assert.Contains("`SysProductPermissionSeeder.cs`", content, StringComparison.Ordinal);
-        Assert.Contains("`SysProductMenuSeeder.cs`", content, StringComparison.Ordinal);
+        Assert.Contains("`SysProductPermissionCatalog.cs`", content, StringComparison.Ordinal);
+        Assert.Contains("`SysProductMenuPages.cs`", content, StringComparison.Ordinal);
         Assert.Contains("`SysProductPageRegistry.snippet.txt`", content, StringComparison.Ordinal);
     }
 
@@ -183,11 +231,33 @@ public sealed class CodeGenArtifactGeneratorTests
     {
         var content = MenuPermissionArtifactGenerator.Build(CodeGenerationTestHelper.CreateContext(), [])[1].Content;
 
-        Assert.Contains("MenuCode=`sys_product`", content, StringComparison.Ordinal);
+        Assert.Contains("MenuCode=`catalog.sys-product`", content, StringComparison.Ordinal);
         Assert.Contains("Path=`/catalog/sys-product`", content, StringComparison.Ordinal);
         Assert.Contains("Component=`catalog/sys-product/index`", content, StringComparison.Ordinal);
         Assert.Contains("RouteName=`CatalogSysProduct`", content, StringComparison.Ordinal);
-        Assert.Contains("I18nKey=`menu.sys_product`", content, StringComparison.Ordinal);
+        // 生成物不带语言包，I18nKey 留空菜单才显示业务名称；多语言时的键按页面码推导
+        Assert.Contains("I18nKey 留空", content, StringComparison.Ordinal);
+        Assert.Contains("`menu.catalog_sys_product`", content, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// README 的按钮码只列实际启用的按钮；勾了打印时写明打印数据源的登记与模板编码。
+    /// </summary>
+    [Fact]
+    public void Readme_ShouldListEnabledButtonsAndPrintWiring()
+    {
+        var context = CodeGenerationTestHelper.CreateContext(enabledActions: ["create", "status", "print"]);
+
+        var content = MenuPermissionArtifactGenerator.Build(context, [])[1].Content;
+
+        Assert.Contains("新增/状态/打印按钮用按钮码 `catalog.sys-product.{create|status|print}` 门控", content, StringComparison.Ordinal);
+        Assert.Contains("services.RegisterPrintDataSource(SysProductPrintDataSource.Definition)", content, StringComparison.Ordinal);
+        Assert.Contains("新建编码为 `catalog.sys-product` 的模板", content, StringComparison.Ordinal);
+        Assert.Contains("`print-template:use`", content, StringComparison.Ordinal);
+
+        var withoutPrint = MenuPermissionArtifactGenerator.Build(CodeGenerationTestHelper.CreateContext(), [])[1].Content;
+        Assert.Contains("新增/编辑/删除按钮用按钮码 `catalog.sys-product.{create|update|delete}` 门控", withoutPrint, StringComparison.Ordinal);
+        Assert.DoesNotContain("RegisterPrintDataSource", withoutPrint, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -205,14 +275,30 @@ public sealed class CodeGenArtifactGeneratorTests
     /// 配置了父菜单时 README 必须把 ParentMenuId 带出来。
     /// </summary>
     [Fact]
-    public void Readme_WithParentMenuShouldEchoParentMenuId()
+    public void Readme_WithParentMenuShouldEchoParentMenuCode()
     {
         var context = CodeGenerationTestHelper.CreateContext();
-        context.Options["ParentMenuId"] = "801";
+        context.ParentMenuCode = "develop";
 
         var content = MenuPermissionArtifactGenerator.Build(context, [])[1].Content;
 
-        Assert.Contains("ParentMenuId=`801`", content, StringComparison.Ordinal);
+        Assert.Contains("> 父菜单：`develop`", content, StringComparison.Ordinal);
+        Assert.Contains("页面挂在目录 `develop` 下", content, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// README 说明登记由平台汇总种子写入、不用登记种子，重启即生效；旧版本的种子要删掉。
+    /// </summary>
+    [Fact]
+    public void Readme_ShouldDescribeContributionsInsteadOfSeederRegistration()
+    {
+        var content = MenuPermissionArtifactGenerator.Build(CodeGenerationTestHelper.CreateContext(), [])[1].Content;
+
+        Assert.Contains("不需要 `AddDataSeeder<>`", content, StringComparison.Ordinal);
+        Assert.Contains("旧版本生成的 `SysProductPermissionSeeder` / `SysProductMenuSeeder` 及其登记要删掉", content, StringComparison.Ordinal);
+        Assert.Contains("4. **重启后端**", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("重建数据库**", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("SeedOrders", content, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -225,7 +311,7 @@ public sealed class CodeGenArtifactGeneratorTests
 
         Assert.Equal("SysProductPermissionDefinitions.cs", artifact.FileName, StringComparer.Ordinal);
         Assert.Equal(
-            CodeGenerationTestHelper.OutputFolder + "/SysProductPermissionDefinitions.cs",
+            "Domain/Permissions/SysProductPermissionDefinitions.cs",
             artifact.RelativePath,
             StringComparer.Ordinal);
         Assert.Equal(CodeGenerationTestHelper.ArtifactTemplateCode, artifact.TemplateCode, StringComparer.Ordinal);
@@ -301,7 +387,7 @@ public sealed class CodeGenArtifactGeneratorTests
         var content = CodeGenerationTestHelper.BuildPageRegistrySnippet(CodeGenerationTestHelper.CreateContext()).Content;
 
         Assert.Contains(
-            "new(\"catalog.sys-product\", \"产品\", \"menu.sys_product\", MenuType.Menu, \"/catalog/sys-product\", \"CatalogSysProduct\",",
+            "new(\"catalog.sys-product\", \"产品\", I18nKey: null, MenuType.Menu, \"/catalog/sys-product\", \"CatalogSysProduct\",",
             content,
             StringComparison.Ordinal);
         Assert.Contains("\"catalog/sys-product/index\"", content, StringComparison.Ordinal);
@@ -352,19 +438,21 @@ public sealed class CodeGenArtifactGeneratorTests
     }
 
     /// <summary>
-    /// 未配置父菜单时片段注明顶级菜单，配置后必须回显 ParentMenuId。
+    /// 未选父菜单时片段注明顶级菜单，选了就写出父菜单码。
     /// </summary>
     [Fact]
-    public void PageRegistrySnippet_ParentCodeNoteShouldFollowParentMenuId()
+    public void PageRegistrySnippet_ParentCodeShouldFollowParentMenuCode()
     {
         var withoutParent = CodeGenerationTestHelper.BuildPageRegistrySnippet(CodeGenerationTestHelper.CreateContext()).Content;
 
         var context = CodeGenerationTestHelper.CreateContext();
-        context.Options["ParentMenuId"] = "801";
+        context.ParentMenuCode = "develop";
         var withParent = CodeGenerationTestHelper.BuildPageRegistrySnippet(context).Content;
 
         Assert.Contains("顶级菜单", withoutParent, StringComparison.Ordinal);
-        Assert.Contains("ParentMenuId=801", withParent, StringComparison.Ordinal);
+        Assert.Contains("/* ParentCode: */ null,", withoutParent, StringComparison.Ordinal);
+        Assert.Contains("/* ParentCode: */ \"develop\",", withParent, StringComparison.Ordinal);
+        Assert.Contains("表配置所选目录的菜单码 develop", withParent, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -379,20 +467,24 @@ public sealed class CodeGenArtifactGeneratorTests
     }
 
     /// <summary>
-    /// 种子骨架产出权限种子与菜单种子两个文件，且都是"仅首次创建"。
+    /// 产出权限目录登记与菜单登记两个文件，内容全由表配置推导，总是覆盖。
     /// </summary>
     /// <remarks>
-    /// 骨架里的 Order 是占位、需人工确认；标成总是覆盖会把落地方确认过的 Order 反复冲掉。
+    /// 登记没有种子顺序号这种要人工确认的占位：包含操作、父菜单改了，重新生成即随之更新（新启用的按钮也会登记）。
     /// </remarks>
     [Fact]
-    public void Seeders_ShouldProduceTwoWriteOnceSkeletons()
+    public void Seeders_ShouldProduceTwoAlwaysOverwriteContributions()
     {
         var artifacts = CodeGenerationTestHelper.BuildSeeders(CodeGenerationTestHelper.CreateContext());
 
         Assert.Equal(2, artifacts.Count);
-        Assert.Equal("SysProductPermissionSeeder.cs", artifacts[0].FileName, StringComparer.Ordinal);
-        Assert.Equal("SysProductMenuSeeder.cs", artifacts[1].FileName, StringComparer.Ordinal);
-        Assert.All(artifacts, artifact => Assert.Equal(ArtifactWriteMode.WriteOnce, artifact.WriteMode));
+        Assert.Equal("SysProductPermissionCatalog.cs", artifacts[0].FileName, StringComparer.Ordinal);
+        Assert.Equal("SysProductMenuPages.cs", artifacts[1].FileName, StringComparer.Ordinal);
+        // 直接放在模块的种子目录：生成到项目时落位即可编译，不用再从中转目录复制
+        Assert.Equal("Infrastructure/Seeders/SysProductPermissionCatalog.cs", artifacts[0].RelativePath, StringComparer.Ordinal);
+        Assert.Equal("Infrastructure/Seeders/SysProductMenuPages.cs", artifacts[1].RelativePath, StringComparer.Ordinal);
+        Assert.All(artifacts, artifact => Assert.Equal(ArtifactSide.Backend, artifact.Side));
+        Assert.All(artifacts, artifact => Assert.Equal(ArtifactWriteMode.AlwaysOverwrite, artifact.WriteMode));
         Assert.All(artifacts, artifact => Assert.Equal(
             CodeGenerationTestHelper.ArtifactTemplateCode,
             artifact.TemplateCode,
@@ -411,56 +503,88 @@ public sealed class CodeGenArtifactGeneratorTests
     }
 
     /// <summary>
-    /// 权限种子骨架必须落在 {命名空间}.Infrastructure.Seeders 并消费同批的权限定义类。
+    /// 权限目录登记落在 {命名空间}.Infrastructure.Seeders，按约定注册为 IPermissionCatalogContribution，消费同批的权限定义类。
     /// </summary>
     [Fact]
-    public void PermissionSeederSkeleton_ShouldConsumePermissionDefinitions()
+    public void PermissionCatalog_ShouldBeAConventionRegisteredContribution()
     {
         var content = CodeGenerationTestHelper.BuildSeeders(CodeGenerationTestHelper.CreateContext())[0].Content;
 
         Assert.Contains("namespace XiHan.BasicApp.Catalog.Infrastructure.Seeders;", content, StringComparison.Ordinal);
-        Assert.Contains("public sealed class SysProductPermissionSeeder : DataSeederBase", content, StringComparison.Ordinal);
+        Assert.Contains("[ExposeServices(typeof(IPermissionCatalogContribution))]\npublic sealed class SysProductPermissionCatalog : IPermissionCatalogContribution, ITransientDependency", content.Replace("\r\n", "\n", StringComparison.Ordinal), StringComparison.Ordinal);
         Assert.Contains("SysProductPermissionDefinitions.Items", content, StringComparison.Ordinal);
-        Assert.Contains("public override int Order => 200;", content, StringComparison.Ordinal);
-        Assert.Contains("[Catalog]产品权限种子数据", content, StringComparison.Ordinal);
+        // 未声明作用侧的权限在任何上下文都不生效：默认两侧
+        Assert.Contains("PermissionSide.Both,", content, StringComparison.Ordinal);
+        Assert.Contains("OperationSeeds.All.Single(operation => operation.Code == item.Action)", content, StringComparison.Ordinal);
+        Assert.Contains("public string Name => \"[Catalog]产品权限目录\";", content, StringComparison.Ordinal);
+        // 不是种子：没有顺序号，也不需要登记
+        Assert.DoesNotContain("Order", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("SeederBase", content, StringComparison.Ordinal);
+        // 超管在平台天然拥有全部权限，不写角色授权
+        Assert.DoesNotContain("super_admin", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("SysRolePermission", content, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// 菜单种子骨架的 Order 必须大于权限种子，菜单建立时才解析得到 read 权限。
+    /// 菜单登记按约定注册为 IMenuPageContribution，页面绑定 read 权限，没有种子顺序号。
     /// </summary>
     [Fact]
-    public void MenuSeederSkeleton_ShouldRunAfterPermissionSeeder()
+    public void MenuPages_ShouldBeAConventionRegisteredContribution()
     {
         var content = CodeGenerationTestHelper.BuildSeeders(CodeGenerationTestHelper.CreateContext())[1].Content;
 
-        Assert.Contains("public override int Order => 201;", content, StringComparison.Ordinal);
-        Assert.Contains("p.PermissionCode == \"sys_product:read\"", content, StringComparison.Ordinal);
+        Assert.Contains("[ExposeServices(typeof(IMenuPageContribution))]\npublic sealed class SysProductMenuPages : IMenuPageContribution, ITransientDependency", content.Replace("\r\n", "\n", StringComparison.Ordinal), StringComparison.Ordinal);
+        Assert.Contains("SysProductPermissionCodes.Read", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("Order", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("SeederBase", content, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// 菜单种子骨架写入的菜单规格必须与 README / PageRegistry 片段完全一致。
+    /// 选了父菜单时页面挂到它的菜单码下，并按 C# 字符串转义。
+    /// </summary>
+    [Fact]
+    public void MenuPages_ShouldUseParentMenuCode()
+    {
+        var context = CodeGenerationTestHelper.CreateContext();
+        context.ParentMenuCode = "develop";
+
+        var content = CodeGenerationTestHelper.BuildSeeders(context)[1].Content;
+        var snippet = CodeGenerationTestHelper.BuildPageRegistrySnippet(context).Content;
+
+        Assert.Contains("ParentCode: \"develop\", SysProductPermissionCodes.Read,", content, StringComparison.Ordinal);
+        Assert.Contains("/* ParentCode: */ \"develop\",", snippet, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 菜单种子骨架登记的页面规格必须与 README / PageRegistry 片段完全一致。
     /// </summary>
     [Fact]
     public void MenuSeederSkeleton_ShouldWriteConsistentMenuSpecification()
     {
         var content = CodeGenerationTestHelper.BuildSeeders(CodeGenerationTestHelper.CreateContext())[1].Content;
 
-        Assert.Contains("MenuCode = \"sys_product\"", content, StringComparison.Ordinal);
-        Assert.Contains("Path = \"/catalog/sys-product\"", content, StringComparison.Ordinal);
-        Assert.Contains("Component = \"catalog/sys-product/index\"", content, StringComparison.Ordinal);
-        Assert.Contains("RouteName = \"CatalogSysProduct\"", content, StringComparison.Ordinal);
-        Assert.Contains("I18nKey = \"menu.sys_product\"", content, StringComparison.Ordinal);
+        Assert.Contains(
+            "new(\"catalog.sys-product\", \"产品\", I18nKey: null, MenuType.Menu, \"/catalog/sys-product\", \"CatalogSysProduct\", \"catalog/sys-product/index\",",
+            content,
+            StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// 菜单种子骨架必须先按 MenuCode 判存在再插入，保证可重复执行（幂等）。
+    /// 菜单种子骨架的按钮行与 PageRegistry 片段一字不差：生成页面的写操作按钮靠这些按钮码门控，两边不能分叉。
     /// </summary>
     [Fact]
-    public void MenuSeederSkeleton_ShouldBeIdempotent()
+    public void MenuSeederSkeleton_ButtonsShouldMatchPageRegistrySnippet()
     {
-        var content = CodeGenerationTestHelper.BuildSeeders(CodeGenerationTestHelper.CreateContext())[1].Content;
+        var context = CodeGenerationTestHelper.CreateContext();
+        var seeder = CodeGenerationTestHelper.BuildSeeders(context)[1].Content;
+        var snippetButtons = CodeGenerationTestHelper.BuildPageRegistrySnippet(context).Content
+            .Split('\n')
+            .Select(line => line.Trim())
+            .Where(line => line.StartsWith("new(\"catalog.sys-product.", StringComparison.Ordinal))
+            .ToList();
 
-        Assert.Contains("AnyAsync(m => m.MenuCode == \"sys_product\")", content, StringComparison.Ordinal);
+        Assert.NotEmpty(snippetButtons);
+        Assert.All(snippetButtons, line => Assert.Contains(line, seeder, StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -478,5 +602,60 @@ public sealed class CodeGenArtifactGeneratorTests
         Assert.Contains("namespace SysProductGenerated.Domain.Permissions;", codes, StringComparison.Ordinal);
         Assert.Contains("namespace SysProductGenerated.Domain.Permissions;", definitions, StringComparison.Ordinal);
         Assert.Contains("namespace SysProductGenerated.Infrastructure.Seeders;", seeder, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 菜单种子骨架用到的 <c>MenuType</c> 在 <c>XiHan.BasicApp.Saas.Domain.Entities</c> 下，
+    /// 导错命名空间会让复制过去的种子编译不过。
+    /// </summary>
+    [Fact]
+    public void MenuSeederSkeleton_ShouldImportTheNamespaceThatDeclaresMenuType()
+    {
+        var content = CodeGenerationTestHelper.BuildSeeders(CodeGenerationTestHelper.CreateContext())[1].Content;
+
+        Assert.Contains("using XiHan.BasicApp.Saas.Domain.Entities;", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("using XiHan.BasicApp.Saas.Domain.Enums;", content, StringComparison.Ordinal);
+        Assert.Contains("MenuType.Menu", content, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 四份 C# 产物都以仓内标准版权文件头开篇，并入源码后才不会触发 XHFH001。
+    /// </summary>
+    [Fact]
+    public void CSharpArtifacts_ShouldStartWithStandardFileHeader()
+    {
+        var context = CodeGenerationTestHelper.CreateContext();
+        string[] contents =
+        [
+            MenuPermissionArtifactGenerator.Build(context, [])[0].Content,
+            CodeGenerationTestHelper.BuildPermissionDefinitions(context).Content,
+            .. CodeGenerationTestHelper.BuildSeeders(context).Select(artifact => artifact.Content)
+        ];
+
+        Assert.All(contents, content =>
+        {
+            Assert.StartsWith("// Copyright (c) 2021-Present XiHanFun and contributors.", content, StringComparison.Ordinal);
+            Assert.Contains("// Licensed under the MIT License. See LICENSE in the project root for license information.", content, StringComparison.Ordinal);
+        });
+    }
+
+    /// <summary>
+    /// 业务名称是自由文本：进字符串字面量按 C# 转义、进文档注释按 XML 转义，
+    /// 否则引号与尖括号会让权限定义、种子骨架与 PageRegistry 片段编译不过。
+    /// </summary>
+    [Fact]
+    public void Artifacts_ShouldEscapeFreeTextDisplayName()
+    {
+        var context = CodeGenerationTestHelper.CreateContext(businessName: "产\"品<A>\\");
+
+        var definitions = CodeGenerationTestHelper.BuildPermissionDefinitions(context).Content;
+        var seeders = CodeGenerationTestHelper.BuildSeeders(context);
+        var snippet = CodeGenerationTestHelper.BuildPageRegistrySnippet(context).Content;
+
+        Assert.Contains("public const string ResourceName = \"产\\\"品<A>\\\\\";", definitions, StringComparison.Ordinal);
+        Assert.Contains("/// 产\"品&lt;A&gt;\\ 权限定义", definitions, StringComparison.Ordinal);
+        Assert.Contains("\"[Catalog]产\\\"品<A>\\\\菜单\"", seeders[1].Content, StringComparison.Ordinal);
+        Assert.Contains("/// 产\"品&lt;A&gt;\\ 菜单登记：页面行与按钮行", seeders[1].Content, StringComparison.Ordinal);
+        Assert.Contains("new(\"catalog.sys-product\", \"产\\\"品<A>\\\\\", I18nKey: null,", snippet, StringComparison.Ordinal);
     }
 }

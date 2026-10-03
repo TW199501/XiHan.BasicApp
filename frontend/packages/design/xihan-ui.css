@@ -12,6 +12,7 @@
  * 2) 同一份映射在 :root 与 .dark 上各写一遍。--x 在嵌套 .dark 容器（深色侧栏、
  *    深色顶栏）里会重解析，但 --xh-* 若只在 :root 声明就只解析一次，
  *    嵌套区里的组件会拿到浅色值。与 variables.css 里 --color-* 的处理同因同法。
+ *    语义映射另写到 [data-theme] 上：浮层的 Portal 壳带 data-theme，库在那里重声明整套语义令牌。
  * ========================================================================== */
 
 @layer xihan.overrides {
@@ -31,7 +32,16 @@
     --xh-color-brand-800: color-mix(in oklab, hsl(var(--primary)) 66%, black);
     --xh-color-brand-900: color-mix(in oklab, hsl(var(--primary)) 50%, black);
     --xh-color-brand-950: color-mix(in oklab, hsl(var(--primary)) 34%, black);
+  }
 
+  /* 以下语义映射还要写到每个 [data-theme] 作用域上：组件库的浮层（对话框、抽屉、弹出面…）
+     经 Portal 挂进一个带 data-theme 的壳，tokens.css 又在 :where([data-theme]) 上把整套语义令牌
+     按库缺省重声明一遍——只写 :root 的话，壳里的正文、描边、淡底全退回库的裸 oklch，
+     弹窗里的表格、文字与列表页对不上。品牌色阶不在此列：库不在壳上重声明它，
+     壳会继承 useTheme 写在根上的派生色阶，这里要是也写一份就把它盖回首帧兜底值了 */
+  :root,
+  .dark,
+  [data-theme] {
     /* —— 功能色：与应用的 success / warning / info / destructive 对齐 —— */
     --xh-color-success-500: hsl(var(--success));
     --xh-color-success-600: color-mix(in oklab, hsl(var(--success)) 88%, black);
@@ -54,12 +64,39 @@
     --xh-bg-subtle-hover: hsl(var(--accent));
     --xh-bg-subtle-active: hsl(var(--heavy));
     --xh-bg-muted: hsl(var(--muted));
+    /* 不透明的那一族（3.0 起表格表头 / 行悬停 / 斑马纹、头像底等改读它）：库里是前景按比例混进卡片底，
+       不接就绕开了应用的 muted / accent / heavy，表格与手写的 .xh-plain-table、动态取色下的品牌色调对不上。
+       应用这几色本身就是实色，直接接 */
+    --xh-bg-subtle-opaque: hsl(var(--muted));
+    --xh-bg-subtle-hover-opaque: hsl(var(--accent));
+    --xh-bg-subtle-active-opaque: hsl(var(--heavy));
+    --xh-bg-muted-opaque: hsl(var(--muted));
     /* 实心底走色阶而不是用户挑的原色：原色的明度由用户定，浅一点白字就压不住 */
     --xh-bg-brand: var(--xh-color-brand-600);
     --xh-bg-brand-hover: var(--xh-color-brand-700);
     --xh-bg-brand-active: var(--xh-color-brand-800);
-    --xh-bg-brand-subtle: hsl(var(--primary) / 12%);
+    /* 淡底必须是实色：表格选中行用它当底，冻结列的单元格靠 background: inherit 取行底，
+       半透明会让横向滚过的其它列从冻结列下面透出来。按 srgb 混入卡片底，与此前 12% 透明叠在卡片上的观感一致 */
+    --xh-bg-brand-subtle: color-mix(in srgb, hsl(var(--primary)) 12%, hsl(var(--card)));
     --xh-bg-overlay: hsl(var(--overlay));
+
+    /* —— 浮层材质：组件库的弹出面（popover / menu / select / 日期面板…）读 frosted，
+       对话框与悬浮按钮读 elevated，提示词输入读 soft。这几族的底与线在库里是裸 oklch，
+       不再经 --xh-bg-surface-raised，上面那条桥到不了它们；这里把底、描边、分隔线接到
+       应用的浮层配色上，浮层才跟着换主色 / 切暗色走。磨砂的透明度、模糊与高光留给库。
+       减少透明与强制色由库在 [data-scope] 上直接改写材质名，压得住这份 :root 声明 —— */
+    --xh-material-frosted-bg: hsl(var(--popover) / var(--xh-alpha-high));
+    --xh-material-frosted-border: hsl(var(--border));
+    --xh-material-frosted-separator: hsl(var(--border) / 60%);
+    --xh-material-elevated-bg: hsl(var(--popover));
+    --xh-material-elevated-border: hsl(var(--border));
+    --xh-material-elevated-separator: hsl(var(--border) / 60%);
+    --xh-material-elevated-fg-muted: hsl(var(--muted-foreground));
+    --xh-material-soft-bg: hsl(var(--card));
+
+    /* 对话框标题与操作区之间不画横线：本应用的弹窗都不大，标题、正文、按钮靠间距就分得清，
+       两条线反而把一小块面切成三截。只收这一族的分隔线，其它浮层的材质线照旧（菜单分组、面板抬头要靠它） */
+    --xh-dialog-separator: transparent;
 
     /* —— 字 —— */
     --xh-fg-default: hsl(var(--foreground));
@@ -75,6 +112,7 @@
 
     /* —— 线与聚焦环 —— */
     --xh-border-default: hsl(var(--border));
+    --xh-border-default-opaque: hsl(var(--border));
     --xh-border-subtle: hsl(var(--border) / 60%);
     --xh-border-strong: hsl(var(--heavy));
     --xh-border-control: hsl(var(--input));
@@ -88,16 +126,38 @@
     /* 滑块取 45% 的次要前景：--border 那一档压在画布上只有 1.27，几乎看不见 */
     --xh-fg-scrollbar-thumb: hsl(var(--muted-foreground) / 45%);
 
+    /* —— 字号基准：组件库的字号阶是按 16px 根设计的 rem（tokens.css 里 md 是 0.875rem，
+       意在 14px），而本应用的根字号就是偏好设置里的「字号」——useHtmlStyle 与 index.html
+       首屏脚本把它写成 html { font-size: N/16*100% }，缺省 14 即 87.5%。库的 rem 在这个根下
+       再缩一次，控件文字（表格、输入框、下拉项、按钮）全成了 12.25px，与正文 14px 不齐。
+       这里把七档按 16/14 补回（每档 = 库值 × 8/7），md 恰好回到 1rem：偏好里填的 N px
+       就是 md 控件文字的 px，改字号偏好整族仍跟着走。--xh-control-font-* 与 --xh-text-*-size
+       在库里都引这七档，不必逐个再桥。不动根字号，是因为应用几百处 tailwind 间距是在
+       14px 根下调好的，根回 100% 会让它们整体涨 14% —— */
+    --xh-font-size-xs: 0.857142857rem;
+    --xh-font-size-sm: 0.928571429rem;
+    --xh-font-size-md: 1rem;
+    --xh-font-size-lg: 1.142857143rem;
+    --xh-font-size-xl: 1.285714286rem;
+    --xh-font-size-2xl: 1.571428571rem;
+    --xh-font-size-3xl: 2rem;
+    /* 日期浮层的时间列高与面板上限由组件库只按 px 结算（3.1 起），不随根字号缩，这里不再补回 */
+
     /* —— 形状：跟随偏好设置里的圆角滑块（useTheme 写 --radius / --radius-card）—— */
     --xh-shape-control: var(--radius);
     --xh-shape-surface: var(--radius-card, var(--radius));
-
-    /* 状态药丸恒是药丸：它们表达的是「一小块状态」，不跟控件的圆角走。
-       组件库里 tag 默认取 shape-control，本站几百枚状态标记因此需要这一条 */
-    --xh-tag-radius: var(--xh-shape-pill);
+    /* 内嵌件（3.0 起菜单 / 下拉 / 树 / 穿梭框的行，复选框的方框，标签……）读 inset，不接就钉死在 4px、
+       不随滑块走。取控件圆角的一半、不低于库缺省：滑块最小时与库一致，调大时跟着变圆，且始终比外层控件小一档 */
+    --xh-shape-inset: max(var(--xh-radius-sm), calc(var(--radius) / 2));
 
     /* —— 层级：整族抬到本仓手写浮层（通知下拉那类）之上 —— */
     --xh-z-sticky: var(--z-sidebar);
+    /* 顶部加载条单独抬出 sticky 这一层：它固定贴在视口上沿，而那正是顶栏所在的位置，
+       顶栏的 z-index 从 200 起步（use-layout-shell-adapter 的 Z_INDEX_BASE），
+       条子留在 sticky（= --z-sidebar，100）就整条压在不透明的顶栏底下，一直没人看得见。
+       不能改 --xh-z-sticky 把整族一起抬走：表格粘性表头、affix、回到顶部与它同层，
+       抬上去就轮到页内的粘性元素盖住顶栏与侧栏。--z-loading 本就是留给这条带子的位置 */
+    --xh-loading-bar-layer: var(--z-loading);
     --xh-z-modal: 2200;
     --xh-z-popover: 2300;
     --xh-z-toast: 2400;
@@ -115,16 +175,11 @@
      相对颜色语法高于浏览器地板，包 @supports；够不着的引擎退回上面那份。 */
   @supports (color: oklch(from red l c h)) {
     :root,
-    .dark {
+    .dark,
+    [data-theme] {
       --xh-color-success-600: oklch(from hsl(var(--success)) 0.53 c h);
       --xh-color-danger-600: oklch(from hsl(var(--destructive)) 0.53 c h);
       --xh-color-warning-600: oklch(from hsl(var(--warning)) 0.56 c h);
     }
   }
-}
-
-/* 表格里的标签是「一格里的一小块信息」，跟单元格一样是方的，不用上面那条全站状态药丸；
-   药丸留给正文里独立出现的状态标记。取 shape-control 即跟随偏好设置里的圆角滑块 */
-[data-scope='table'][data-part='root'] {
-  --xh-tag-radius: var(--xh-shape-inset);
 }

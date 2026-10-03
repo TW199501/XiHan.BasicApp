@@ -53,7 +53,12 @@ public sealed record UserStatusChangeCommand(long BasicId, EnableStatus Status, 
 /// <summary>
 /// 用户密码重置命令
 /// </summary>
-public sealed record UserPasswordResetCommand(long UserId, string NewPassword, DateTimeOffset? PasswordExpirationTime, string? Remark);
+/// <param name="UserId">用户主键</param>
+/// <param name="NewPassword">新密码</param>
+/// <param name="PasswordExpirationTime">密码过期时间</param>
+/// <param name="Remark">备注</param>
+/// <param name="BySelf">是否本人重置（找回密码）；管理员重置为 false，此时标记需要本人改密</param>
+public sealed record UserPasswordResetCommand(long UserId, string NewPassword, DateTimeOffset? PasswordExpirationTime, string? Remark, bool BySelf);
 
 /// <summary>
 /// 用户双因素认证重置命令（清除 OTP 绑定）
@@ -71,15 +76,41 @@ public sealed record UserLockChangeCommand(long UserId, bool IsLocked, DateTimeO
 public sealed record UserLoginPolicyUpdateCommand(long UserId, bool AllowMultiLogin, int MaxLoginDevices, string? Remark);
 
 /// <summary>
-/// 用户角色授权命令
+/// 用户角色批量变更命令（一次性提交授予与撤销）
 /// </summary>
-public sealed record UserRoleGrantCommand(
+public sealed record UserRoleBatchUpdateCommand(
     long UserId,
+    IReadOnlyList<long> GrantRoleIds,
+    IReadOnlyList<long> RevokeUserRoleIds);
+
+/// <summary>
+/// 用户角色批量变更结果（本次实际发生变化的角色，用于审计发事件）
+/// </summary>
+/// <param name="GrantedRoleIds">实际授予的角色ID</param>
+/// <param name="RevokedRoleIds">实际撤销的角色ID</param>
+public sealed record UserRoleBatchUpdateResult(
+    IReadOnlyList<long> GrantedRoleIds,
+    IReadOnlyList<long> RevokedRoleIds);
+
+/// <summary>
+/// 角色成员批量变更命令（以角色为中心，一次性提交加入与移出）
+/// </summary>
+/// <param name="RoleId">角色主键</param>
+/// <param name="GrantUserIds">加入的成员（用户主键）</param>
+/// <param name="RevokeUserRoleIds">移出的授权记录（用户角色绑定主键）</param>
+public sealed record RoleMemberBatchUpdateCommand(
     long RoleId,
-    DateTimeOffset? EffectiveTime,
-    DateTimeOffset? ExpirationTime,
-    string? GrantReason,
-    string? Remark);
+    IReadOnlyList<long> GrantUserIds,
+    IReadOnlyList<long> RevokeUserRoleIds);
+
+/// <summary>
+/// 角色成员批量变更结果（本次实际加入与移出的成员，用于审计发事件）
+/// </summary>
+/// <param name="GrantedUserIds">实际加入的成员</param>
+/// <param name="RevokedUserIds">实际移出的成员</param>
+public sealed record RoleMemberBatchUpdateResult(
+    IReadOnlyList<long> GrantedUserIds,
+    IReadOnlyList<long> RevokedUserIds);
 
 /// <summary>
 /// 用户角色更新命令
@@ -95,18 +126,6 @@ public sealed record UserRoleUpdateCommand(
 /// 用户角色状态变更命令
 /// </summary>
 public sealed record UserRoleStatusChangeCommand(long BasicId, ValidityStatus Status, string? Remark);
-
-/// <summary>
-/// 用户直授权限授权命令
-/// </summary>
-public sealed record UserPermissionGrantCommand(
-    long UserId,
-    long PermissionId,
-    PermissionAction PermissionAction,
-    DateTimeOffset? EffectiveTime,
-    DateTimeOffset? ExpirationTime,
-    string? GrantReason,
-    string? Remark);
 
 /// <summary>
 /// 用户直授权限批量变更中的单条授予项
@@ -149,39 +168,44 @@ public sealed record UserPermissionUpdateCommand(
 public sealed record UserPermissionStatusChangeCommand(long BasicId, ValidityStatus Status, string? Remark);
 
 /// <summary>
-/// 用户数据范围授权命令
+/// 成员数据范围设置命令：覆盖档位与自定义部门一次落地
 /// </summary>
-public sealed record UserDataScopeGrantCommand(
+/// <param name="UserId">用户主键</param>
+/// <param name="DataScope">覆盖档位（null 表示跟随角色）</param>
+/// <param name="Departments">自定义部门（仅档位为 Custom 时提交，且至少一个）</param>
+public sealed record UserDataScopeSetCommand(
     long UserId,
-    long DepartmentId,
-    bool IncludeChildren,
-    string? Remark);
+    DataPermissionScope? DataScope,
+    IReadOnlyList<DataScopeDepartmentItem> Departments);
 
 /// <summary>
-/// 用户数据范围更新命令
+/// 用户部门归属批量变更中的单条分配项
 /// </summary>
-public sealed record UserDataScopeUpdateCommand(
-    long BasicId,
-    bool IncludeChildren,
-    string? Remark);
-
-/// <summary>
-/// 用户数据范围状态变更命令
-/// </summary>
-public sealed record UserDataScopeStatusChangeCommand(long BasicId, ValidityStatus Status, string? Remark);
-
-/// <summary>
-/// 用户部门归属分配命令
-/// </summary>
-public sealed record UserDepartmentAssignCommand(
-    long UserId,
+public sealed record UserDepartmentBatchAssignItem(
     long DepartmentId,
     bool IsMain,
-    string? Remark,
+    string? Remark = null,
     long? PositionId = null,
     string? JobNumber = null,
     string? JobLevel = null,
     DateTimeOffset? JoinTime = null);
+
+/// <summary>
+/// 用户部门归属批量变更命令（一次性提交分配与撤销）
+/// </summary>
+public sealed record UserDepartmentBatchUpdateCommand(
+    long UserId,
+    IReadOnlyList<UserDepartmentBatchAssignItem> Assigns,
+    IReadOnlyList<long> RevokeUserDepartmentIds);
+
+/// <summary>
+/// 用户部门归属批量变更结果（本次实际进出的部门）
+/// </summary>
+/// <param name="AssignedDepartmentIds">实际新分配或恢复的部门ID</param>
+/// <param name="RevokedDepartmentIds">实际撤销的部门ID</param>
+public sealed record UserDepartmentBatchUpdateResult(
+    IReadOnlyList<long> AssignedDepartmentIds,
+    IReadOnlyList<long> RevokedDepartmentIds);
 
 /// <summary>
 /// 用户部门归属更新命令
@@ -229,11 +253,6 @@ public sealed record UserRoleCommandResult(SysUserRole UserRole, SysRole? Role, 
 /// 用户直授权限命令结果
 /// </summary>
 public sealed record UserPermissionCommandResult(SysUserPermission UserPermission, SysPermission? Permission, SysTenantUser? TenantMember, DateTimeOffset Now);
-
-/// <summary>
-/// 用户数据范围命令结果
-/// </summary>
-public sealed record UserDataScopeCommandResult(SysUserDataScope DataScope, SysDepartment? Department, SysTenantUser? TenantMember);
 
 /// <summary>
 /// 用户部门归属命令结果

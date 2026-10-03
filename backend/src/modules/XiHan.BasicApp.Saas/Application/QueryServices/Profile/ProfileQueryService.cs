@@ -12,6 +12,11 @@ namespace XiHan.BasicApp.Saas.Application.QueryServices;
 /// <summary>
 /// 当前用户个人中心查询服务实现
 /// </summary>
+/// <remarks>
+/// 账号、安全记录、会话、三方绑定、偏好是当前用户的自有行（按 UserId 归属），带的是归属租户 / 产生时所在租户的戳，
+/// 跨租户成员切进别的租户后经全局租户过滤会看不到自己的行，这些一律忽略租户过滤、只按 UserId 取。
+/// 活跃度（统计快照 / 操作与访问日志）与登录日志按当前租户切分，沿用全局租户过滤。
+/// </remarks>
 public sealed class ProfileQueryService
     : IProfileQueryService
 {
@@ -89,7 +94,7 @@ public sealed class ProfileQueryService
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        var user = await _userRepository.GetByIdAsync(userId, cancellationToken)
+        var user = await _userRepository.GetByIdIgnoreTenantAsync(userId, cancellationToken)
             ?? throw new InvalidOperationException("当前用户不存在。");
         var security = await _userSecurityRepository.GetByUserIdAsync(user.BasicId, cancellationToken)
             ?? throw new InvalidOperationException("用户安全记录不存在。");
@@ -193,7 +198,7 @@ public sealed class ProfileQueryService
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        var accounts = await _externalLoginRepository.GetListAsync(item => item.UserId == userId, cancellationToken);
+        var accounts = await _externalLoginRepository.GetListByUserIdIgnoreTenantAsync(userId, cancellationToken);
         return [.. accounts
             .OrderBy(item => item.Provider)
             .Select(item => new ProfileExternalLoginDto
@@ -266,14 +271,11 @@ public sealed class ProfileQueryService
         cancellationToken.ThrowIfCancellationRequested();
 
         var now = DateTimeOffset.UtcNow;
-        var expireFallback = now.AddYears(100);
-        var sessions = await _userSessionRepository.GetListAsync(
-            session => session.UserId == userId &&
-                       session.Status != SessionStatus.Revoked &&
-                       SqlFunc.IsNull(session.ExpirationTime, expireFallback) > now,
-            cancellationToken);
+        var sessions = await _userSessionRepository.GetNotRevokedByUserIgnoreTenantAsync(userId, cancellationToken);
 
+        // 只列自己的设备（模仿会话行的 UserId 是被模仿者，由发起人自己的列表排除），过期的不列
         return [.. sessions
+            .Where(session => session.UserId == userId && (session.ExpirationTime is null || session.ExpirationTime > now))
             .OrderByDescending(session => string.Equals(session.UserSessionId, currentSessionId, StringComparison.Ordinal))
             .ThenByDescending(session => session.LastActivityTime)
             .Select(session => new ProfileSessionDto

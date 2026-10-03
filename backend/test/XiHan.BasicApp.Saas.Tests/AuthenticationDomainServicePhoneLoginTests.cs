@@ -38,7 +38,7 @@ public sealed class AuthenticationDomainServicePhoneLoginTests
     public async Task AuthenticatePhoneLoginAsync_WithUnregisteredPhone_ShouldFailWithInvalidCredentials()
     {
         _userRepository
-            .Setup(repo => repo.GetByPhoneAsync("+8613800138000", It.IsAny<CancellationToken>()))
+            .Setup(repo => repo.GetByPhoneGloballyAsync("+8613800138000", It.IsAny<CancellationToken>()))
             .ReturnsAsync((SysUser?)null);
 
         var result = await _service.AuthenticatePhoneLoginAsync("+8613800138000", tenantId: null, DateTimeOffset.UtcNow);
@@ -58,7 +58,7 @@ public sealed class AuthenticationDomainServicePhoneLoginTests
     {
         var user = CreateUser(basicId: 7L, status: EnableStatus.Disabled);
         _userRepository
-            .Setup(repo => repo.GetByPhoneAsync("+8613800138000", It.IsAny<CancellationToken>()))
+            .Setup(repo => repo.GetByPhoneGloballyAsync("+8613800138000", It.IsAny<CancellationToken>()))
             .ReturnsAsync(user);
         _userSecurityRepository
             .Setup(repo => repo.GetByUserIdAsync(7L, It.IsAny<CancellationToken>()))
@@ -78,7 +78,7 @@ public sealed class AuthenticationDomainServicePhoneLoginTests
     {
         var user = CreateUser(basicId: 9L, status: EnableStatus.Enabled);
         _userRepository
-            .Setup(repo => repo.GetByPhoneAsync("+8613800138000", It.IsAny<CancellationToken>()))
+            .Setup(repo => repo.GetByPhoneGloballyAsync("+8613800138000", It.IsAny<CancellationToken>()))
             .ReturnsAsync(user);
         _userSecurityRepository
             .Setup(repo => repo.GetByUserIdAsync(9L, It.IsAny<CancellationToken>()))
@@ -102,7 +102,7 @@ public sealed class AuthenticationDomainServicePhoneLoginTests
             () => _service.AuthenticatePhoneLoginAsync(phone, tenantId: null, DateTimeOffset.UtcNow));
 
         _userRepository.Verify(
-            repo => repo.GetByPhoneAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            repo => repo.GetByPhoneGloballyAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 

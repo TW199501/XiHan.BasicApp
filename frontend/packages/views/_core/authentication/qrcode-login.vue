@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { onMounted, ref, watch } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useTheme } from '~/hooks'
 import { Icon } from '~/iconify'
@@ -9,6 +9,9 @@ defineOptions({ name: 'QrCodeLoginPage' })
 const { isDark } = useTheme()
 const { t } = useI18n()
 const canvasRef = ref<HTMLCanvasElement | null>(null)
+
+/** 码点恒是深色：码底是白的，暗色下换成浅码点等于把码抹掉，扫码器也只认深码点压浅底 */
+const MODULE_COLOR = '#1a1a2e'
 
 function drawQrPlaceholder(canvas: HTMLCanvasElement) {
   const ctx = canvas.getContext('2d')
@@ -28,7 +31,7 @@ function drawQrPlaceholder(canvas: HTMLCanvasElement) {
   context.fillStyle = '#ffffff'
   context.fillRect(0, 0, size, size)
 
-  context.fillStyle = isDark.value ? '#e2e8f0' : '#1a1a2e'
+  context.fillStyle = MODULE_COLOR
 
   const rng = (seed: number) => {
     let s = seed
@@ -51,11 +54,11 @@ function drawQrPlaceholder(canvas: HTMLCanvasElement) {
   }
 
   function drawFinderPattern(x: number, y: number) {
-    context.fillStyle = isDark.value ? '#e2e8f0' : '#1a1a2e'
+    context.fillStyle = MODULE_COLOR
     context.fillRect(x, y, 7 * cellSize, 7 * cellSize)
     context.fillStyle = '#ffffff'
     context.fillRect(x + cellSize, y + cellSize, 5 * cellSize, 5 * cellSize)
-    context.fillStyle = isDark.value ? '#e2e8f0' : '#1a1a2e'
+    context.fillStyle = MODULE_COLOR
     context.fillRect(x + 2 * cellSize, y + 2 * cellSize, 3 * cellSize, 3 * cellSize)
   }
 
@@ -68,18 +71,13 @@ onMounted(() => {
   if (canvasRef.value)
     drawQrPlaceholder(canvasRef.value)
 })
-
-watch(isDark, () => {
-  if (canvasRef.value)
-    drawQrPlaceholder(canvasRef.value)
-})
 </script>
 
 <template>
   <div class="py-1">
     <div class="mb-8">
       <p
-        class="mt-3 text-[15px] leading-7"
+        class="mt-3 auth-body"
         :class="isDark ? 'text-gray-300' : 'text-[hsl(var(--muted-foreground))]'"
       >
         {{ t('page.auth.qrcode_subtitle') }}
@@ -103,7 +101,7 @@ watch(isDark, () => {
       </div>
 
       <p
-        class="mt-5 text-center text-[15px]"
+        class="mt-5 text-center auth-helper"
         :class="isDark ? 'text-gray-400' : 'text-[hsl(var(--muted-foreground))]'"
       >
         {{ t('page.auth.qrcode_prompt') }}

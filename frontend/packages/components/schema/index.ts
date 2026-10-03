@@ -1,3 +1,4 @@
+export { actionConfirmText, deleteConfirmText, statusConfirmText } from './confirm-text'
 export { formatFieldText, renderFieldCell } from './renderer'
 export { default as SchemaActionPanel } from './SchemaActionPanel.vue'
 export { default as SchemaImportDialog } from './SchemaImportDialog.vue'
@@ -27,15 +28,13 @@ export type {
   SchemaActionScope,
   SchemaColumn,
   SchemaFieldDataType,
+  SchemaPageInstance,
   SchemaQueryParams,
   SchemaResource,
   SchemaSelectOption,
   SchemaSortRule,
   ViewSchema,
 } from './types'
-
-export { useFieldSecurity } from './useFieldSecurity'
-export type { FieldSecurityRule, UseFieldSecurity } from './useFieldSecurity'
 
 export { useSchemaDictionaries } from './useSchemaDictionaries'
 export type { UseSchemaDictionaries } from './useSchemaDictionaries'

@@ -35,9 +35,11 @@ public sealed class CodeGenEngineOrchestrationTests
     private readonly Mock<ICodeGenTemplateRepository> _templateRepository = new();
     private readonly Mock<ITemplateRendererResolver> _rendererResolver = new();
     private readonly Mock<IEnumTypeCatalog> _enumTypeCatalog = new();
+    private readonly Mock<IEntityMetadataCatalog> _entityCatalog = new();
     private readonly Mock<IGeneratedArtifactPackager> _packager = new();
     private readonly Mock<IGeneratedArtifactWriter> _artifactWriter = new();
     private readonly Mock<IPermissionRepository> _permissionRepository = new();
+    private readonly Mock<IMenuRepository> _menuRepository = new();
     private readonly RecordingRenderer _renderer = new();
 
     /// <summary>
@@ -75,9 +77,11 @@ public sealed class CodeGenEngineOrchestrationTests
             _rendererResolver.Object,
             new DefaultTypeMappingProvider(),
             _enumTypeCatalog.Object,
+            _entityCatalog.Object,
             _packager.Object,
             _artifactWriter.Object,
             _permissionRepository.Object,
+            _menuRepository.Object,
             NullLogger<CodeGenerationEngine>.Instance);
     }
 
@@ -88,7 +92,6 @@ public sealed class CodeGenEngineOrchestrationTests
     /// <param name="templateType">模板类型</param>
     /// <param name="scope">生成范围</param>
     /// <param name="enabledActions">包含操作</param>
-    /// <param name="genPath">生成路径</param>
     /// <param name="treeParentColumn">树表父级列</param>
     /// <param name="treeNameColumn">树表显示名列</param>
     /// <param name="masterTableId">主表主键</param>
@@ -99,7 +102,6 @@ public sealed class CodeGenEngineOrchestrationTests
         TemplateType templateType = TemplateType.Single,
         GenerationScope scope = GenerationScope.All,
         string? enabledActions = null,
-        string? genPath = null,
         string? treeParentColumn = null,
         string? treeNameColumn = null,
         long? masterTableId = null,
@@ -120,7 +122,6 @@ public sealed class CodeGenEngineOrchestrationTests
                 TemplateType = templateType,
                 GenerationScope = scope,
                 EnabledActions = enabledActions,
-                GenPath = genPath,
                 TreeParentColumn = treeParentColumn,
                 TreeNameColumn = treeNameColumn,
                 MasterTableId = masterTableId,
@@ -150,7 +151,10 @@ public sealed class CodeGenEngineOrchestrationTests
         bool isPrimaryKey = false,
         bool isNullable = false,
         DictSelectorType? dictSelectorType = null,
-        string? enumTypeName = null)
+        string? enumTypeName = null,
+        string? dictCode = null,
+        long? relationTableId = null,
+        string? relationLabelColumn = null)
     {
         return new SysCodeGenTableColumn
         {
@@ -163,7 +167,10 @@ public sealed class CodeGenEngineOrchestrationTests
             IsPrimaryKey = isPrimaryKey,
             IsNullable = isNullable,
             DictSelectorType = dictSelectorType,
-            EnumTypeName = enumTypeName
+            EnumTypeName = enumTypeName,
+            DictCode = dictCode,
+            RelationTableId = relationTableId,
+            RelationLabelColumn = relationLabelColumn
         };
     }
 
@@ -296,8 +303,8 @@ public sealed class CodeGenEngineOrchestrationTests
                 "README.md",
                 "SysProductPermissionDefinitions.cs",
                 "SysProductPageRegistry.snippet.txt",
-                "SysProductPermissionSeeder.cs",
-                "SysProductMenuSeeder.cs"
+                "SysProductPermissionCatalog.cs",
+                "SysProductMenuPages.cs"
             ],
             secondOrder);
     }
@@ -522,17 +529,19 @@ public sealed class CodeGenEngineOrchestrationTests
     }
 
     /// <summary>
-    /// 包含操作未配置时归一化为写操作全集，二阶产物随之给出全部权限码。
+    /// 包含操作未配置时归一化为缺省集（增删改与导出、导入；状态切换与打印须显式勾选），二阶产物随之给出对应权限码。
     /// </summary>
     /// <param name="enabledActions">表配置的包含操作</param>
-    /// <param name="expectedActions">期望生效的写操作</param>
+    /// <param name="expectedActions">期望生效的操作</param>
     [Theory]
-    [InlineData(null, "create,update,delete")]
-    [InlineData("", "create,update,delete")]
-    [InlineData("   ", "create,update,delete")]
+    [InlineData(null, "create,update,delete,export,import")]
+    [InlineData("", "create,update,delete,export,import")]
+    [InlineData("   ", "create,update,delete,export,import")]
     [InlineData("create", "create")]
     [InlineData("delete,create", "create,delete")]
     [InlineData("CREATE, Update ", "create,update")]
+    [InlineData("import,export,create", "create,export,import")]
+    [InlineData("print,create", "create,print")]
     [InlineData("approve", "")]
     public async Task PreviewAsync_EnabledActionsShouldBeNormalizedIntoContext(string? enabledActions, string expectedActions)
     {
@@ -543,6 +552,23 @@ public sealed class CodeGenEngineOrchestrationTests
 
         var expected = expectedActions.Split(',', StringSplitOptions.RemoveEmptyEntries);
         Assert.Equal(expected, _renderer.LastContext!.EnabledActions);
+    }
+
+    /// <summary>
+    /// 只勾导入不勾新增时生成失败：导入逐行调新增接口，否则会产出指向不存在接口的导入按钮。
+    /// 存量配置可能早于保存侧校验写入，生成侧必须再拦一次。
+    /// </summary>
+    [Fact]
+    public async Task PreviewAsync_ImportWithoutCreateShouldFail()
+    {
+        GivenTable(Table(enabledActions: "update,import"));
+        GivenTemplates(Template());
+
+        var result = await CreateEngine().PreviewAsync(new GenerationRequest { TableId = TableId });
+
+        Assert.False(result.Success);
+        Assert.Contains("导入", result.Message, StringComparison.Ordinal);
+        Assert.Contains("新增", result.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -559,6 +585,24 @@ public sealed class CodeGenEngineOrchestrationTests
         var permissionCodes = result.Artifacts.Single(artifact => artifact.FileName == "SysProductPermissionCodes.cs");
         Assert.Contains("sys_product:delete", permissionCodes.Content, StringComparison.Ordinal);
         Assert.DoesNotContain("sys_product:create", permissionCodes.Content, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 模块名不合规（中文、空格）推导出的页面码过不了前端权限码门禁，按钮码会被静默跳过检查，
+    /// 必须在建模时失败，不能照常产出。
+    /// </summary>
+    [Fact]
+    public async Task PreviewAsync_InvalidModuleNameShouldFailOnPageCode()
+    {
+        var table = Table();
+        table.ModuleName = "产品 目录";
+        GivenTable(table);
+        GivenTemplates(Template());
+
+        var result = await CreateEngine().PreviewAsync(new GenerationRequest { TableId = TableId });
+
+        Assert.False(result.Success);
+        Assert.Contains("页面码", result.Message!, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -845,29 +889,446 @@ public sealed class CodeGenEngineOrchestrationTests
     }
 
     /// <summary>
-    /// 字典选择器列当前没有选项通道，只告警不阻断，也不会被当成枚举列处理。
+    /// 字典选择器列带上字典编码进上下文，不会被当成枚举列处理。
     /// </summary>
     [Fact]
-    public async Task PreviewAsync_DictSelectorColumnShouldNotBlockGeneration()
+    public async Task PreviewAsync_DictSelectorColumnShouldCarryDictCode()
     {
         GivenTable(Table());
-        GivenColumns(TableId, Column("status", dictSelectorType: DictSelectorType.DictSelector));
+        GivenColumns(TableId, Column("level", dictSelectorType: DictSelectorType.DictSelector, dictCode: "demo_customer_level"));
         GivenTemplates(Template());
 
         var result = await CreateEngine().PreviewAsync(new GenerationRequest { TableId = TableId });
 
         Assert.True(result.Success);
+        Assert.Equal("demo_customer_level", _renderer.LastContext!.Columns[0].DictCode);
         Assert.Null(_renderer.LastContext!.Columns[0].EnumTypeShortName);
     }
 
     /// <summary>
-    /// 上下文的扩展选项必须带上结构字段，供模板与二阶产物读取。
+    /// 字典选择器没填字典编码、或列不是文本（字典项按编码存）时生成失败，并指明是哪一列。
+    /// </summary>
+    /// <param name="csharpType">列的 C# 类型</param>
+    /// <param name="dictCode">字典编码</param>
+    /// <param name="expected">错误信息里应出现的片段</param>
+    [Theory]
+    [InlineData("string", null, "没填字典编码")]
+    [InlineData("string", "  ", "没填字典编码")]
+    [InlineData("int", "demo_customer_level", "列须为 string")]
+    [InlineData("long?", "demo_customer_level", "列须为 string")]
+    public async Task PreviewAsync_InvalidDictSelectorShouldFail(string csharpType, string? dictCode, string expected)
+    {
+        GivenTable(Table());
+        GivenColumns(TableId, Column("level", csharpType: csharpType, dictSelectorType: DictSelectorType.DictSelector, dictCode: dictCode));
+        GivenTemplates(Template());
+
+        var result = await CreateEngine().PreviewAsync(new GenerationRequest { TableId = TableId });
+
+        Assert.False(result.Success);
+        Assert.Contains("level", result.Message!, StringComparison.Ordinal);
+        Assert.Contains(expected, result.Message!, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 让枚举目录认得 EnableStatus。
+    /// </summary>
+    private void GivenEnableStatusEnum()
+    {
+        var facts = new EnumTypeFacts("EnableStatus", "XiHan.BasicApp.Saas.Domain.Enums", "Disabled");
+        _enumTypeCatalog.Setup(catalog => catalog.TryResolve("EnableStatus", out facts)).Returns(true);
+    }
+
+    /// <summary>
+    /// 构造一列 EnableStatus 枚举列。
+    /// </summary>
+    private static SysCodeGenTableColumn EnableStatusColumn(string name, bool isList = true)
+    {
+        var column = Column(name, csharpType: "EnableStatus", dictSelectorType: DictSelectorType.EnumSelector, enumTypeName: "EnableStatus");
+        column.IsList = isList;
+        return column;
+    }
+
+    /// <summary>
+    /// 状态切换：有多列 EnableStatus 时取名为 Status 的那列。
+    /// </summary>
+    [Fact]
+    public async Task PreviewAsync_StatusActionShouldPreferColumnNamedStatus()
+    {
+        GivenEnableStatusEnum();
+        GivenTable(Table(enabledActions: "create,update,status"));
+        GivenColumns(TableId, EnableStatusColumn("AuditStatus"), EnableStatusColumn("Status"));
+        GivenTemplates(Template());
+
+        var result = await CreateEngine().PreviewAsync(new GenerationRequest { TableId = TableId });
+
+        Assert.True(result.Success, result.Message);
+        Assert.Equal(["create", "update", "status"], _renderer.LastContext!.EnabledActions);
+        Assert.Equal("Status", _renderer.LastContext.StatusColumn!.ColumnName, StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// 状态切换：只有一列 EnableStatus 时不论叫什么都用它；没勾状态切换时不找状态列。
+    /// </summary>
+    [Fact]
+    public async Task PreviewAsync_StatusActionShouldUseTheOnlyEnableStatusColumn()
+    {
+        GivenEnableStatusEnum();
+        GivenTable(Table(enabledActions: "status"));
+        GivenColumns(TableId, EnableStatusColumn("State"));
+        GivenTemplates(Template());
+
+        var result = await CreateEngine().PreviewAsync(new GenerationRequest { TableId = TableId });
+
+        Assert.True(result.Success, result.Message);
+        Assert.Equal("State", _renderer.LastContext!.StatusColumn!.ColumnName, StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// 状态切换找不到、确定不了或状态列不进列表时生成失败，不猜。
+    /// </summary>
+    /// <param name="scenario">none：没有 EnableStatus 列；many：多列且都不叫 Status；hidden：状态列没进列表</param>
+    /// <param name="expected">错误信息片段</param>
+    [Theory]
+    [InlineData("none", "没有 EnableStatus 类型的状态列")]
+    [InlineData("many", "有多个 EnableStatus 列")]
+    [InlineData("hidden", "没有勾选「列表」")]
+    public async Task PreviewAsync_StatusActionWithoutUsableColumnShouldFail(string scenario, string expected)
+    {
+        GivenEnableStatusEnum();
+        GivenTable(Table(enabledActions: "create,status"));
+        var columns = scenario switch
+        {
+            "none" => new[] { Column("name") },
+            "many" => [EnableStatusColumn("State"), EnableStatusColumn("AuditState")],
+            _ => [EnableStatusColumn("Status", isList: false)]
+        };
+        GivenColumns(TableId, columns);
+        GivenTemplates(Template());
+
+        var result = await CreateEngine().PreviewAsync(new GenerationRequest { TableId = TableId });
+
+        Assert.False(result.Success);
+        Assert.Contains(expected, result.Message!, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 没勾状态切换时即使没有状态列也照常生成。
+    /// </summary>
+    [Fact]
+    public async Task PreviewAsync_WithoutStatusActionShouldNotRequireStatusColumn()
+    {
+        GivenTable(Table(enabledActions: "create,print"));
+        GivenColumns(TableId, Column("name"));
+        GivenTemplates(Template());
+
+        var result = await CreateEngine().PreviewAsync(new GenerationRequest { TableId = TableId });
+
+        Assert.True(result.Success, result.Message);
+        Assert.Null(_renderer.LastContext!.StatusColumn);
+    }
+
+    /// <summary>
+    /// 布尔与二进制列勾了唯一时生成失败：它们做不了唯一校验。
+    /// </summary>
+    /// <param name="csharpType">列的 C# 类型</param>
+    [Theory]
+    [InlineData("bool")]
+    [InlineData("byte[]")]
+    public async Task PreviewAsync_UniqueOnUnsupportedTypeShouldFail(string csharpType)
+    {
+        var column = Column("flag", csharpType: csharpType);
+        column.IsUnique = true;
+        GivenTable(Table());
+        GivenColumns(TableId, column);
+        GivenTemplates(Template());
+
+        var result = await CreateEngine().PreviewAsync(new GenerationRequest { TableId = TableId });
+
+        Assert.False(result.Success);
+        Assert.Contains("做不了唯一校验", result.Message!, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 挂上一个菜单（父菜单候选）。
+    /// </summary>
+    private void GivenMenu(long id, string code, MenuType menuType = MenuType.Directory, long tenantId = 0, string name = "开发中心")
+    {
+        var menu = CodeGenerationTestHelper.WithId(new SysMenu { MenuCode = code, MenuName = name, MenuType = menuType, TenantId = tenantId }, id);
+        _menuRepository.Setup(repository => repository.GetByIdAsync(id, It.IsAny<CancellationToken>())).ReturnsAsync(menu);
+    }
+
+    /// <summary>
+    /// 表配置选了父菜单：生成时解析成它的菜单码（主键各库不同，菜单登记按菜单码挂靠）。
+    /// </summary>
+    [Fact]
+    public async Task PreviewAsync_ParentMenuShouldResolveToItsMenuCode()
+    {
+        GivenMenu(801, "develop");
+        var table = Table();
+        table.ParentMenuId = 801;
+        GivenTable(table);
+        GivenTemplates(Template());
+
+        var result = await CreateEngine().PreviewAsync(new GenerationRequest { TableId = TableId });
+
+        Assert.True(result.Success, result.Message);
+        Assert.Equal("develop", _renderer.LastContext!.ParentMenuCode);
+        var menuPages = result.Artifacts.Single(artifact => artifact.FileName == "SysProductMenuPages.cs").Content;
+        Assert.Contains("ParentCode: \"develop\",", menuPages, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 没选父菜单即顶级菜单。
+    /// </summary>
+    [Fact]
+    public async Task PreviewAsync_WithoutParentMenuShouldBeTopLevel()
+    {
+        GivenTable(Table());
+        GivenTemplates(Template());
+
+        var result = await CreateEngine().PreviewAsync(new GenerationRequest { TableId = TableId });
+
+        Assert.True(result.Success, result.Message);
+        Assert.Null(_renderer.LastContext!.ParentMenuCode);
+        Assert.Contains("ParentCode: null,", result.Artifacts.Single(artifact => artifact.FileName == "SysProductMenuPages.cs").Content, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 父菜单不存在、是租户菜单、不是目录或没有菜单码时生成失败，不猜挂到哪。
+    /// </summary>
+    /// <param name="scenario">missing / tenant / page / nocode</param>
+    /// <param name="expected">错误信息片段</param>
+    [Theory]
+    [InlineData("missing", "不存在或不是平台菜单")]
+    [InlineData("tenant", "不存在或不是平台菜单")]
+    [InlineData("page", "不是目录")]
+    [InlineData("nocode", "没有菜单码")]
+    public async Task PreviewAsync_UnusableParentMenuShouldFail(string scenario, string expected)
+    {
+        switch (scenario)
+        {
+            case "tenant":
+                GivenMenu(801, "develop", tenantId: 7);
+                break;
+            case "page":
+                GivenMenu(801, "develop.page", MenuType.Menu);
+                break;
+            case "nocode":
+                GivenMenu(801, "");
+                break;
+        }
+
+        var table = Table();
+        table.ParentMenuId = 801;
+        GivenTable(table);
+        GivenTemplates(Template());
+
+        var result = await CreateEngine().PreviewAsync(new GenerationRequest { TableId = TableId });
+
+        Assert.False(result.Success);
+        Assert.Contains(expected, result.Message!, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 让实体目录认得某张表对应的实体类型。
+    /// </summary>
+    /// <param name="tableName">表名</param>
+    /// <param name="entityType">实体类型</param>
+    private void GivenEntity(string tableName, Type entityType)
+    {
+        _entityCatalog.Setup(catalog => catalog.TryGetEntityType(tableName, out entityType)).Returns(true);
+    }
+
+    /// <summary>
+    /// 实体模板、实体手动模板与 DTO 模板各一份。
+    /// </summary>
+    private void GivenEntityAndDtoTemplates()
+    {
+        GivenTemplates(
+            Template(),
+            Template(code: "backend.entity.manual", name: "后端实体（自定义）", writeMode: ArtifactWriteMode.WriteOnce),
+            Template(code: "backend.dtos", name: "后端DTO"));
+    }
+
+    /// <summary>
+    /// 表由手写实体建出（实体建表的常规路径）：沿用那个实体，不生成实体与实体手动文件，其余照常，
+    /// 生成的代码按实体所在命名空间引用它。
+    /// </summary>
+    [Fact]
+    public async Task PreviewAsync_HandWrittenEntityShouldBeReusedInsteadOfGenerated()
+    {
+        GivenEntity("sys_product", typeof(Fixtures.HandWritten.SysProduct));
+        GivenTable(Table());
+        GivenEntityAndDtoTemplates();
+
+        var result = await CreateEngine().PreviewAsync(new GenerationRequest { TableId = TableId });
+
+        Assert.True(result.Success, result.Message);
+        var codes = result.Artifacts.Select(artifact => artifact.TemplateCode).ToList();
+        Assert.Contains("backend.dtos", codes);
+        Assert.DoesNotContain("backend.entity", codes);
+        Assert.DoesNotContain("backend.entity.manual", codes);
+        Assert.Equal("XiHan.BasicApp.CodeGeneration.Tests.Fixtures.HandWritten", _renderer.LastContext!.ExistingEntityNamespace);
+    }
+
+    /// <summary>
+    /// 生成器产出的实体（带生成器标记）不算已有实体：照常重新生成，外部库的表（没有实体）同样照常生成。
+    /// </summary>
+    /// <param name="generated">true：目录里是生成的实体；false：目录里没有实体</param>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task PreviewAsync_GeneratedOrMissingEntityShouldStillBeGenerated(bool generated)
+    {
+        if (generated)
+        {
+            GivenEntity("sys_product", typeof(Fixtures.Generated.SysProduct));
+        }
+
+        GivenTable(Table());
+        GivenEntityAndDtoTemplates();
+
+        var result = await CreateEngine().PreviewAsync(new GenerationRequest { TableId = TableId });
+
+        Assert.True(result.Success, result.Message);
+        var codes = result.Artifacts.Select(artifact => artifact.TemplateCode).ToList();
+        Assert.Contains("backend.entity", codes);
+        Assert.Contains("backend.entity.manual", codes);
+        Assert.Null(_renderer.LastContext!.ExistingEntityNamespace);
+    }
+
+    /// <summary>
+    /// 沿用已有实体时类名须与实体一致，否则生成的代码引用不到它，直接失败并给出正确类名。
+    /// </summary>
+    [Fact]
+    public async Task PreviewAsync_HandWrittenEntityWithDifferentClassNameShouldFail()
+    {
+        GivenEntity("sys_product", typeof(Fixtures.HandWritten.SysProduct));
+        var table = Table();
+        table.ClassName = "Product";
+        GivenTable(table);
+        GivenEntityAndDtoTemplates();
+
+        var result = await CreateEngine().PreviewAsync(new GenerationRequest { TableId = TableId });
+
+        Assert.False(result.Success);
+        Assert.Contains("请把类名改成 SysProduct", result.Message!, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 关联目标表已有实体时，用它的真实类型（不按目标表配置的命名空间拼）。
+    /// </summary>
+    [Fact]
+    public async Task PreviewAsync_RelationToExistingEntityShouldUseItsRealType()
+    {
+        GivenEntity("sys_category", typeof(Fixtures.HandWritten.SysCategory));
+        GivenTable(Table());
+        GivenCategoryTable(isTree: false);
+        GivenColumns(TableId, Column("category_id", csharpType: "long", dictSelectorType: DictSelectorType.TableSelector, relationTableId: 2, relationLabelColumn: "category_name"));
+        GivenTemplates(Template());
+
+        var result = await CreateEngine().PreviewAsync(new GenerationRequest { TableId = TableId });
+
+        Assert.True(result.Success, result.Message);
+        Assert.Equal(
+            "XiHan.BasicApp.CodeGeneration.Tests.Fixtures.HandWritten.SysCategory",
+            _renderer.LastContext!.Columns[0].Relation!.EntityTypeQualified);
+    }
+
+    /// <summary>
+    /// 关联的目标表（产品分类，主键 2）：树表时以 parent_id 为父级、category_name 为名称列。
+    /// </summary>
+    private void GivenCategoryTable(bool isTree)
+    {
+        var category = Table(
+            id: 2,
+            templateType: isTree ? TemplateType.Tree : TemplateType.Single,
+            treeParentColumn: isTree ? "parent_id" : null,
+            treeNameColumn: isTree ? "category_name" : null);
+        category.TableName = "sys_category";
+        category.TableComment = "产品分类";
+        category.ClassName = "SysCategory";
+        GivenTable(category);
+        GivenColumns(2, Column("category_name"), Column("parent_id", csharpType: "long?"), Column("sort", csharpType: "int"));
+    }
+
+    /// <summary>
+    /// 关联表：解析出目标实体的限定类型名与显示列，本表按它生成选项接口。
+    /// </summary>
+    [Fact]
+    public async Task PreviewAsync_TableRelationShouldResolveTarget()
+    {
+        GivenTable(Table());
+        GivenCategoryTable(isTree: false);
+        GivenColumns(TableId, Column("category_id", csharpType: "long", dictSelectorType: DictSelectorType.TableSelector, relationTableId: 2, relationLabelColumn: "category_name"));
+        GivenTemplates(Template());
+
+        var result = await CreateEngine().PreviewAsync(new GenerationRequest { TableId = TableId });
+
+        Assert.True(result.Success, result.Message);
+        var relation = _renderer.LastContext!.Columns[0].Relation!;
+        Assert.Equal("XiHan.BasicApp.Catalog.Domain.Entities.SysCategory", relation.EntityTypeQualified);
+        Assert.Equal("category_name", relation.LabelProperty);
+        Assert.False(relation.IsTree);
+        Assert.Null(relation.ParentProperty);
+    }
+
+    /// <summary>
+    /// 关联树：目标须为树表，显示列缺省取其名称列，父级取其父级列。
+    /// </summary>
+    [Fact]
+    public async Task PreviewAsync_TreeRelationShouldDefaultLabelToTreeName()
+    {
+        GivenTable(Table());
+        GivenCategoryTable(isTree: true);
+        GivenColumns(TableId, Column("category_id", csharpType: "long?", dictSelectorType: DictSelectorType.TreeSelector, relationTableId: 2));
+        GivenTemplates(Template());
+
+        var result = await CreateEngine().PreviewAsync(new GenerationRequest { TableId = TableId });
+
+        Assert.True(result.Success, result.Message);
+        var relation = _renderer.LastContext!.Columns[0].Relation!;
+        Assert.True(relation.IsTree);
+        Assert.Equal("category_name", relation.LabelProperty);
+        Assert.Equal("parent_id", relation.ParentProperty);
+    }
+
+    /// <summary>
+    /// 关联配置对不上时生成失败，并指明哪一列、错在哪。
+    /// </summary>
+    /// <param name="csharpType">本列 C# 类型</param>
+    /// <param name="selector">关联表 / 关联树</param>
+    /// <param name="relationTableId">关联的表配置主键</param>
+    /// <param name="labelColumn">显示列</param>
+    /// <param name="expected">错误信息里应出现的片段</param>
+    [Theory]
+    [InlineData("string", DictSelectorType.TableSelector, 2L, "category_name", "列须为 long")]
+    [InlineData("long", DictSelectorType.TableSelector, 99L, "category_name", "不存在")]
+    [InlineData("long", DictSelectorType.TableSelector, 2L, null, "没选显示列")]
+    [InlineData("long", DictSelectorType.TableSelector, 2L, "no_such", "不在关联的表")]
+    [InlineData("long", DictSelectorType.TableSelector, 2L, "sort", "显示列须为 string")]
+    [InlineData("long", DictSelectorType.TreeSelector, 2L, "category_name", "不是树表")]
+    public async Task PreviewAsync_InvalidRelationShouldFail(string csharpType, DictSelectorType selector, long relationTableId, string? labelColumn, string expected)
+    {
+        GivenTable(Table());
+        GivenCategoryTable(isTree: false);
+        GivenColumns(TableId, Column("category_id", csharpType: csharpType, dictSelectorType: selector, relationTableId: relationTableId, relationLabelColumn: labelColumn));
+        GivenTemplates(Template());
+
+        var result = await CreateEngine().PreviewAsync(new GenerationRequest { TableId = TableId });
+
+        Assert.False(result.Success);
+        Assert.Contains("category_id", result.Message!, StringComparison.Ordinal);
+        Assert.Contains(expected, result.Message!, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 上下文的扩展选项必须带上结构字段，供模板与二阶产物读取（父菜单另行解析成菜单码，见父菜单用例）。
     /// </summary>
     [Fact]
     public async Task PreviewAsync_ContextOptionsShouldCarryStructuralConfiguration()
     {
         var table = Table(primaryKeyColumn: "Basic_Id", masterTableId: 2, masterForeignKey: "order_id");
-        table.ParentMenuId = 801;
         GivenTable(table);
         GivenTemplates(Template());
 
@@ -877,7 +1338,7 @@ public sealed class CodeGenEngineOrchestrationTests
         Assert.Equal("Basic_Id", options["PrimaryKeyColumn"]);
         Assert.Equal("2", options["MasterTableId"]);
         Assert.Equal("order_id", options["MasterForeignKey"]);
-        Assert.Equal("801", options["ParentMenuId"]);
+        Assert.False(options.ContainsKey("ParentMenuId"));
     }
 
     /// <summary>
@@ -934,7 +1395,7 @@ public sealed class CodeGenEngineOrchestrationTests
             packager => packager.PackAsync(It.IsAny<IEnumerable<GeneratedArtifact>>(), It.IsAny<CancellationToken>()),
             Times.Never);
         _artifactWriter.Verify(
-            writer => writer.WriteAsync(It.IsAny<IReadOnlyList<GeneratedArtifact>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()),
+            writer => writer.WriteToProjectAsync(It.IsAny<IReadOnlyList<GeneratedArtifact>>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -957,48 +1418,72 @@ public sealed class CodeGenEngineOrchestrationTests
     }
 
     /// <summary>
-    /// 落盘方式生成时按表配置的生成路径写入，并回填写入数与跳过清单。
+    /// 生成到项目时按表配置的命名空间找后端项目写入，并回填写入数、跳过清单与写入位置。
     /// </summary>
     [Fact]
-    public async Task GenerateAsync_CustomPathShouldWriteToConfiguredGenPath()
+    public async Task GenerateAsync_ProjectShouldWriteIntoNamespaceProject()
     {
-        GivenTable(Table(genPath: "D:/out"));
+        GivenTable(Table());
         GivenTemplates(Template());
         _artifactWriter
-            .Setup(writer => writer.WriteAsync(It.IsAny<IReadOnlyList<GeneratedArtifact>>(), "D:/out", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(GeneratedArtifactWriteResult.Ok(5, 1, ["Domain/Entities/SysProduct.cs"]));
+            .Setup(writer => writer.WriteToProjectAsync(It.IsAny<IReadOnlyList<GeneratedArtifact>>(), "XiHan.BasicApp.Catalog", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(GeneratedArtifactWriteResult.Ok(5, 1, ["Domain/Entities/SysProduct.cs"], ["E:/repo/backend/src/modules/XiHan.BasicApp.Catalog"]));
 
         var result = await CreateEngine().GenerateAsync(new GenerationRequest
         {
             TableId = TableId,
-            GenType = GenType.CustomPath
+            GenType = GenType.Project
         });
 
-        Assert.True(result.Success);
+        Assert.True(result.Success, result.Message);
         Assert.Equal(5, result.WrittenCount);
         Assert.Equal(["Domain/Entities/SysProduct.cs"], result.SkippedPaths);
+        Assert.Equal(["E:/repo/backend/src/modules/XiHan.BasicApp.Catalog"], result.TargetRoots);
     }
 
     /// <summary>
-    /// 落盘被安全策略拒绝时整次生成返回失败，并原样带出拒绝原因。
+    /// 写入被拒时整次生成返回失败，并原样带出拒绝原因。
     /// </summary>
     [Fact]
-    public async Task GenerateAsync_CustomPathWriteFailureShouldFailWholeGeneration()
+    public async Task GenerateAsync_ProjectWriteFailureShouldFailWholeGeneration()
     {
-        GivenTable(Table(genPath: "D:/out"));
+        GivenTable(Table());
         GivenTemplates(Template());
         _artifactWriter
-            .Setup(writer => writer.WriteAsync(It.IsAny<IReadOnlyList<GeneratedArtifact>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(GeneratedArtifactWriteResult.Fail("生成路径不在白名单内：D:/out"));
+            .Setup(writer => writer.WriteToProjectAsync(It.IsAny<IReadOnlyList<GeneratedArtifact>>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(GeneratedArtifactWriteResult.Fail("找不到后端项目 XiHan.BasicApp.Catalog"));
 
         var result = await CreateEngine().GenerateAsync(new GenerationRequest
         {
             TableId = TableId,
-            GenType = GenType.CustomPath
+            GenType = GenType.Project
         });
 
         Assert.False(result.Success);
-        Assert.Contains("不在白名单内", result.Message!, StringComparison.Ordinal);
+        Assert.Contains("找不到后端项目", result.Message!, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 产物按模板分组标明归属：后端模板与接线产物归后端，前端模板归前端，分组不明的不标。
+    /// </summary>
+    [Fact]
+    public async Task PreviewAsync_ArtifactsShouldCarrySideFromTemplateGroup()
+    {
+        GivenTable(Table(enabledActions: "create"));
+        GivenTemplates(
+            Template(),
+            Template(code: "frontend.api", name: "前端接口", group: "frontend-crud", fileExtension: ".ts"),
+            Template(code: "misc.notes", name: "备注", group: "misc", fileExtension: ".md"));
+
+        var result = await CreateEngine().PreviewAsync(new GenerationRequest { TableId = TableId });
+
+        Assert.True(result.Success, result.Message);
+        Assert.Equal(ArtifactSide.Backend, result.Artifacts.Single(artifact => artifact.TemplateCode == "backend.entity").Side);
+        Assert.Equal(ArtifactSide.Frontend, result.Artifacts.Single(artifact => artifact.TemplateCode == "frontend.api").Side);
+        Assert.Null(result.Artifacts.Single(artifact => artifact.TemplateCode == "misc.notes").Side);
+        Assert.All(
+            result.Artifacts.Where(artifact => artifact.TemplateCode is not ("backend.entity" or "frontend.api" or "misc.notes")),
+            artifact => Assert.Equal(ArtifactSide.Backend, artifact.Side));
     }
 
     /// <summary>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type {
   ApiId,
+  NumericString,
   PageResult,
   PermissionListItemDto,
   TenantEditionCreateDto,
@@ -10,23 +11,26 @@ import type {
   TenantEditionUpdateDto,
 } from '@/api'
 import type { ListFieldSchema, PageSchema, SchemaActionPayload } from '~/components'
-import { XhButton, XhCheckbox, XhDrawerCloseTrigger, XhDrawerContent, XhDrawerRoot, XhDrawerTitle, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFormFieldGroup, XhFormRoot, XhSwitch, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
+import { XhButton, XhButtonIndicator, XhButtonLabel, XhDrawerCloseTrigger, XhDrawerContent, XhDrawerRoot, XhDrawerTitle, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFormFieldGroup, XhFormRoot, XhSwitch, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
 import { computed, h, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   createPageRequest,
   EnableStatus,
   permissionApi,
+  PermissionSide,
   querySortsFromSchema,
   tenantEditionApi,
   tenantEditionPermissionApi,
   ValidityStatus,
 } from '@/api'
 import { STATUS_OPTIONS } from '@/constants'
-import { SchemaPage, XEditModal, XInput, XNumberInput, XPermissionGrantPanel, XSelect } from '~/components'
+import { SchemaPage, XEditModal, XInput, XNumberInput, XPermissionTransfer, XSelect } from '~/components'
 import { dialog, toast } from '~/composables'
 import { useEnumOptions, usePermission } from '~/hooks'
-import { getOptionLabel } from '~/utils'
+import { Icon } from '~/iconify'
+import { getOptionLabel, randomString } from '~/utils'
+import { diffEditionGrants, isEmptyEditionGrantDiff, mergeMappedIntoCatalog, validEditionPermissionIds } from './edition-grants'
 
 defineOptions({ name: 'TenantEditionPage' })
 
@@ -83,7 +87,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     render: (row) => {
       const r = row as unknown as TenantEditionListItemDto
       if (r.isFree) {
-        return h(XhTagRoot, { variant: 'outline', tone: 'success' }, () => h(XhTagLabel, () => t('tenant.edition.free')))
+        return h(XhTagRoot, { variant: 'subtle', tone: 'success' }, () => h(XhTagLabel, () => t('tenant.edition.free')))
       }
       return h('span', r.price == null ? '-' : `¥ ${r.price}`)
     },
@@ -136,7 +140,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 7,
     render: (row) => {
       const r = row as unknown as TenantEditionListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: r.isFree ? 'success' : 'neutral' }, () => h(XhTagLabel, () => (r.isFree ? t('tenant.edition.yes') : t('tenant.edition.no'))))
+      return h(XhTagRoot, { variant: 'subtle', tone: r.isFree ? 'success' : 'neutral' }, () => h(XhTagLabel, () => (r.isFree ? t('tenant.edition.yes') : t('tenant.edition.no'))))
     },
   },
   {
@@ -152,7 +156,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     render: (row) => {
       const r = row as unknown as TenantEditionListItemDto
       return r.isDefault
-        ? h(XhTagRoot, { variant: 'outline', tone: 'warning' }, () => h(XhTagLabel, () => t('tenant.edition.default_tag')))
+        ? h(XhTagRoot, { variant: 'subtle', tone: 'warning' }, () => h(XhTagLabel, () => t('tenant.edition.default_tag')))
         : h('span', { style: 'opacity:.45' }, '-')
     },
   },
@@ -170,7 +174,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 9,
     render: (row) => {
       const r = row as unknown as TenantEditionListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: r.status === EnableStatus.Enabled ? 'success' : 'danger' }, () => h(XhTagLabel, () => getOptionLabel(statusOptions.value, r.status)))
+      return h(XhTagRoot, { variant: 'subtle', tone: r.status === EnableStatus.Enabled ? 'success' : 'danger' }, () => h(XhTagLabel, () => getOptionLabel(statusOptions.value, r.status)))
     },
   },
   { key: 'sort', title: t('tenant.edition.sort'), dataType: 'number', sortable: true, width: 80, order: 10 },
@@ -306,9 +310,19 @@ function normalizeNullable(value?: string | null) {
   return normalized || null
 }
 
+/** 回填表单：存储上限是 long，按字符串传输，数字输入框要数字 */
+function toNullableNumber(value?: NumericString | null) {
+  return value == null ? null : Number(value)
+}
+
 function handleAdd() {
   editionForm.value = createDefaultForm()
   modalVisible.value = true
+}
+
+/** 随机生成版本编码：解决「起名困难、图省事」；唯一性由后端唯一索引与前置校验兜底 */
+function generateEditionCode() {
+  editionForm.value.editionCode = randomString(8)
 }
 
 async function handleEdit(row: TenantEditionListItemDto) {
@@ -332,7 +346,7 @@ async function handleEdit(row: TenantEditionListItemDto) {
     remark: detail?.remark ?? null,
     sort: detail?.sort ?? row.sort,
     status: detail?.status ?? row.status,
-    storageLimit: detail?.storageLimit ?? row.storageLimit ?? null,
+    storageLimit: toNullableNumber(detail?.storageLimit ?? row.storageLimit),
     userLimit: detail?.userLimit ?? row.userLimit ?? null,
   }
   modalVisible.value = true
@@ -396,7 +410,7 @@ async function handleSubmit() {
     reloadList()
   }
   catch (e) {
-    toast.error((e as Error).message || t('tenant.edition.save_failed'))
+    toast.danger((e as Error).message || t('tenant.edition.save_failed'))
   }
   finally {
     submitLoading.value = false
@@ -421,7 +435,7 @@ function confirmToggleStatus(row: TenantEditionListItemDto, next: EnableStatus) 
         reloadList()
       }
       catch (e) {
-        toast.error((e as Error).message || t('tenant.edition.status_update_failed'))
+        toast.danger((e as Error).message || t('tenant.edition.status_update_failed'))
       }
     },
   })
@@ -441,111 +455,81 @@ function confirmSetDefault(row: TenantEditionListItemDto) {
         reloadList()
       }
       catch (e) {
-        toast.error((e as Error).message || t('tenant.edition.set_default_failed'))
+        toast.danger((e as Error).message || t('tenant.edition.set_default_failed'))
       }
     },
   })
 }
 
 // ── 版本权限抽屉 ────────────────────────────────────────────────
-const canGrantPermission = computed(() => hasPermission('tenant.edition.permission-grant'))
-const canRevokePermission = computed(() => hasPermission('tenant.edition.permission-revoke'))
-const canUpdateMapping = computed(() => hasPermission('tenant.edition.permission-update'))
+/** 授予、撤销、重新启用一项都没有时只能看；有其一就放开，提交时后端按实际出现的操作逐项校验 */
+const canEditPermission = computed(() =>
+  hasPermission('tenant.edition.permission-grant')
+  || hasPermission('tenant.edition.permission-revoke')
+  || hasPermission('tenant.edition.permission-update'),
+)
 
 const permDrawerVisible = ref(false)
 const permLoading = ref(false)
+/** 加载失败时穿梭框只读：拿不到现有映射就算不出差量，动了也存不对 */
 const permError = ref(false)
 const permEdition = ref<TenantEditionListItemDto | null>(null)
 const permList = ref<TenantEditionPermissionListItemDto[]>([])
-
 const permCatalog = ref<PermissionListItemDto[]>([])
-const permPanelRef = ref<{ reset: () => void } | null>(null)
-const permDraftGranted = ref<Set<ApiId>>(new Set())
-const permDraftStatus = ref<Map<ApiId, ValidityStatus>>(new Map())
-const permDirty = ref(false)
+/** 生效中的权限主键，即穿梭框右侧那一栏 */
+const permChecked = ref<ApiId[]>([])
+/** 条目为权限目录并上目录外的生效映射，否则一动穿梭框它们就被当成撤销 */
+const permItems = computed(() => mergeMappedIntoCatalog(permCatalog.value, permList.value))
+/** 停用的映射与未授予同在左栏，标出来：移到右栏即重新启用 */
+const permDisabledIds = computed(() => new Set(
+  permList.value.filter(item => item.status !== ValidityStatus.Valid).map(item => item.permissionId),
+))
 
-/** permissionId → 该版本的权限映射行（含停用态，停用后仍要能看到并启用回来） */
-const permByPermissionId = computed(() => {
-  const map = new Map<ApiId, TenantEditionPermissionListItemDto>()
-  for (const item of permList.value) {
-    map.set(item.permissionId, item)
-  }
-  return map
-})
+/**
+ * 脏态按差量算，不用回写事件置位的标志位：穿梭框挂载时会把规整后的值回写一次，
+ * 标志位会被这一次空回写点亮。比出来的脏态没有这个问题，保存后也会自动归位。
+ */
+const permDirty = computed(() => !isEmptyEditionGrantDiff(diffEditionGrants(permChecked.value, permList.value)))
 
-function openPermissionDrawer(row: TenantEditionListItemDto) {
-  permEdition.value = row
-  permList.value = []
-  permDrawerVisible.value = true
-  permPanelRef.value?.reset()
-  void loadPermissionList()
-  void loadPermCatalog()
-}
-
+/** 权限目录一次取全；平台侧权限进不了租户，套餐白名单里不列 */
 async function loadPermCatalog() {
   if (permCatalog.value.length > 0) {
     return
   }
-  try {
-    permCatalog.value = await permissionApi.catalog()
-  }
-  catch {
-    permCatalog.value = []
-  }
+  permCatalog.value = (await permissionApi.catalog()).filter(permission => permission.side !== PermissionSide.Platform)
 }
 
-async function loadPermissionList() {
-  if (!permEdition.value) {
-    return
-  }
-  permLoading.value = true
+async function openPermissionDrawer(row: TenantEditionListItemDto) {
+  permEdition.value = row
+  permList.value = []
+  permChecked.value = []
   permError.value = false
+  permDrawerVisible.value = true
+  permLoading.value = true
   try {
-    permList.value = await tenantEditionPermissionApi.list(permEdition.value.basicId)
-    derivePermDraft()
+    const [, mappings] = await Promise.all([
+      loadPermCatalog(),
+      tenantEditionPermissionApi.list(row.basicId),
+    ])
+    permList.value = mappings
+    derivePermChecked()
   }
   catch (error) {
     permError.value = true
-    permList.value = []
-    derivePermDraft()
-    toast.error((error as Error)?.message || t('tenant.edition.perm_load_failed'))
+    toast.danger((error as Error)?.message || t('tenant.edition.perm_load_failed'))
   }
   finally {
     permLoading.value = false
   }
 }
 
-/** 本地草稿：打开抽屉时由现有绑定推导，之后只改本地，保存时一次性提交 */
-function derivePermDraft() {
-  permDraftGranted.value = new Set(permList.value.map(item => item.permissionId))
-  permDraftStatus.value = new Map(permList.value.map(item => [item.permissionId, item.status] as const))
-  permDirty.value = false
+/** 本地授予态：打开抽屉时由生效中的映射推导，之后只改本地，保存时一次性提交 */
+function derivePermChecked() {
+  permChecked.value = validEditionPermissionIds(permList.value)
 }
 
-function togglePermGrant(permission: PermissionListItemDto, checked: boolean) {
-  const granted = new Set(permDraftGranted.value)
-  const status = new Map(permDraftStatus.value)
-  if (checked) {
-    granted.add(permission.basicId)
-    // 新授予默认有效；已有绑定重新勾选时沿用其原状态
-    if (!status.has(permission.basicId)) {
-      status.set(permission.basicId, ValidityStatus.Valid)
-    }
-  }
-  else {
-    granted.delete(permission.basicId)
-  }
-  permDraftGranted.value = granted
-  permDraftStatus.value = status
-  permDirty.value = true
-}
-
-function togglePermStatus(permissionId: ApiId) {
-  const status = new Map(permDraftStatus.value)
-  const next = status.get(permissionId) === ValidityStatus.Valid ? ValidityStatus.Invalid : ValidityStatus.Valid
-  status.set(permissionId, next)
-  permDraftStatus.value = status
-  permDirty.value = true
+function onPermTransfer(next: (number | string)[]) {
+  permChecked.value = next as ApiId[]
 }
 
 async function savePermChanges() {
@@ -553,41 +537,24 @@ async function savePermChanges() {
   if (!edition || permLoading.value) {
     return
   }
-  const current = new Map(permList.value.map(item => [item.permissionId, item] as const))
-  const grantPermissionIds = [...permDraftGranted.value].filter(permissionId => !current.has(permissionId))
-  const revokeEditionPermissionIds = [...current.entries()]
-    .filter(([permissionId]) => !permDraftGranted.value.has(permissionId))
-    .map(([, item]) => item.basicId)
-  // 启停只对留存的既有绑定有意义：本次新授予的还没有绑定主键，撤销掉的也不必再改状态
-  const statusChanges = [...current.entries()]
-    .filter(([permissionId, item]) =>
-      permDraftGranted.value.has(permissionId)
-      && permDraftStatus.value.get(permissionId) !== item.status,
-    )
-    .map(([permissionId, item]) => ({ basicId: item.basicId, status: permDraftStatus.value.get(permissionId)! }))
-  if (grantPermissionIds.length === 0 && revokeEditionPermissionIds.length === 0 && statusChanges.length === 0) {
+  const diff = diffEditionGrants(permChecked.value, permList.value)
+  if (isEmptyEditionGrantDiff(diff)) {
     toast.info(t('tenant.edition.perm_no_change'))
-    permDirty.value = false
     return
   }
   permLoading.value = true
   try {
-    await tenantEditionPermissionApi.batchUpdate({
-      editionId: edition.basicId,
-      grantPermissionIds,
-      revokeEditionPermissionIds,
-      statusChanges,
-    })
-    await loadPermissionList()
-    derivePermDraft()
+    await tenantEditionPermissionApi.batchUpdate({ editionId: edition.basicId, ...diff })
+    permList.value = await tenantEditionPermissionApi.list(edition.basicId)
+    derivePermChecked()
     toast.success(t('tenant.edition.perm_saved', {
-      grant: grantPermissionIds.length,
-      revoke: revokeEditionPermissionIds.length,
-      status: statusChanges.length,
+      grant: diff.grantPermissionIds.length,
+      revoke: diff.revokeEditionPermissionIds.length,
+      status: diff.statusChanges.length,
     }))
   }
   catch (e) {
-    toast.error((e as Error).message || t('common.messages.save_failed'))
+    toast.danger((e as Error).message || t('common.messages.save_failed'))
   }
   finally {
     permLoading.value = false
@@ -614,7 +581,7 @@ async function savePermChanges() {
         class="xh-edit-form-grid"
         @submit="handleSubmit"
       >
-        <XhFormFieldGroup value="editionCode">
+        <XhFormFieldGroup name="editionCode">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('tenant.edition.edition_code') }}</XhFieldLabel>
             <XhFieldControl>
@@ -623,12 +590,26 @@ async function savePermChanges() {
                 :disabled="Boolean(editionForm.basicId)"
                 clearable
                 :placeholder="t('tenant.edition.edition_code_placeholder')"
-              />
+              >
+                <!-- 随机生成触发器仅新增态出现；type="button" 防止把整表提交掉 -->
+                <template #suffix>
+                  <button
+                    v-if="!editionForm.basicId"
+                    type="button"
+                    class="edition-code-random"
+                    :aria-label="t('tenant.edition.edition_code_random')"
+                    :title="t('tenant.edition.edition_code_random')"
+                    @click="generateEditionCode"
+                  >
+                    <Icon width="14" height="14" icon="lucide:dices" />
+                  </button>
+                </template>
+              </XInput>
             </XhFieldControl>
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="editionName">
+        <XhFormFieldGroup name="editionName">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('tenant.edition.edition_name') }}</XhFieldLabel>
             <XhFieldControl>
@@ -637,7 +618,7 @@ async function savePermChanges() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="price">
+        <XhFormFieldGroup name="price">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('tenant.edition.price') }}</XhFieldLabel>
             <XhFieldControl>
@@ -646,14 +627,13 @@ async function savePermChanges() {
                 :disabled="editionForm.isFree"
                 :min="0"
                 :precision="2"
-                clearable
                 :placeholder="t('tenant.edition.price_placeholder')"
               />
             </XhFieldControl>
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="billingPeriodMonths">
+        <XhFormFieldGroup name="billingPeriodMonths">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('tenant.edition.billing_period_form') }}</XhFieldLabel>
             <XhFieldControl>
@@ -661,14 +641,13 @@ async function savePermChanges() {
                 v-model:value="editionForm.billingPeriodMonths"
                 :min="1"
                 :precision="0"
-                clearable
                 :placeholder="t('tenant.edition.billing_period_placeholder')"
               />
             </XhFieldControl>
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="userLimit">
+        <XhFormFieldGroup name="userLimit">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('tenant.edition.user_limit') }}</XhFieldLabel>
             <XhFieldControl>
@@ -676,14 +655,13 @@ async function savePermChanges() {
                 v-model:value="editionForm.userLimit"
                 :min="0"
                 :precision="0"
-                clearable
                 :placeholder="t('tenant.edition.user_limit_placeholder')"
               />
             </XhFieldControl>
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="storageLimit">
+        <XhFormFieldGroup name="storageLimit">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('tenant.edition.storage_limit_form') }}</XhFieldLabel>
             <XhFieldControl>
@@ -691,14 +669,13 @@ async function savePermChanges() {
                 v-model:value="editionForm.storageLimit"
                 :min="0"
                 :precision="0"
-                clearable
                 :placeholder="t('tenant.edition.storage_limit_placeholder')"
               />
             </XhFieldControl>
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="isFree">
+        <XhFormFieldGroup name="isFree">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('tenant.edition.is_free') }}</XhFieldLabel>
             <XhFieldControl>
@@ -707,7 +684,7 @@ async function savePermChanges() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="isDefault">
+        <XhFormFieldGroup name="isDefault">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('tenant.edition.set_default') }}</XhFieldLabel>
             <XhFieldControl>
@@ -716,7 +693,7 @@ async function savePermChanges() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup v-if="!editionForm.basicId" value="status">
+        <XhFormFieldGroup v-if="!editionForm.basicId" name="status">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('tenant.edition.status') }}</XhFieldLabel>
             <XhFieldControl>
@@ -725,7 +702,7 @@ async function savePermChanges() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="sort">
+        <XhFormFieldGroup name="sort">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('tenant.edition.sort') }}</XhFieldLabel>
             <XhFieldControl>
@@ -734,7 +711,7 @@ async function savePermChanges() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="description" class="xh-span-2">
+        <XhFormFieldGroup name="description" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('tenant.edition.description') }}</XhFieldLabel>
             <XhFieldControl>
@@ -749,7 +726,7 @@ async function savePermChanges() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="remark" class="xh-span-2">
+        <XhFormFieldGroup name="remark" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('tenant.edition.remark') }}</XhFieldLabel>
             <XhFieldControl>
@@ -768,50 +745,66 @@ async function savePermChanges() {
     </XEditModal>
 
     <XhDrawerRoot v-model:open="permDrawerVisible" side="right">
-      <XhDrawerContent style="--xh-drawer-size: 760px">
+      <XhDrawerContent style="--xh-drawer-size: 980px">
         <XhDrawerTitle>{{ t('tenant.edition.perm_drawer_title', { name: permEdition?.editionName ?? '' }) }}</XhDrawerTitle>
         <XhDrawerCloseTrigger />
-        <XPermissionGrantPanel
-          ref="permPanelRef"
-          :items="permCatalog"
+        <p v-if="permDisabledIds.size > 0" class="drawer-tip">
+          {{ t('tenant.edition.perm_disabled_tip') }}
+        </p>
+        <XPermissionTransfer
+          :items="permItems"
+          :value="permChecked"
           :loading="permLoading"
+          :disabled="permLoading || permError || !canEditPermission"
+          :source-title="t('tenant.edition.perm_available')"
+          :target-title="t('tenant.edition.perm_granted')"
           :search-placeholder="t('tenant.edition.perm_grant_placeholder')"
-          :granted-count-label="t('tenant.edition.perm_granted_count', { count: permDraftGranted.size })"
-          :empty-description="t('tenant.edition.perm_empty')"
           :other-group-label="t('tenant.edition.perm_group_other')"
+          @update:value="onPermTransfer"
         >
-          <template #toolbar>
-            <XhButton v-if="permError" size="sm" @click="loadPermissionList">
-              {{ t('tenant.edition.perm_retry') }}
-            </XhButton>
+          <template #suffix="{ item, side }">
+            <!-- 停用的映射不在白名单里，与未授予同在左栏；移到右栏保存即重新启用 -->
+            <XhTagRoot v-if="side === 'source' && permDisabledIds.has(item.basicId)" variant="subtle" size="sm" tone="warning">
+              <XhTagLabel>{{ t('tenant.edition.perm_disabled') }}</XhTagLabel>
+            </XhTagRoot>
           </template>
-          <template #action="{ item }">
-            <XhButton
-              v-if="permDraftGranted.has(item.basicId) && permByPermissionId.get(item.basicId)"
-              :disabled="!canUpdateMapping || permLoading"
-              size="sm"
-              :tone="permDraftStatus.get(item.basicId) === ValidityStatus.Valid ? 'success' : 'warning'"
-              @click="togglePermStatus(item.basicId)"
-            >
-              {{ permDraftStatus.get(item.basicId) === ValidityStatus.Valid ? t('tenant.edition.perm_enabled') : t('tenant.edition.perm_disabled') }}
-            </XhButton>
-            <XhCheckbox
-              :checked="permDraftGranted.has(item.basicId)"
-              :disabled="permLoading || (permDraftGranted.has(item.basicId) ? !canRevokePermission : !canGrantPermission)"
-              @update:checked="(checked: boolean) => togglePermGrant(item as PermissionListItemDto, checked)"
-            />
-          </template>
-        </XPermissionGrantPanel>
+        </XPermissionTransfer>
         <!-- 按钮行排在抽屉内容区末尾，右对齐 -->
         <div class="xh-dialog-footer">
-          <XhButton @click="permDrawerVisible = false">
+          <XhButton variant="subtle" @click="permDrawerVisible = false">
             {{ t('tenant.edition.cancel') }}
           </XhButton>
-          <XhButton tone="brand" :loading="permLoading" :disabled="!permDirty" @click="savePermChanges">
-            {{ t('tenant.edition.perm_save') }}
+          <XhButton variant="subtle" tone="brand" :loading="permLoading" :disabled="!permDirty" @click="savePermChanges">
+            <XhButtonIndicator />
+            <XhButtonLabel>{{ t('tenant.edition.perm_save') }}</XhButtonLabel>
           </XhButton>
         </div>
       </XhDrawerContent>
     </XhDrawerRoot>
   </SchemaPage>
 </template>
+
+<style scoped>
+.drawer-tip {
+  margin: 0;
+  color: var(--xh-fg-muted);
+  font-size: var(--xh-text-caption-size);
+}
+
+/* 版本编码随机生成触发器：排在输入框盒内，与清除钮同段；焦点环交给浏览器默认样式 */
+.edition-code-random {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--xh-fg-muted);
+  cursor: pointer;
+}
+
+.edition-code-random:hover {
+  color: var(--xh-fg-default);
+}
+</style>

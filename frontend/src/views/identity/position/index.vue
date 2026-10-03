@@ -17,9 +17,9 @@ import {
   querySortsFromSchema,
 } from '@/api'
 import { STATUS_OPTIONS } from '@/constants'
-import { Icon, SchemaPage, XEditModal, XInput, XNumberInput, XSelect } from '~/components'
+import { deleteConfirmText, Icon, SchemaPage, statusConfirmText, XEditModal, XInput, XNumberInput, XSelect } from '~/components'
 import { toast } from '~/composables'
-import { useEnumOptions } from '~/hooks'
+import { useEnumOptions, usePermission } from '~/hooks'
 import { formatDate, getOptionLabel } from '~/utils'
 
 defineOptions({ name: 'IdentityPositionPage' })
@@ -34,6 +34,7 @@ interface PositionFormModel {
 }
 
 const { t } = useI18n()
+const { hasPermission } = usePermission()
 
 /** 编辑弹窗的保存钮靠这个 id 关联到表单，点它才会走整表校验 */
 const editFormId = useId()
@@ -82,11 +83,11 @@ const schema = computed<PageSchema>(() => ({
     updateStatus: (id, enabled) => positionApi.updateStatus({ basicId: id, status: enabled ? EnableStatus.Enabled : EnableStatus.Disabled }),
   },
   actions: [
-    { key: 'create', title: t('identity.position.add'), scope: 'page', type: 'primary', icon: 'lucide:plus' },
-    { key: 'view', title: t('identity.position.view'), scope: 'row' },
-    { key: 'edit', title: t('common.actions.edit'), scope: 'row' },
-    { key: 'toggle', title: t('identity.position.toggle'), scope: 'row' },
-    { key: 'delete', title: t('common.actions.delete'), scope: 'row' },
+    { key: 'create', title: t('identity.position.add'), scope: 'page', type: 'primary', icon: 'lucide:plus', permission: 'identity.position.create' },
+    { key: 'view', title: t('identity.position.view'), scope: 'row', icon: 'lucide:eye' },
+    { key: 'edit', title: t('common.actions.edit'), scope: 'row', icon: 'lucide:pencil', permission: 'identity.position.update' },
+    { key: 'toggle', title: t('identity.position.toggle'), scope: 'row', icon: 'lucide:power', confirm: true, confirmText: row => statusConfirmText(t, (row as unknown as PositionListItemDto).status === EnableStatus.Enabled, (row as unknown as PositionListItemDto).positionName), permission: 'identity.position.status' },
+    { key: 'delete', title: t('common.actions.delete'), scope: 'row', icon: 'lucide:trash-2', type: 'error', confirm: true, confirmText: row => deleteConfirmText(t, (row as unknown as PositionListItemDto).positionName), permission: 'identity.position.delete' },
   ],
 }))
 
@@ -169,7 +170,7 @@ async function handleEdit(row: PositionListItemDto) {
     detail = await positionApi.detail(row.basicId)
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('identity.position.load_detail_failed'))
+    toast.danger((error as Error)?.message || t('identity.position.load_detail_failed'))
   }
   positionForm.value = {
     basicId: row.basicId,
@@ -194,7 +195,7 @@ async function handleView(row: PositionListItemDto) {
     }
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('identity.position.load_detail_failed'))
+    toast.danger((error as Error)?.message || t('identity.position.load_detail_failed'))
   }
   finally {
     detailLoading.value = false
@@ -215,7 +216,7 @@ async function handleToggleStatus(row: PositionListItemDto) {
     reloadPage()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('common.messages.status_failed'))
+    toast.danger((error as Error)?.message || t('common.messages.status_failed'))
   }
 }
 
@@ -263,7 +264,7 @@ async function handleSubmit() {
     reloadPage()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('common.messages.save_failed'))
+    toast.danger((error as Error)?.message || t('common.messages.save_failed'))
   }
   finally {
     submitLoading.value = false
@@ -279,10 +280,14 @@ async function handleSubmit() {
   >
     <XhDialogRoot v-model:open="detailVisible">
       <XhDialogContent class="xh-mgmt-detail-modal" style="--xh-dialog-max-w: 640px">
-        <XhDialogTitle v-if="currentDetail">
-          <div class="det-hd-entity">
+        <!-- 标题须在弹窗打开期间一直在：详情未到时先念「加载中」 -->
+        <XhDialogTitle>
+          <template v-if="!currentDetail">
+            {{ t('common.loading') }}
+          </template>
+          <div v-else class="det-hd-entity">
             <div class="det-hd-ico">
-              <Icon icon="lucide:briefcase" :size="22" />
+              <Icon icon="lucide:briefcase" width="22" height="22" />
             </div>
             <div class="min-w-0">
               <div class="det-hd-name">
@@ -299,7 +304,7 @@ async function handleSubmit() {
         <div v-if="detailLoading" class="modal-loading">
           {{ t('common.statuses.loading') }}
         </div>
-        <XhDescriptionsRoot v-else-if="currentDetail" :columns="2" bordered size="sm">
+        <XhDescriptionsRoot v-else-if="currentDetail" :columns="2" variant="outline" size="sm">
           <XhDescriptionsItem>
             <XhDescriptionsLabel>{{ t('identity.position.position_code') }}</XhDescriptionsLabel>
             <XhDescriptionsValue>
@@ -338,11 +343,12 @@ async function handleSubmit() {
 
         <div class="xh-dialog-footer">
           <XhFlex justify="end" gap="md">
-            <XhButton size="sm" @click="detailVisible = false">
+            <XhButton variant="subtle" size="sm" @click="detailVisible = false">
               {{ t('common.actions.close') }}
             </XhButton>
             <XhButton
-              v-if="currentDetail"
+              v-if="currentDetail && hasPermission('identity.position.update')"
+              variant="subtle"
               size="sm"
               tone="brand"
               @click="detailVisible = false; handleEdit(currentDetail as PositionListItemDto)"
@@ -367,7 +373,7 @@ async function handleSubmit() {
         class="xh-edit-form-grid"
         @submit="handleSubmit"
       >
-        <XhFormFieldGroup value="positionName">
+        <XhFormFieldGroup name="positionName">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.position.position_name') }}</XhFieldLabel>
             <XhFieldControl>
@@ -376,7 +382,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="positionCode">
+        <XhFormFieldGroup name="positionCode">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.position.position_code') }}</XhFieldLabel>
             <XhFieldControl>
@@ -390,7 +396,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="sort">
+        <XhFormFieldGroup name="sort">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.position.sort') }}</XhFieldLabel>
             <XhFieldControl>
@@ -399,7 +405,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup v-if="!positionForm.basicId" value="status">
+        <XhFormFieldGroup v-if="!positionForm.basicId" name="status">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.position.status') }}</XhFieldLabel>
             <XhFieldControl>
@@ -408,7 +414,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="remark" class="xh-span-2">
+        <XhFormFieldGroup name="remark" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.position.remark') }}</XhFieldLabel>
             <XhFieldControl>

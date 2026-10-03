@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Authorization;
 using System.Text.Json;
 using XiHan.BasicApp.Saas.Application.Contracts;
 using XiHan.BasicApp.Saas.Application.Dtos;
+using XiHan.BasicApp.Saas.Application.Exporting;
+using XiHan.BasicApp.Saas.Application.Services;
 using XiHan.BasicApp.Saas.Domain.Entities;
 using XiHan.BasicApp.Saas.Domain.Repositories;
 using XiHan.BasicApp.Saas.Infrastructure.Exporting;
@@ -12,6 +14,8 @@ using XiHan.Framework.Application.Attributes;
 using XiHan.Framework.Caching.Distributed.Abstracts;
 using XiHan.Framework.Security.Users;
 using XiHan.Framework.Uow;
+using XiHan.Framework.Security.Claims;
+using XiHan.Framework.Security.Extensions;
 
 namespace XiHan.BasicApp.Saas.Application.AppServices;
 
@@ -32,20 +36,36 @@ public sealed class ExportTaskAppService
 
     private readonly IUnitOfWorkManager _unitOfWorkManager;
 
+    private readonly IReadOnlyList<IExportProvider> _providers;
+
+    private readonly IOperationPermissionGuard _operationPermissionGuard;
+
     /// <summary>
     /// 构造函数
     /// </summary>
-    public ExportTaskAppService(IExportTaskRepository repository, ICurrentUser currentUser, IRedisDelayQueue<ExportTaskMessage> exportTaskQueue, IUnitOfWorkManager unitOfWorkManager)
+    public ExportTaskAppService(
+        IExportTaskRepository repository,
+        ICurrentUser currentUser,
+        IRedisDelayQueue<ExportTaskMessage> exportTaskQueue,
+        IUnitOfWorkManager unitOfWorkManager,
+        IEnumerable<IExportProvider> providers,
+        IOperationPermissionGuard operationPermissionGuard)
     {
         _repository = repository;
         _currentUser = currentUser;
         _exportTaskQueue = exportTaskQueue;
         _unitOfWorkManager = unitOfWorkManager;
+        _providers = [.. providers];
+        _operationPermissionGuard = operationPermissionGuard;
     }
 
     /// <summary>
     /// 提交导出任务（落 Pending，由后台 worker 异步执行）
     /// </summary>
+    /// <remarks>
+    /// 提交时就按业务类型对应 Provider 的导出权限拦截：接口对所有登录用户开放，
+    /// 只有读权限的人直调也提交不进来，不必等后台执行时才失败。
+    /// </remarks>
     public async Task<ExportTaskDto> SubmitAsync(ExportTaskSubmitDto input, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(input);
@@ -61,6 +81,11 @@ public sealed class ExportTaskAppService
         _ = _currentUser.UserId ?? throw new InvalidOperationException("当前用户未登录。");
 
         var businessType = input.BusinessType.Trim();
+        // 与执行器同一分发口径：业务类型不区分大小写，重复登记取先注册的
+        var provider = _providers.FirstOrDefault(item => string.Equals(item.BusinessType, businessType, StringComparison.OrdinalIgnoreCase))
+            ?? throw new ArgumentException($"该资源未接入导出（{businessType}）。", nameof(input));
+        await _operationPermissionGuard.EnsureGrantedAsync(provider.RequiredPermission, cancellationToken);
+
         var taskName = string.IsNullOrWhiteSpace(input.TaskName)
             ? $"{businessType}_{DateTimeOffset.UtcNow:yyyyMMddHHmmss}"
             : input.TaskName.Trim();
@@ -74,14 +99,18 @@ public sealed class ExportTaskAppService
             Status = ExportTaskStatus.Pending,
             Progress = 0,
             QuerySnapshot = string.IsNullOrWhiteSpace(input.QuerySnapshot) ? null : input.QuerySnapshot,
-            FieldsSnapshot = JsonSerializer.Serialize(input.Columns)
+            FieldsSnapshot = JsonSerializer.Serialize(input.Columns),
+            // 后台执行要按发起时的身份跑：会话失效即失败，模仿态的禁用照样生效
+            RequesterSessionId = _currentUser.FindClaimValue(XiHanClaimTypes.SessionId),
+            ImpersonatorUserId = _currentUser.FindImpersonatorUserId(),
+            ImpersonatorTenantId = _currentUser.FindImpersonatorTenantId()
         };
         // CreatedId（发起人）/ TenantId（发起租户）由审计 AOP 自动注入，后台据此重建上下文
         entity = await _repository.AddAsync(entity, cancellationToken);
 
         // 提交后入队（延迟 0）：后台导出服务拉取后立即领取执行（替换原 3s 轮询）。无环境 UoW 时直接入队。
         var taskId = entity.BasicId;
-        var message = new ExportTaskMessage { ExportTaskId = taskId, CreatedAt = DateTimeOffset.UtcNow };
+        var message = new ExportTaskMessage { ExportTaskId = taskId, TenantId = entity.TenantId, CreatedAt = DateTimeOffset.UtcNow };
         var uow = _unitOfWorkManager.Current;
         if (uow is not null)
         {

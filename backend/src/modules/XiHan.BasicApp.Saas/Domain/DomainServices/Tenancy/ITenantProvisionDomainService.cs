@@ -9,18 +9,17 @@ namespace XiHan.BasicApp.Saas.Domain.DomainServices;
 /// 租户开通领域服务
 /// </summary>
 /// <remarks>
-/// 职责：编排租户开通全流程（创建租户 + 初始化管理员 + 分配默认角色）
-/// 不处理事务，由调用方（应用服务）开启 UnitOfWork
+/// 职责：建租户时定版本、开通管理员、套餐变更后回收越界授权。不处理事务，由调用方（应用服务）开启 UnitOfWork。
 /// <para>
-/// 全流程在平台态（<c>ICurrentTenant.Change(null)</c>）内写入：账号注册表与租户授权绑定都落平台库，
-/// 库隔离租户的独立库在开通期尚未建立（<c>ConfigStatus=Pending</c>，建库走 <c>InitializeDatabase</c>）。
-/// 各实体均显式置 <c>TenantId</c>，平台态插入保留该预置值。
+/// 平台就是 0 号租户，写只能落在当前作用域：租户注册表与版本是平台数据，在平台作用域读写；
+/// 管理员账号、成员关系、所有者角色与绑定是该租户的数据，切入该租户写（行的 <c>TenantId</c> 由作用域决定）。
+/// 库隔离租户要等独立库初始化完成才能开通管理员。
 /// </para>
 /// </remarks>
 public interface ITenantProvisionDomainService
 {
     /// <summary>
-    /// 一站式开通租户：确保版本、创建管理员账号、创建 Owner 角色并按版本白名单授权、绑定角色
+    /// 开通租户管理员：管理员账号、所有者成员关系、所有者角色（系统角色，权限随套餐）及其绑定
     /// </summary>
     /// <param name="tenant">已创建的租户实体</param>
     /// <param name="adminUserName">管理员用户名</param>
@@ -29,26 +28,6 @@ public interface ITenantProvisionDomainService
     /// <param name="cancellationToken">取消令牌</param>
     /// <returns>创建的管理员用户</returns>
     Task<SysUser> ProvisionTenantAdminAsync(SysTenant tenant, string adminUserName, string adminEmail, string passwordHash, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// 初始化租户管理员账号
-    /// </summary>
-    /// <param name="tenant">已创建的租户实体</param>
-    /// <param name="adminUserName">管理员用户名</param>
-    /// <param name="adminEmail">管理员邮箱（登录身份标识，全平台唯一）</param>
-    /// <param name="passwordHash">管理员密码哈希</param>
-    /// <param name="cancellationToken">取消令牌</param>
-    /// <returns>创建的管理员用户</returns>
-    Task<SysUser> InitializeTenantAdminAsync(SysTenant tenant, string adminUserName, string adminEmail, string passwordHash, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// 为租户管理员分配默认角色
-    /// </summary>
-    /// <param name="tenant">租户实体</param>
-    /// <param name="adminUserId">管理员用户ID</param>
-    /// <param name="ownerRoleId">Owner 角色ID</param>
-    /// <param name="cancellationToken">取消令牌</param>
-    Task AssignAdminRoleAsync(SysTenant tenant, long adminUserId, long ownerRoleId, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 为租户分配默认版本
@@ -78,4 +57,12 @@ public interface ITenantProvisionDomainService
     /// <param name="cancellationToken">取消令牌</param>
     /// <returns>回收（置失效）的授权行数合计</returns>
     Task<int> ReconcileEditionTenantsAuthorizationAsync(long editionId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 取待初始化管理员的租户：可开通（库隔离租户的独立库已配置完成）、还没有所有者
+    /// </summary>
+    /// <param name="tenantId">租户主键</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>租户实体</returns>
+    Task<SysTenant> GetTenantAwaitingAdminAsync(long tenantId, CancellationToken cancellationToken = default);
 }

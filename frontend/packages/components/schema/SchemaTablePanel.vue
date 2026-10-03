@@ -6,18 +6,19 @@ import {
   XhTableBody,
   XhTableCell,
   XhTableColumnHeader,
+  XhTableColumnLabel,
   XhTableEmpty,
   XhTableExpandedRow,
   XhTableExpandTrigger,
   XhTableHeader,
-  XhTableLoadingState,
+  XhTableLoading,
   XhTableRoot,
   XhTableRow,
   XhTableRowSelectTrigger,
   XhTableSelectAllTrigger,
   XhTableSortTrigger,
 } from '@xihan-ui/vue'
-import { computed, ref } from 'vue'
+import { computed, mergeProps, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useIsMobile } from '~/composables'
 import { Icon } from '~/iconify'
@@ -75,6 +76,8 @@ const props = withDefaults(defineProps<{
   renderExpand?: (row: TRow) => VNodeChild
   /** 行是否可展开（默认全部可展开） */
   rowExpandable?: (row: TRow) => boolean
+  /** 逐行附加属性（class / style / 事件），主从页用它做整行点选与当前行高亮 */
+  rowProps?: (row: TRow, rowIndex: number) => Record<string, unknown>
 }>(), {
   loading: false,
   rowKey: 'basicId',
@@ -87,7 +90,7 @@ const props = withDefaults(defineProps<{
   checkedKeys: () => [],
   sorts: () => [],
   density: 'sm',
-  striped: true,
+  striped: false,
   bordered: true,
   singleLine: true,
   tree: false,
@@ -97,6 +100,7 @@ const props = withDefaults(defineProps<{
   peekFields: undefined,
   renderExpand: undefined,
   rowExpandable: undefined,
+  rowProps: undefined,
 })
 const emit = defineEmits<{
   'update:page': [value: number]
@@ -238,49 +242,40 @@ function declaredWidthOf(column: SchemaColumn<TRow>): number {
 }
 
 /**
- * 逐列下限。width 只是 flex 基准，容器不够时各列按比例压缩，压到这个值为止。
- * 没写 minWidth 的列（如操作列）以自己的声明宽为下限，不写就会跌到皮肤的全局兜底值。
- *
- * 「不吃余量」也写在这里：表头格与表体格由同一个函数出样式，两侧必然一致。
- * 组件库只给表头格发列号（data-value），按列号写的 CSS 选择器只命中表头，
- * 表体那一半静默落空，同一列在两个区段就会分到不同的余量、列边界跟着错开。
- */
-function minWidthStyle(column: SchemaColumn<TRow>): Record<string, string> {
-  return {
-    '--xh-table-cell-min-w': `${column.minWidth ?? declaredWidthOf(column)}px`,
-    ...(column.key === ACTION_COL ? { flexGrow: '0' } : {}),
-  }
-}
-
-/** 前缀列（展开/勾选/序号）同样要有自己的下限，否则一并被压到皮肤兜底值；它们也不吃余量 */
-function prefixStyle(id: string): Record<string, string> {
-  const width = prefixColumns.value.find(c => c.id === id)?.width
-  return {
-    ...(width === undefined ? {} : { '--xh-table-cell-min-w': `${width}px` }),
-    flexGrow: '0',
-  }
-}
-
-/**
- * 喂给组件库的列契约：列号、列宽、可排序与吸附的唯一事实源。
+ * 喂给组件库的列契约：列号、列宽、上下限、可排序与吸附的唯一事实源。
  * 前缀列也必须在此声明，否则右侧所有列的 aria-colindex 串位。
+ *
+ * width 只是 flex 基准，容器不够时各列按比例压缩；minWidth 由库写到表头格与表体格上，
+ * 布局压缩与拖动改宽都不越过它。没写 minWidth 的列以自己的声明宽为下限，不写就会跌到皮肤的全局兜底值。
+ * 前缀列（展开/勾选/序号）与操作列不吃余量：上下限都写成声明宽，即一列定宽。
  */
 const tableColumns = computed<TableColumnDef[]>(() => {
   // 有业务列左固定时，前面的勾选/序号/展开列也钉在行首侧，业务列的偏移才接得上
   const pinPrefix = props.columns.some(column => column.fixed === 'left')
   return [
-    ...prefixColumns.value.map<TableColumnDef>(c => ({ id: c.id, width: c.width, ...(pinPrefix ? { sticky: 'start' } : {}) })),
-    ...props.columns.map<TableColumnDef>(column => ({
-      id: column.key,
-      label: column.title,
-      ...(column.sortable ? { sortable: true } : {}),
-      // 吸附偏移由库按列宽累加，这里只报侧别
-      ...(column.fixed ? { sticky: column.fixed === 'right' ? 'end' : 'start' } : {}),
-      width: declaredWidthOf(column),
-      // 改宽由库接管：它按下那一刻量出各列的实际宽度做基线，因此钉住的一瞬间视觉不跳
-      // 操作列不给拖：它的宽度跟着按钮走，拖窄了按钮会被挤掉
-      ...(column.resizable === false || column.key === ACTION_COL ? {} : { resizable: true, minWidth: column.minWidth ?? 80 }),
+    ...prefixColumns.value.map<TableColumnDef>(c => ({
+      id: c.id,
+      width: c.width,
+      minWidth: c.width,
+      maxWidth: c.width,
+      ...(pinPrefix ? { sticky: 'start' } : {}),
     })),
+    ...props.columns.map<TableColumnDef>((column) => {
+      const width = declaredWidthOf(column)
+      return {
+        id: column.key,
+        label: column.title,
+        ...(column.sortable ? { sortable: true } : {}),
+        // 吸附偏移由库按列宽累加，这里只报侧别
+        ...(column.fixed ? { sticky: column.fixed === 'right' ? 'end' : 'start' } : {}),
+        width,
+        minWidth: column.minWidth ?? width,
+        // 操作列不给拖：它的宽度跟着按钮走，拖窄了按钮会被挤掉
+        ...(column.key === ACTION_COL ? { maxWidth: width } : {}),
+        // 改宽由库接管：它按下那一刻量出各列的实际宽度做基线，因此钉住的一瞬间视觉不跳
+        ...(column.resizable === false || column.key === ACTION_COL ? {} : { resizable: true }),
+      }
+    }),
   ]
 })
 
@@ -326,9 +321,11 @@ function onSelectionChange(next: TableSelection): void {
   emit('update:checkedKeys', keys)
 }
 
-// 悬停速览的行事件：未启用时不挂，省掉每行三个监听
-function rowPeekHandlers(row: TRow) {
-  return peekEnabled.value ? peek.rowProps(row) : {}
+// 行属性：悬停速览的事件（未启用时不挂，省掉每行三个监听）与页面附加属性合并，同名事件都保留
+function rowAttrs(row: TRow, rowIndex: number) {
+  const peekHandlers = peekEnabled.value ? peek.rowProps(row) : {}
+  const extra = props.rowProps?.(row, rowIndex)
+  return extra ? mergeProps(peekHandlers, extra) : peekHandlers
 }
 </script>
 
@@ -347,7 +344,7 @@ function rowPeekHandlers(row: TRow) {
       :size="density"
       sticky-header
       :striped="striped"
-      :borderless="!bordered"
+      :variant="bordered ? 'outline' : 'ghost'"
       :ruled="!singleLine"
       @column-preference-change="onColumnPreferenceChange"
       @update:sort="onSortChange"
@@ -355,29 +352,24 @@ function rowPeekHandlers(row: TRow) {
     >
       <XhTableHeader>
         <XhTableRow>
-          <XhTableColumnHeader v-if="renderExpand" :value="EXPAND_COL" :style="prefixStyle(EXPAND_COL)" />
-          <XhTableColumnHeader v-if="selectable" :value="SELECT_COL" :style="prefixStyle(SELECT_COL)">
+          <XhTableColumnHeader v-if="renderExpand" :value="EXPAND_COL" />
+          <XhTableColumnHeader v-if="selectable" :value="SELECT_COL">
             <XhTableSelectAllTrigger />
           </XhTableColumnHeader>
-          <XhTableColumnHeader v-if="showIndex" :value="INDEX_COL" :style="prefixStyle(INDEX_COL)">
-            {{ t('component.schema_table.index') }}
+          <XhTableColumnHeader v-if="showIndex" :value="INDEX_COL">
+            <XhTableColumnLabel>{{ t('component.schema_table.index') }}</XhTableColumnLabel>
           </XhTableColumnHeader>
           <XhTableColumnHeader
             v-for="column in columns"
             :key="column.key"
             :value="column.key"
-            :style="minWidthStyle(column)"
           >
-            <!-- 截断落在内部文字节点上：皮肤把排序箭头做成把手的伪元素，加在把手上会连箭头一起裁掉 -->
-            <XhTableSortTrigger
-              v-if="column.sortable"
-              class="xh-table-panel__sort"
-              :title="t('component.schema_table.sort_tip')"
-            >
-              <span class="xh-table-panel__title">{{ column.title }}</span>
-            </XhTableSortTrigger>
-            <span v-else class="xh-table-panel__title">{{ column.title }}</span>
-            <!-- 调宽把手与排序把手是兄弟节点，拖它不会连带触发排序 -->
+            <!-- 列名一律放进 column-label：它是列头里唯一可收窄的一格，超宽出省略号；
+                 排序钮与调宽把手都是它的兄弟，排在列名之后被推到行尾并排。点列名不排序，点钮才排序 -->
+            <XhTableColumnLabel>{{ column.title }}</XhTableColumnLabel>
+            <!-- 定尺图标钮，不包列名；箭头由皮肤按当前方向兜底画，可及名由库的 translations.sort(列名) 给 -->
+            <XhTableSortTrigger v-if="column.sortable" :title="t('component.schema_table.sort_tip')" />
+            <!-- 调宽把手与排序钮是兄弟节点，拖它不会连带触发排序 -->
             <XhTableColumnResizeTrigger :title="t('component.schema_table.resize_tip')" />
           </XhTableColumnHeader>
         </XhTableRow>
@@ -385,21 +377,20 @@ function rowPeekHandlers(row: TRow) {
 
       <XhTableBody>
         <template v-for="(item, rowIndex) in flatRows" :key="item.key">
-          <XhTableRow :value="item.key" v-bind="rowPeekHandlers(item.row)">
-            <XhTableCell v-if="renderExpand" :value="EXPAND_COL" :style="prefixStyle(EXPAND_COL)">
+          <XhTableRow :value="item.key" v-bind="rowAttrs(item.row, rowIndex)">
+            <XhTableCell v-if="renderExpand" :value="EXPAND_COL">
               <XhTableExpandTrigger />
             </XhTableCell>
-            <XhTableCell v-if="selectable" :value="SELECT_COL" :style="prefixStyle(SELECT_COL)">
+            <XhTableCell v-if="selectable" :value="SELECT_COL">
               <XhTableRowSelectTrigger />
             </XhTableCell>
-            <XhTableCell v-if="showIndex" :value="INDEX_COL" :style="prefixStyle(INDEX_COL)">
+            <XhTableCell v-if="showIndex" :value="INDEX_COL">
               {{ item.indexLabel }}
             </XhTableCell>
             <XhTableCell
               v-for="column in columns"
               :key="column.key"
               :value="column.key"
-              :style="minWidthStyle(column)"
             >
               <!-- 树形列：缩进 + 展开箭头，其余列照常渲染 -->
               <template v-if="tree && column.tree">
@@ -423,14 +414,17 @@ function rowPeekHandlers(row: TRow) {
             </XhTableCell>
           </XhTableRow>
 
+          <!-- 详情行的内容也要装在单元格里：从首列（展开列）起跨满全部列，读屏才把它当作一行里的一格 -->
           <XhTableExpandedRow v-if="renderExpand" :value="item.key">
-            <VNodeRender :content="renderExpand(item.row)" />
+            <XhTableCell :value="EXPAND_COL" :colspan="tableColumns.length">
+              <VNodeRender :content="renderExpand(item.row)" />
+            </XhTableCell>
           </XhTableExpandedRow>
         </template>
       </XhTableBody>
 
       <XhTableEmpty>{{ t('component.schema_table.empty') }}</XhTableEmpty>
-      <XhTableLoadingState>{{ t('component.schema_table.loading') }}</XhTableLoadingState>
+      <XhTableLoading>{{ t('component.schema_table.loading') }}</XhTableLoading>
     </XhTableRoot>
 
     <!-- 悬停速览卡（Teleport 到 body，pointer-events none 不干扰交互） -->
@@ -505,25 +499,12 @@ function rowPeekHandlers(row: TRow) {
   min-inline-size: min-content;
 }
 
-/* 前缀列与操作列的「不吃余量」改由 minWidthStyle / prefixStyle 写成内联样式，
-   两侧同一个函数出，见脚本区 */
+/* 紧凑密度下中档表格的行距收紧在 design/ui.css：与弹窗里的次级表格（XDataTable）共用同一把尺 */
 
-/* 排序把手：文字段占满、箭头贴右缘 */
-.xh-table-panel__sort {
-  min-width: 0;
-}
+/* 前缀列与操作列的定宽、各列的下限都写在列契约（tableColumns）里，由组件库落到表头格与表体格上 */
 
 /* 单元格里的文字段：超宽出省略号 */
 .xh-table-panel__cell-text {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* 列标题里的文字段：占满剩余宽度并省略，把手才贴得住右缘 */
-.xh-table-panel__title {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -560,7 +541,7 @@ function rowPeekHandlers(row: TRow) {
   gap: 8px 12px;
   align-items: center;
   justify-content: space-between;
-  padding-top: 12px;
+  padding-top: var(--xh-space-2);
 }
 
 /* 左侧：统计 + 批量浮条 */
@@ -571,10 +552,11 @@ function rowPeekHandlers(row: TRow) {
   min-width: 0;
 }
 
-/* 分页：限制不超过页脚宽度；窄屏/页数极多时内部横向滚动，避免撑破页面 */
+/* 分页：限制不超过页脚宽度；页数极多时靠分页条自己的 flex-wrap 折行。
+   不能在这里开 overflow-x: auto——那会连带把 overflow-y 变成 auto，粗指针下页码钮的 44px 热区伪元素
+   竖向探出 8px 就冒出一条竖向滚动条，手机上页码右侧那根「竖线」就是它 */
 .xh-table-panel__pagination {
   max-width: 100%;
-  overflow-x: auto;
 }
 
 .xh-table__count {

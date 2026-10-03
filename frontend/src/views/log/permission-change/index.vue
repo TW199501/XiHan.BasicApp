@@ -34,6 +34,8 @@ const changeTypeOptions = computed(() => [
   { label: t('log.permission_change.type_role_deny'), value: PermissionChangeType.RoleDenyPermission },
   { label: t('log.permission_change.type_user_delegate_grant'), value: PermissionChangeType.UserDelegateGrant },
   { label: t('log.permission_change.type_user_delegate_revoke'), value: PermissionChangeType.UserDelegateRevoke },
+  { label: t('log.permission_change.type_role_add_parent'), value: PermissionChangeType.RoleAddParent },
+  { label: t('log.permission_change.type_role_remove_parent'), value: PermissionChangeType.RoleRemoveParent },
 ])
 
 /** 变更类型 → 标签类型：授权绿、撤权橙、拒绝红 */
@@ -45,6 +47,7 @@ function changeTypeTagType(type: PermissionChangeType) {
     case PermissionChangeType.RoleRevokePermission:
     case PermissionChangeType.UserRevokePermission:
     case PermissionChangeType.UserRemoveRole:
+    case PermissionChangeType.RoleRemoveParent:
       return 'warning'
     default:
       return 'success'
@@ -67,21 +70,21 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 10,
     render: (row) => {
       const type = (row as unknown as PermissionChangeLogListItemDto).changeType
-      return h(XhTagRoot, { variant: 'outline', tone: changeTypeTagType(type) }, () => h(XhTagLabel, () => getOptionLabel(changeTypeOptions.value, type)))
+      return h(XhTagRoot, { variant: 'subtle', tone: changeTypeTagType(type) }, () => h(XhTagLabel, () => getOptionLabel(changeTypeOptions.value, type)))
     },
   },
   { key: 'operatorUserName', title: t('log.permission_change.operator_user_name'), dataType: 'string', minWidth: 130, order: 11 },
   { key: 'operatorUserId', title: t('log.permission_change.operator_user_id'), dataType: 'string', advancedSearch: true, sortable: true, minWidth: 140, order: 12 },
-  { key: 'targetUserName', title: t('log.permission_change.target_user_name'), dataType: 'string', minWidth: 130, order: 13 },
-  { key: 'targetUserId', title: t('log.permission_change.target_user_id'), dataType: 'string', advancedSearch: true, sortable: true, minWidth: 140, order: 14 },
-  { key: 'targetRoleName', title: t('log.permission_change.target_role_name'), dataType: 'string', minWidth: 130, order: 15 },
-  { key: 'targetRoleId', title: t('log.permission_change.target_role_id'), dataType: 'string', advancedSearch: true, sortable: true, minWidth: 140, order: 16 },
-  { key: 'permissionName', title: t('log.permission_change.permission_name'), dataType: 'string', minWidth: 150, order: 17 },
-  { key: 'permissionId', title: t('log.permission_change.permission_id'), dataType: 'string', advancedSearch: true, sortable: true, minWidth: 140, order: 18 },
-  { key: 'changeReason', title: t('log.permission_change.change_reason'), dataType: 'string', minWidth: 180, order: 19 },
-  { key: 'description', title: t('log.permission_change.description'), dataType: 'string', minWidth: 220, order: 20 },
-  { key: 'operationIp', title: t('log.permission_change.operation_ip'), dataType: 'string', searchable: true, sortable: true, searchPlaceholder: t('log.permission_change.operation_ip_placeholder'), minWidth: 130, order: 21 },
-  { key: 'traceId', title: t('log.common.trace_id'), dataType: 'string', advancedSearch: true, sortable: true, minWidth: 160, order: 22 },
+  { key: 'traceId', title: t('log.common.trace_id'), dataType: 'string', advancedSearch: true, sortable: true, minWidth: 160, order: 13 },
+  { key: 'targetUserName', title: t('log.permission_change.target_user_name'), dataType: 'string', minWidth: 130, order: 14 },
+  { key: 'targetUserId', title: t('log.permission_change.target_user_id'), dataType: 'string', advancedSearch: true, sortable: true, minWidth: 140, order: 15 },
+  { key: 'targetRoleName', title: t('log.permission_change.target_role_name'), dataType: 'string', minWidth: 130, order: 16 },
+  { key: 'targetRoleId', title: t('log.permission_change.target_role_id'), dataType: 'string', advancedSearch: true, sortable: true, minWidth: 140, order: 17 },
+  { key: 'permissionName', title: t('log.permission_change.permission_name'), dataType: 'string', minWidth: 150, order: 18 },
+  { key: 'permissionId', title: t('log.permission_change.permission_id'), dataType: 'string', advancedSearch: true, sortable: true, minWidth: 140, order: 19 },
+  { key: 'changeReason', title: t('log.permission_change.change_reason'), dataType: 'string', minWidth: 180, order: 20 },
+  { key: 'description', title: t('log.permission_change.description'), dataType: 'string', minWidth: 220, order: 21 },
+  { key: 'operationIp', title: t('log.permission_change.operation_ip'), dataType: 'string', searchable: true, sortable: true, searchPlaceholder: t('log.permission_change.operation_ip_placeholder'), minWidth: 130, order: 22 },
   { key: 'changeTime', title: t('log.permission_change.change_time'), dataType: 'datetime', sortable: true, minWidth: 170, order: 23 },
   { key: 'createdTime', title: t('common.fields.created_time'), dataType: 'datetime', sortable: true, minWidth: 170, order: 24 },
   // 仅高级搜索：变更时间区间
@@ -156,7 +159,7 @@ async function handleDetail(row: PermissionChangeLogListItemDto) {
   }
   catch (error) {
     detailData.value = row
-    toast.error((error as Error)?.message || t('log.permission_change.detail_load_failed'))
+    toast.danger((error as Error)?.message || t('log.permission_change.detail_load_failed'))
   }
   finally {
     detailLoading.value = false

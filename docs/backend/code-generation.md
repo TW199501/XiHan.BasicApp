@@ -15,7 +15,7 @@
 | 模板渲染器 | `ITemplateRenderer` / `ScribanTemplateRenderer` | 用**原生 Scriban** 渲染模板（见下文约定） |
 | 渲染器解析器 | `ITemplateRendererResolver` | 按 `TemplateEngine` 选渲染器；当前仅 Scriban |
 | 打包器 | `IGeneratedArtifactPackager` / `ZipArtifactPackager` | 产物清单 → Zip 字节流 |
-| 落盘写入器 | `IGeneratedArtifactWriter` / `FileSystemArtifactWriter` | 受控落盘（默认禁用 + 白名单 + 路径穿越拒绝） |
+| 生成到项目 | `IGeneratedArtifactWriter` / `ProjectArtifactWriter` | 写进本仓库的后端模块项目与前端工程（位置由配置推导，默认关闭，路径越界拒绝） |
 
 四张配置实体（均 `BasicAppFullAuditedEntity`，软删、多租户、审计俱全）：
 
@@ -67,13 +67,13 @@
 
 前端产物落到 `src/api/modules/<module>/` 与 `src/views/<module>/<class-kebab>/`（路径表达式里 `ModuleName` 会 `string.downcase`）。生成的页面与手写页面同构：`SchemaPage` 驱动列表与搜索，`XEditModal` + `XhFormRoot` 承载表单弹窗，控件取 `~/components` 的 `XInput` / `XSelect` / `XNumberInput` / `XTreeSelect`，提示走 `~/composables` 的 `toast`，枚举下拉走 `useEnumOptions`。文案为中文字面量，接 i18n 需自行替换。
 
-除模板产物外，引擎每次还追加**二阶产物**（目录 `_GeneratedMenuPermission/`）：
+除模板产物外，引擎每次还追加**二阶产物**（后端接线，路径相对后端模块项目根）：
 
-- <code v-pre>{{ClassName}}PermissionCodes.cs</code>——权限码常量类（资源段取表名，`{资源}:{操作}` 两段式）。
-- <code v-pre>{{ClassName}}PermissionDefinitions.cs</code>——权限定义片段。
-- <code v-pre>{{ClassName}}PageRegistry.snippet.txt</code>——`PageDescriptor` / `ButtonDescriptor` 粘贴片段。
-- <code v-pre>{{ClassName}}PermissionSeeder.cs</code> 与 <code v-pre>{{ClassName}}MenuSeeder.cs</code>——种子骨架。
-- `README.md`——落地说明：权限码表、按钮→权限码映射、`SysMenu` 菜单规格，以及并入源码后的 Seeder / 升级脚本接线清单。
+- <code v-pre>Domain/Permissions/{{ClassName}}PermissionCodes.cs</code>——权限码常量类（资源段取表名，`{资源}:{操作}` 两段式）。
+- <code v-pre>Domain/Permissions/{{ClassName}}PermissionDefinitions.cs</code>——权限定义片段。
+- <code v-pre>Infrastructure/Seeders/{{ClassName}}PermissionCatalog.cs</code> 与 <code v-pre>Infrastructure/Seeders/{{ClassName}}MenuPages.cs</code>——权限目录登记与菜单登记（总是覆盖，随包含操作、父菜单推导）。它们实现 `IPermissionCatalogContribution` / `IMenuPageContribution` 并按约定注册，由 SaaS 的汇总种子在权限目录、菜单两个阶段最后统一写入：不需要 `AddDataSeeder`，也没有种子顺序号。页面挂在表配置所选的「父菜单」下（只能选平台目录，按菜单码挂靠），未选即顶级菜单。
+- <code v-pre>_GeneratedMenuPermission/{{ClassName}}PageRegistry.snippet.txt</code>——`PageDescriptor` / `ButtonDescriptor` 粘贴片段（并进模块自己的页面登记表时用，与菜单登记二选一）。
+- `_GeneratedMenuPermission/README.md`——落地说明：权限码表、按钮→权限码映射、`SysMenu` 菜单规格与生效步骤（重启后端即由启动播种写入）。
 
 ::: tip 从旧版本升级
 前端模板此前产出的是 naive-ui 页面，现已整体迁到 XiHan.UI。已生成过代码的工程重新生成时：
@@ -83,14 +83,6 @@
 - bigint 列的 TS 类型由 `number` 改为 `string`（后端 `LongJsonConverter` 把 long 全部序列化为字符串）。存量表配置**不用管**：渲染期会按 C# 类型归一化，库里存着 `ts_type='number'` 也照样产出正确的产物。升级脚本 `UpdateScripts/4.0.4` 只是顺带把库里的配置刷成一致，好让列配置界面显示的类型与实际产物对得上。
 :::
 
-::: warning 日期时间列目前是文本框
-纯日期列（`date`）用日期选择器，按本地年月日提交，不会因时区换算退掉一天。
-
-而日期时间列（`datetime` / `timestamp` / `datetimeoffset`）渲染成带格式校验的文本框：组件库的 `XDatePicker` 只到日，用它承载会在编辑时把时分秒抹成本地零点。等 `XDatePicker` 补上 `show-time`（headless 层已支持 `showTime` / `timeGranularity`）再切回选择器。
-
-时间列（`time`）同理，也是文本框 + `HH:mm(:ss)` 校验。二进制列用文本框承载 Base64，接真实上传需自行替换成上传组件。
-:::
-
 ::: warning 按钮码必须先落到 PageRegistry
 生成页面的行/页面操作用 `permission: '{页面码}.{按钮键}'` 门控，这是服务端下发的**按钮码**。
 把 <code v-pre>{{ClassName}}PageRegistry.snippet.txt</code> 里的 `ButtonDescriptor` 条目粘进 `PageRegistry.Buttons` 之前，
@@ -98,6 +90,26 @@
 :::
 
 > 二阶产物是**待并入源码的代码片段，不是运行时写库**。这符合 BasicApp 的单一事实源 + 菜单即绑约定：把片段并入源码后，全新库由 Seeder 初始化；存量库还要把必要的数据变化纳入同版本 `UpdateScripts`。
+
+### 表单控件的取值口径
+
+- 纯日期列（`date`）用 `XDatePicker`，按本地年月日（`yyyy-MM-dd`）提交，不会因时区换算退掉一天。
+- 日期时间列（`datetime` / `timestamp` / `datetimeoffset`）用带时刻的 `XDatePicker show-time`，精确到分，按本地时间文本（`yyyy-MM-dd HH:mm:ss`）提交，与后端下发、导入的口径一致。
+- 数字列用 `XNumberInput`：整数列 `:precision="0"`，输入的小数直接回舍，不会因 1.5 让整单 400；`decimal` 列按列定义的小数位；浮点列不限。
+- 文本列带上列定义的长度 `:max-length`，文本域同时显示字数；DTO 不校验长度，超长原本要到落库才报错。
+- 关联表列的候选随目标表增长：表单用可输入筛选的 `XCombobox`，搜索区的字段标 `searchFilterable` 同样可输入筛选，都在取回的全量选项里本地筛；字典、枚举、常量下拉仍是 `XSelect`，关联树仍是树形下拉。已生成的页面重新生成后搜索区随 `schema.generated.ts` 自动换上，表单在 `index.vue` 里，想要可自行把该列的 `XSelect` 换成 `XCombobox`。
+- 时间列（`time`）没有对应的选择器，仍是文本框 + `HH:mm(:ss)` 校验；二进制列用文本框承载 Base64，接真实上传需自行替换成上传组件。
+
+::: warning 5.4.2 及更早版本生成的页面
+`{kebab}.schema.generated.ts` 每次覆盖，`index.vue` 只首次创建。含日期时间列的表重新生成后，表单模型里该字段变为 `number | null`（时间戳），而旧 `index.vue` 仍用文本框承载，类型检查会报错。按新模板手工迁移旧 `index.vue`：
+
+- 控件换成 `<XDatePicker v-model:value="form.xxx" clearable show-time />`；
+- 回填改为 `xxx: src.xxx ? new Date(String(src.xxx).replace(' ', 'T')).getTime() : null`；
+- 提交改为 `toDateTime(form.value.xxx)`（可空列 `form.value.xxx == null ? null : toDateTime(form.value.xxx)`），`toDateTime` 照抄新模板；
+- 删掉 `DATE_TIME_PATTERN` 及其校验；整数列的 `Number.isInteger` 校验可换成数字框的 `:precision="0"`。
+
+不含日期时间列的表不受影响。
+:::
 
 ## 数据源与表结构
 
@@ -223,20 +235,39 @@ Options            扩展键（树/主从结构字段、ParentMenuId 等）
 
 | `GenType` | 行为 |
 | --- | --- |
-| `Preview` | 只返回产物清单（含文件内容），不打包不落盘 |
-| `Zip` | 打成 Zip，包体以 **Base64** 随 `CodeGenResultDto.PackageBase64` 返回，前端触发下载 |
-| `CustomPath` | **受控落盘**到 `SysCodeGenTable.GenPath` |
+| `Zip` | 生成并下载：打成 Zip，包体以 **Base64** 随 `CodeGenResultDto.PackageBase64` 返回，前端触发下载 |
+| `Project` | 生成到项目：后端产物写进与表配置**命名空间**同名的模块项目，前端产物写进前端工程 |
 
-### 落盘的安全策略（fail-closed）
+预览走独立入口（`PreviewAsync`），只返回产物清单（含文件内容），不打包不落盘。
 
-`CustomPath` 落盘由 `FileSystemArtifactWriter` 把关，绑定配置节 `CodeGeneration`（`CodeGenerationOptions`），**默认禁用**，任一条件不满足即拒绝：
+### 生成到项目的位置
 
-- `EnableCustomPathDisk=false`（默认）→ 拒绝。
-- `AllowedRootPaths` 为空 → 拒绝。
-- 目标路径不在白名单根目录内 → 拒绝。
+写入位置不由表配置随意指定，而是按宿主内容根（WebHost 项目目录）推导本仓库的目录：
+
+- **后端**：在 `BackendRootPath`（缺省配置 `../..`，即 `backend/src`）下的分组目录里找 `<命名空间>/<命名空间>.csproj`，如命名空间 `XiHan.BasicApp.Sample` 写进 `backend/src/business/XiHan.BasicApp.Sample/`。模板的路径表达式（`Domain/Entities`、`Application/Dtos`…）与接线产物都相对这个项目目录。
+- **前端**：写进 `FrontendRootPath`（缺省配置 `../../../../frontend`）指向的前端工程，模板路径 `src/api/modules/<module>/`、`src/views/<module>/<class-kebab>/` 相对它。
+- 产物按模板分组归属：`backend-*` 进后端项目，`frontend-*` 进前端工程；生成范围只选后端时不碰前端配置。
+
+由 `ProjectArtifactWriter` 写入，绑定配置节 `CodeGeneration`（`CodeGenerationOptions`），**默认关闭**，任一条件不满足即整体拒绝、一个文件都不写：
+
+- `EnableGenerateToProject` 未开启（缺省）→ 拒绝。配置只放在 `appsettings.Development.json`，其他环境只能生成并下载。
+- 命名空间为空、不是以点分隔的标识符，或在源码根下找不到 / 找到多个同名项目 → 拒绝，不替你新建项目。
+- 前端工程目录下没有 `package.json` → 拒绝。
+- 模板分组既不是后端也不是前端 → 拒绝（不知道写进哪个项目）。
 - 产物相对路径是绝对路径 / 带盘符 / 拼接后越界（`..` 逃逸）→ 拒绝。
 
-即"默认禁用 + 白名单根目录 + 路径穿越二次校验"，符合本仓 fail-closed 约定。生产要落盘须显式开启并配置白名单。
+全部产物定好位置才动磁盘；手动文件已存在时跳过，生成历史记下写入的项目目录。
+
+### 沿用已有实体
+
+本仓库的表一般由实体自动建出：先写实体，启动时框架按实体建表，再把表导入代码生成。这种表在代码里已经有实体，生成时沿用它：
+
+- 引擎经实体元数据目录按表名找到实体类型；它没有生成器标记（`[GeneratedCode("XiHan.CodeGen", …)]`）即视为手写实体，不再生成 `backend.entity` 与 `backend.entity.manual`。
+- 仓储、映射、查询服务等按实体所在命名空间引用它（模板变量 `EntityNamespace`）；表配置的类名须与实体类名一致，否则生成直接失败并给出正确类名。
+- 关联目标表已有实体时，选项查询直接用它的真实类型。
+- 外部库的表没有实体，照常生成实体；生成的实体带生成器标记，下次照常覆盖。
+- 唯一列的索引由实体负责：沿用已有实体时要自己在实体上加 `SugarIndex`。
+- 生成到项目时，若项目里已有手写的同名文件（如手写仓储）而没有对应的自动文件，整体拒绝、一个文件都不写：先移走它，自定义代码写进生成后的手动文件。
 
 ## 零代码运行时（只读）
 
@@ -254,7 +285,7 @@ Options            扩展键（树/主从结构字段、ParentMenuId 等）
 - **加一种数据库方言**：扩展 `ITypeMappingProvider` 的映射；扫描能力依赖框架 `IDatabaseMetadataProvider`。
 - **加/改模板**：新增 `SysCodeGenTemplate`（自定义编码、Scriban 正文、文件名/路径表达式），或改动非内置模板；用模板变量表与 `IsBaseColumn` 约定编写。
 - **换渲染引擎**：实现 `ITemplateRenderer`（`Engine` 返回对应 `TemplateEngine`）并注册，`TemplateRendererResolver` 后注册覆盖先注册。
-- **生成后并入源码**：按 `_GeneratedMenuPermission/README.md` 的步骤把权限码常量、种子（资源→权限→菜单→授权，Order 用 200+ 段）并入模块；全新库由种子初始化，存量库还要补对应版本的前向升级脚本。
+- **生成后并入源码**：按 `_GeneratedMenuPermission/README.md` 确认权限码常量与两个登记类落位，重启后端即由汇总种子写入权限与菜单（不需要登记种子）；旧版本生成的 `XxxPermissionSeeder` / `XxxMenuSeeder` 及其 `AddDataSeeder` 登记要删掉。
 
 ## 下一步
 

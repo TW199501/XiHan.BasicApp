@@ -1,6 +1,7 @@
 // Copyright (c) 2021-Present XiHanFun and contributors.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
+using System.Text;
 using XiHan.BasicApp.CodeGeneration.Domain.Enums;
 using XiHan.BasicApp.CodeGeneration.Domain.Generation;
 using Shared = XiHan.BasicApp.CodeGeneration.Infrastructure.Generation.MenuPermissionArtifactShared;
@@ -8,17 +9,19 @@ using Shared = XiHan.BasicApp.CodeGeneration.Infrastructure.Generation.MenuPermi
 namespace XiHan.BasicApp.CodeGeneration.Infrastructure.Generation;
 
 /// <summary>
-/// 种子骨架二阶产物生成器（{Class}PermissionSeeder.cs + {Class}MenuSeeder.cs）
+/// 种子登记二阶产物生成器（{Class}PermissionCatalog.cs + {Class}MenuPages.cs）
 /// </summary>
 /// <remarks>
-/// 产出可编译的种子骨架，镜像本仓库既有 Seeder 样板（DataSeederBase + 资源/权限/授权/菜单）。
-/// Order 为占位、需人工确认不冲突，故标 <see cref="ArtifactWriteMode.WriteOnce"/>（首次创建后永不覆盖）。
-/// 权限项来源为同批生成的 {Class}PermissionDefinitions，避免两处描述。
+/// 产出的不是种子，而是交给平台汇总种子的登记：权限目录实现 IPermissionCatalogContribution（资源 + 资源 × 操作的权限），
+/// 菜单实现 IMenuPageContribution（页面行 + 按钮行）。两者按约定注册（ExposeServices + ITransientDependency），
+/// 由 SaaS 的汇总种子在权限目录、菜单两个阶段最后统一写入：业务模块不需要登记种子，也不各自占种子顺序号。
+/// 内容全部由表配置推导（包含操作、父菜单），标 <see cref="ArtifactWriteMode.AlwaysOverwrite"/>，重新生成即随配置更新。
+/// 权限项来源为同批生成的 {Class}PermissionDefinitions，按钮的权限码来自同批生成的 {Class}PermissionCodes，避免两处描述。
 /// </remarks>
 internal static class SeederArtifactGenerator
 {
     /// <summary>
-    /// 构建两个种子骨架
+    /// 构建权限目录登记与菜单登记
     /// </summary>
     public static IReadOnlyList<GeneratedArtifact> Build(CodeGenerationContext context)
     {
@@ -26,252 +29,158 @@ internal static class SeederArtifactGenerator
 
         return
         [
-            BuildPermissionSeeder(context),
-            BuildMenuSeeder(context)
+            Artifact(context, "PermissionCatalog", PermissionCatalogTemplate),
+            Artifact(context, "MenuPages", MenuPagesTemplate)
         ];
     }
 
-    private static GeneratedArtifact BuildPermissionSeeder(CodeGenerationContext context)
+    private static GeneratedArtifact Artifact(CodeGenerationContext context, string suffix, string template)
     {
-        var content = Fill(PermissionSeederTemplate, context);
-        var fileName = $"{context.ClassName}PermissionSeeder.cs";
-        return new GeneratedArtifact($"{Shared.OutputFolder}/{fileName}", fileName, content, Shared.TemplateCode, ArtifactWriteMode.WriteOnce);
-    }
-
-    private static GeneratedArtifact BuildMenuSeeder(CodeGenerationContext context)
-    {
-        var content = Fill(MenuSeederTemplate, context);
-        var fileName = $"{context.ClassName}MenuSeeder.cs";
-        return new GeneratedArtifact($"{Shared.OutputFolder}/{fileName}", fileName, content, Shared.TemplateCode, ArtifactWriteMode.WriteOnce);
+        var fileName = $"{context.ClassName}{suffix}.cs";
+        return new GeneratedArtifact($"{Shared.SeedersFolder}/{fileName}", fileName, Fill(template, context), Shared.TemplateCode, ArtifactWriteMode.AlwaysOverwrite, ArtifactSide.Backend);
     }
 
     /// <summary>
     /// 占位替换（原始字符串模板含大量 C# 花括号/内插，用 %TOKEN% 占位避免转义）
     /// </summary>
+    /// <remarks>
+    /// 显示名是业务名称的自由文本：进字符串字面量的 %DISPLAY% 按 C# 字符串转义，
+    /// 进文档注释的 %DISPLAY_DOC% 按 XML 转义，否则引号、反斜杠、尖括号都会让登记编译不过。
+    /// </remarks>
     private static string Fill(string template, CodeGenerationContext context)
     {
+        var display = Shared.Display(context);
         return template
             .Replace("%NS%", Shared.ResolveNamespace(context))
             .Replace("%CLASS%", context.ClassName)
             .Replace("%MODULE%", Shared.ModuleSegment(context))
-            .Replace("%DISPLAY%", Shared.Display(context))
+            .Replace("%DISPLAY_DOC%", TemplateTextEscaper.XmlDoc(display))
+            .Replace("%DISPLAY%", TemplateTextEscaper.CSharpString(display))
             .Replace("%RESOURCE%", Shared.Resource(context))
-            .Replace("%PAGECODE%", $"{Shared.ModuleLower(context)}.{Shared.Kebab(context)}")
+            .Replace("%PAGECODE%", Shared.PageCode(context))
             .Replace("%PATH%", $"/{Shared.ModuleLower(context)}/{Shared.Kebab(context)}")
             .Replace("%COMPONENT%", Shared.Component(context))
-            .Replace("%ROUTE%", Shared.RouteName(context));
+            .Replace("%ROUTE%", Shared.RouteName(context))
+            .Replace("%PARENT%", context.ParentMenuCode is null ? "null" : $"\"{TemplateTextEscaper.CSharpString(context.ParentMenuCode)}\"")
+            .Replace("%BUTTONS%", BuildButtons(context));
     }
 
-    private const string PermissionSeederTemplate = """
-// 本文件为代码生成器产出的种子骨架：仅首次创建、重新生成不覆盖，可自由编辑。
-// Order 为占位（默认 200 段），并入前请确认不与既有 Seeder 冲突。
-using Microsoft.Extensions.Logging;
+    /// <summary>
+    /// 按钮行（已启用的写操作与打印）；查询与详情走列表页的读取权限，没有独立按钮
+    /// </summary>
+    private static string BuildButtons(CodeGenerationContext context)
+    {
+        var pageCode = Shared.PageCode(context);
+        var sb = new StringBuilder();
+        var sort = 1;
+        foreach (var button in Shared.EnabledButtons(context))
+        {
+            sb.AppendLine($"        new(\"{pageCode}.{button.Key}\", \"{button.Title}\", \"{pageCode}\", {context.ClassName}PermissionCodes.{Shared.Pascalize(button.Action)}, {sort}),");
+            sort++;
+        }
+
+        return sb.ToString().TrimEnd();
+    }
+
+    private const string PermissionCatalogTemplate = """
+// Copyright (c) 2021-Present XiHanFun and contributors.
+// Licensed under the MIT License. See LICENSE in the project root for license information.
+// <auto-generated />
+// 本文件由代码生成器产出，重新生成时整体覆盖：权限随表配置的包含操作推导，请勿手工编辑。
+
 using %NS%.Domain.Permissions;
 using XiHan.BasicApp.Saas.Domain.Entities;
-using XiHan.BasicApp.Saas.Domain.Enums;
-using XiHan.Framework.Data.SqlSugar.Clients;
-using XiHan.Framework.Data.SqlSugar.Seeders;
+using XiHan.BasicApp.Saas.Infrastructure.Seeders;
+using XiHan.Framework.Core.DependencyInjection;
+using XiHan.Framework.Core.DependencyInjection.ServiceLifetimes;
 
 namespace %NS%.Infrastructure.Seeders;
 
 /// <summary>
-/// %DISPLAY% 资源 + 权限 + 超管授权种子（生成骨架）
+/// %DISPLAY_DOC% 权限目录登记：资源与「资源 × 已启用操作」的权限
 /// </summary>
 /// <remarks>
-/// 依赖平台操作字典（SysOperation：read/create/update/delete…）已由既有种子登记。
-/// 须置于 %CLASS%MenuSeeder 之前：菜单建立时需解析 %RESOURCE%:read。
+/// 按约定注册，由平台的汇总种子在权限目录阶段最后统一写入平台库：不需要在模块里登记种子，也没有自己的种子顺序号。
+/// 操作来自平台操作字典（OperationSeeds）；作用侧两侧生效。
+/// 权限只需声明，超管在平台天然拥有全部权限，租户的角色与套餐白名单由运营授予。
 /// </remarks>
-public sealed class %CLASS%PermissionSeeder : DataSeederBase
+[ExposeServices(typeof(IPermissionCatalogContribution))]
+public sealed class %CLASS%PermissionCatalog : IPermissionCatalogContribution, ITransientDependency
 {
-    /// <summary>构造函数</summary>
-    public %CLASS%PermissionSeeder(ISqlSugarClientResolver clientResolver, ILogger<%CLASS%PermissionSeeder> logger, IServiceProvider serviceProvider)
-        : base(clientResolver, logger, serviceProvider)
-    {
-    }
+    private static readonly ResourceSeed Resource = new(
+        %CLASS%PermissionDefinitions.Resource,
+        %CLASS%PermissionDefinitions.ResourceName,
+        %CLASS%PermissionDefinitions.ResourcePath,
+        %CLASS%PermissionDefinitions.ResourceName + "接口",
+        0);
 
-    /// <summary>种子优先级（TODO：确认不冲突，保持 权限→菜单 顺序）</summary>
-    public override int Order => 200;
+    /// <summary>登记名</summary>
+    public string Name => "[%MODULE%]%DISPLAY%权限目录";
 
-    /// <summary>种子名称</summary>
-    public override string Name => "[%MODULE%]%DISPLAY%权限种子数据";
+    /// <summary>模块编码</summary>
+    public string ModuleCode => %CLASS%PermissionDefinitions.Module;
 
-    /// <summary>种子实现</summary>
-    protected override async Task SeedInternalAsync()
-    {
-        var client = DbClient;
+    /// <summary>资源</summary>
+    public IReadOnlyList<ResourceSeed> Resources { get; } = [Resource];
 
-        // 1) 资源（幂等）
-        var resource = await client.Queryable<SysResource>().FirstAsync(r => r.ResourceCode == %CLASS%PermissionDefinitions.Resource);
-        if (resource is null)
-        {
-            await BulkInsertAsync(new List<SysResource>
-            {
-                new()
-                {
-                    ResourceCode = %CLASS%PermissionDefinitions.Resource,
-                    ResourceName = %CLASS%PermissionDefinitions.ResourceName,
-                    ResourceType = ResourceType.Api,
-                    ResourcePath = %CLASS%PermissionDefinitions.ResourcePath,
-                    Description = %CLASS%PermissionDefinitions.ResourceName + " API",
-                    AccessLevel = ResourceAccessLevel.Authorized,
-                    Status = EnableStatus.Enabled,
-                    Sort = 0
-                }
-            });
-            resource = await client.Queryable<SysResource>().FirstAsync(r => r.ResourceCode == %CLASS%PermissionDefinitions.Resource);
-        }
-
-        // 2) 权限（资源 × 操作）
-        var operationMap = (await client.Queryable<SysOperation>().ToListAsync()).ToDictionary(o => o.OperationCode, o => o);
-        var codes = %CLASS%PermissionDefinitions.Items.Select(i => $"{resource.ResourceCode}:{i.Action}").ToList();
-        var existingCodes = (await client.Queryable<SysPermission>().Where(p => codes.Contains(p.PermissionCode)).ToListAsync())
-            .Select(p => p.PermissionCode).ToHashSet();
-        var permissionAddList = new List<SysPermission>();
-        foreach (var item in %CLASS%PermissionDefinitions.Items)
-        {
-            var permissionCode = $"{resource.ResourceCode}:{item.Action}";
-            if (existingCodes.Contains(permissionCode))
-            {
-                continue;
-            }
-
-            if (!operationMap.TryGetValue(item.Action, out var operation))
-            {
-                Logger.LogWarning("操作字典缺少 {Action}，跳过权限 {Code}", item.Action, permissionCode);
-                continue;
-            }
-
-            permissionAddList.Add(new SysPermission
-            {
-                ModuleCode = %CLASS%PermissionDefinitions.Module,
-                ResourceId = resource.BasicId,
-                OperationId = operation.BasicId,
-                PermissionCode = permissionCode,
-                PermissionName = item.Name,
-                PermissionDescription = item.Description,
-                IsRequireAudit = item.IsRequireAudit,
-                Tags = %CLASS%PermissionDefinitions.Resource,
-                Status = EnableStatus.Enabled,
-                Sort = 900 + permissionAddList.Count
-            });
-        }
-
-        if (permissionAddList.Count > 0)
-        {
-            await BulkInsertAsync(permissionAddList);
-        }
-
-        // 3) 超管授权
-        var superRole = await client.Queryable<SysRole>().FirstAsync(r => r.RoleCode == "super_admin");
-        if (superRole is null)
-        {
-            Logger.LogWarning("super_admin 角色不存在，跳过 %RESOURCE% 超管授权");
-            return;
-        }
-
-        var resourcePrefix = %CLASS%PermissionDefinitions.Resource + ":";
-        var permissions = await client.Queryable<SysPermission>().Where(p => p.PermissionCode.StartsWith(resourcePrefix)).ToListAsync();
-        var permissionIds = permissions.Select(p => p.BasicId).ToList();
-        var grantedIds = (await client.Queryable<SysRolePermission>()
-                .Where(rp => rp.RoleId == superRole.BasicId && permissionIds.Contains(rp.PermissionId)).ToListAsync())
-            .Select(rp => rp.PermissionId).ToHashSet();
-        var grantAddList = permissions.Where(p => !grantedIds.Contains(p.BasicId))
-            .Select(p => new SysRolePermission { RoleId = superRole.BasicId, PermissionId = p.BasicId }).ToList();
-        if (grantAddList.Count > 0)
-        {
-            await BulkInsertAsync(grantAddList);
-        }
-
-        Logger.LogInformation("%DISPLAY% 权限种子：新增权限 {P} 个、授权 {G} 个", permissionAddList.Count, grantAddList.Count);
-    }
+    /// <summary>权限（资源 × 已启用操作）</summary>
+    public IReadOnlyList<PermissionSeed> Permissions { get; } =
+    [
+        .. %CLASS%PermissionDefinitions.Items.Select((item, index) => new PermissionSeed(
+            $"{Resource.Code}:{item.Action}",
+            item.Name,
+            item.Description,
+            Resource.Code,
+            PermissionSide.Both,
+            item.IsRequireAudit,
+            9000 + index,
+            Resource,
+            OperationSeeds.All.Single(operation => operation.Code == item.Action)))
+    ];
 }
 """;
 
-    private const string MenuSeederTemplate = """
-// 本文件为代码生成器产出的种子骨架：仅首次创建、重新生成不覆盖，可自由编辑。
-// Order 为占位（默认 201），须 > %CLASS%PermissionSeeder.Order，并入前确认不冲突。
-using Microsoft.Extensions.Logging;
+    private const string MenuPagesTemplate = """
+// Copyright (c) 2021-Present XiHanFun and contributors.
+// Licensed under the MIT License. See LICENSE in the project root for license information.
+// <auto-generated />
+// 本文件由代码生成器产出，重新生成时整体覆盖：页面与按钮随表配置（包含操作、父菜单）推导，请勿手工编辑。
+
+using %NS%.Domain.Permissions;
+using XiHan.BasicApp.Saas.Application.Pages;
 using XiHan.BasicApp.Saas.Domain.Entities;
-using XiHan.BasicApp.Saas.Domain.Enums;
-using XiHan.Framework.Data.SqlSugar.Clients;
-using XiHan.Framework.Data.SqlSugar.Seeders;
+using XiHan.BasicApp.Saas.Infrastructure.Seeders;
+using XiHan.Framework.Core.DependencyInjection;
+using XiHan.Framework.Core.DependencyInjection.ServiceLifetimes;
 
 namespace %NS%.Infrastructure.Seeders;
 
 /// <summary>
-/// %DISPLAY% 菜单种子（生成骨架）
+/// %DISPLAY_DOC% 菜单登记：页面行与按钮行
 /// </summary>
 /// <remarks>
-/// 须置于 %CLASS%PermissionSeeder 之后：菜单建立时需解析 %RESOURCE%:read 绑定可见性。
-/// 如挂父菜单：插入后用 Updateable 按 MenuCode 回写 ParentId。
-/// 若走模块 PageRegistry 单一事实源（推荐，见 Saas/AI/CodeGeneration 各自的 Application/Pages/PageRegistry.cs），
-/// 则删除本种子，改为登记条目并让模块菜单种子继承 PageRegistryMenuSeederBase。
-///
-/// 本种子只种菜单行（MenuType.Menu），不种按钮行。生成页面的新增/编辑/删除按钮用按钮码
-/// %PAGECODE%.{create|update|delete} 门控，按钮码只由 PageRegistry.Buttons 下发——
-/// 只注册本种子的话按钮一个都不会显示，须把 %CLASS%PageRegistry.snippet.txt 的
-/// ButtonDescriptor 条目粘进 PageRegistry.Buttons。
+/// 按约定注册，由平台的汇总种子在菜单阶段最后统一写入（此时平台各模块的目录都已就位）：不需要登记种子，也没有自己的种子顺序号。
+/// 页面绑定 %RESOURCE%:read 控制可见；页面按钮用按钮码 %PAGECODE%.{create|update|delete…} 门控，按钮码只由这里的按钮行下发。
+/// 父菜单取表配置的「父菜单」；排序、启停、显隐归运营，在菜单管理页调整（种子只在插入时写排序）。
 /// </remarks>
-public sealed class %CLASS%MenuSeeder : DataSeederBase
+[ExposeServices(typeof(IMenuPageContribution))]
+public sealed class %CLASS%MenuPages : IMenuPageContribution, ITransientDependency
 {
-    /// <summary>构造函数</summary>
-    public %CLASS%MenuSeeder(ISqlSugarClientResolver clientResolver, ILogger<%CLASS%MenuSeeder> logger, IServiceProvider serviceProvider)
-        : base(clientResolver, logger, serviceProvider)
-    {
-    }
+    /// <summary>登记名</summary>
+    public string Name => "[%MODULE%]%DISPLAY%菜单";
 
-    /// <summary>种子优先级（TODO：确认 &gt; %CLASS%PermissionSeeder.Order 且不冲突）</summary>
-    public override int Order => 201;
+    /// <summary>页面</summary>
+    public IReadOnlyList<PageDescriptor> Pages { get; } =
+    [
+        new("%PAGECODE%", "%DISPLAY%", I18nKey: null, MenuType.Menu, "%PATH%", "%ROUTE%", "%COMPONENT%",
+            ParentCode: %PARENT%, %CLASS%PermissionCodes.Read, "lucide:table", 999),
+    ];
 
-    /// <summary>种子名称</summary>
-    public override string Name => "[%MODULE%]%DISPLAY%菜单种子数据";
-
-    /// <summary>种子实现</summary>
-    protected override async Task SeedInternalAsync()
-    {
-        var client = DbClient;
-
-        var readPermission = await client.Queryable<SysPermission>().FirstAsync(p => p.PermissionCode == "%RESOURCE%:read");
-        if (readPermission is null)
-        {
-            Logger.LogWarning("%RESOURCE%:read 权限不存在，跳过 %DISPLAY% 菜单种子");
-            return;
-        }
-
-        var exists = await client.Queryable<SysMenu>().AnyAsync(m => m.MenuCode == "%RESOURCE%");
-        if (exists)
-        {
-            Logger.LogInformation("%DISPLAY% 菜单已存在，跳过");
-            return;
-        }
-
-        await BulkInsertAsync(new List<SysMenu>
-        {
-            new()
-            {
-                ParentId = null, // TODO：如需挂父目录，插入后按 MenuCode 回写 ParentId
-                PermissionId = readPermission.BasicId,
-                MenuName = "%DISPLAY%",
-                MenuCode = "%RESOURCE%",
-                MenuType = MenuType.Menu,
-                Path = "%PATH%",
-                Component = "%COMPONENT%",
-                RouteName = "%ROUTE%",
-                Icon = "lucide:table",
-                Title = "%DISPLAY%",
-                I18nKey = "menu.%RESOURCE%",
-                IsExternal = false,
-                IsCache = true,
-                IsVisible = true,
-                IsAffix = false,
-                Status = EnableStatus.Enabled,
-                Sort = 999,
-                Remark = "%DISPLAY%"
-            }
-        });
-
-        Logger.LogInformation("初始化 %DISPLAY% 菜单");
-    }
+    /// <summary>页面内按钮</summary>
+    public IReadOnlyList<ButtonDescriptor> Buttons { get; } =
+    [
+%BUTTONS%
+    ];
 }
 """;
 }

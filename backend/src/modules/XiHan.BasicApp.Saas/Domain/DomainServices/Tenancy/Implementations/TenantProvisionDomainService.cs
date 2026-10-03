@@ -15,11 +15,6 @@ namespace XiHan.BasicApp.Saas.Domain.DomainServices;
 public sealed class TenantProvisionDomainService
     : ITenantProvisionDomainService
 {
-    /// <summary>
-    /// 租户初始化 Owner 角色编码
-    /// </summary>
-    private const string TenantOwnerRoleCode = "tenant_owner";
-
     private readonly IUserRepository _userRepository;
 
     private readonly IUserSecurityRepository _userSecurityRepository;
@@ -72,8 +67,12 @@ public sealed class TenantProvisionDomainService
     }
 
     /// <summary>
-    /// 一站式开通租户：确保版本、创建管理员账号、创建 Owner 角色并按版本白名单授权、绑定角色
+    /// 开通租户管理员：管理员账号、所有者成员关系、所有者角色及其绑定
     /// </summary>
+    /// <remarks>
+    /// 所有者角色是系统角色，不写授权行：授权快照让持有者拿到租户生效的全部权限，再经套餐门控收窄，
+    /// 所以套餐升降、新增权限码都即时反映，无需回头同步。账号、成员关系、角色与绑定都是该租户的数据，切入该租户写。
+    /// </remarks>
     /// <param name="tenant">已创建的租户实体</param>
     /// <param name="adminUserName">管理员用户名</param>
     /// <param name="adminEmail">管理员邮箱（登录身份标识，全平台唯一）</param>
@@ -88,50 +87,7 @@ public sealed class TenantProvisionDomainService
         ArgumentException.ThrowIfNullOrWhiteSpace(passwordHash);
         cancellationToken.ThrowIfCancellationRequested();
 
-        // 平台态代写：SysTenant 行、账号注册表、租户授权绑定都落平台库（库隔离租户的独立库此时尚未建立，
-        //           其 ConfigStatus 为 Pending，建库是 InitializeDatabase 的独立步骤）。
-        //           各实体均显式置 TenantId，平台态插入保留该预置值
-        using var platformScope = _currentTenant.Change(null);
-
-        // 1) 确保版本：未指定则取默认版本并持久化
-        var editionId = tenant.EditionId ?? await AssignDefaultEditionAsync(tenant, cancellationToken);
-        if (editionId.HasValue && tenant.EditionId != editionId)
-        {
-            tenant.EditionId = editionId;
-            await _tenantRepository.UpdateAsync(tenant, cancellationToken);
-        }
-
-        // 2) 创建管理员（用户/安全/成员）
-        var adminUser = await InitializeTenantAdminAsync(tenant, adminUserName, adminEmail, passwordHash, cancellationToken);
-
-        // 3) 创建 Owner 角色并按版本白名单授权
-        var ownerRoleId = await CreateOwnerRoleWithEditionPermissionsAsync(tenant, editionId, cancellationToken);
-
-        // 4) 绑定管理员到 Owner 角色
-        await AssignAdminRoleAsync(tenant, adminUser.BasicId, ownerRoleId, cancellationToken);
-
-        return adminUser;
-    }
-
-    /// <summary>
-    /// 初始化租户管理员账号
-    /// </summary>
-    /// <param name="tenant">已创建的租户实体</param>
-    /// <param name="adminUserName">管理员用户名</param>
-    /// <param name="adminEmail">管理员邮箱（登录身份标识，全平台唯一）</param>
-    /// <param name="passwordHash">管理员密码哈希</param>
-    /// <param name="cancellationToken">取消令牌</param>
-    /// <returns>创建的管理员用户</returns>
-    public async Task<SysUser> InitializeTenantAdminAsync(SysTenant tenant, string adminUserName, string adminEmail, string passwordHash, CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(tenant);
-        ArgumentException.ThrowIfNullOrWhiteSpace(adminUserName);
-        ArgumentException.ThrowIfNullOrWhiteSpace(adminEmail);
-        ArgumentException.ThrowIfNullOrWhiteSpace(passwordHash);
-        cancellationToken.ThrowIfCancellationRequested();
-
-        // 平台态代写：账号注册表落平台库（实体显式置 TenantId，平台态插入保留该预置值）
-        using var platformScope = _currentTenant.Change(null);
+        EnsureProvisionable(tenant);
 
         // 邮箱是全平台唯一的登录身份标识
         var normalizedEmail = adminEmail.Trim();
@@ -147,64 +103,43 @@ public sealed class TenantProvisionDomainService
             throw new UserFriendlyException("管理员用户名已被使用。");
         }
 
-        // 创建管理员用户
-        var adminUser = new SysUser
+        using var tenantScope = EnterTenantScope(tenant);
+
+        var adminUser = await _userRepository.AddAsync(new SysUser
         {
-            TenantId = tenant.BasicId,
             UserName = normalizedUserName,
             Email = normalizedEmail,
             Status = EnableStatus.Enabled,
             IsSystemAccount = true
-        };
-        adminUser = await _userRepository.AddAsync(adminUser, cancellationToken);
+        }, cancellationToken);
 
-        // 创建用户安全信息（密码）
-        var security = new SysUserSecurity
+        await _userSecurityRepository.AddAsync(new SysUserSecurity
         {
-            TenantId = tenant.BasicId,
             UserId = adminUser.BasicId,
             Password = passwordHash,
-            LastPasswordChangeTime = DateTimeOffset.UtcNow
-        };
-        await _userSecurityRepository.AddAsync(security, cancellationToken);
+            LastPasswordChangeTime = DateTimeOffset.UtcNow,
+            // 初始密码由平台设置
+            PasswordChangeRequired = true
+        }, cancellationToken);
 
-        // 创建租户成员关系
-        var tenantUser = new SysTenantUser
+        await _tenantUserRepository.AddAsync(new SysTenantUser
         {
-            TenantId = tenant.BasicId,
             UserId = adminUser.BasicId,
             MemberType = TenantMemberType.Owner,
             InviteStatus = TenantMemberInviteStatus.Accepted,
             RespondedTime = DateTimeOffset.UtcNow
-        };
-        await _tenantUserRepository.AddAsync(tenantUser, cancellationToken);
+        }, cancellationToken);
+
+        var ownerRole = await _roleRepository.AddAsync(SysRole.CreateTenantOwnerRole(), cancellationToken);
+        await _userRoleRepository.AddAsync(new SysUserRole
+        {
+            UserId = adminUser.BasicId,
+            RoleId = ownerRole.BasicId,
+            Status = ValidityStatus.Valid,
+            GrantReason = "租户开通"
+        }, cancellationToken);
 
         return adminUser;
-    }
-
-    /// <summary>
-    /// 为租户管理员分配默认角色
-    /// </summary>
-    /// <param name="tenant">租户实体</param>
-    /// <param name="adminUserId">管理员用户ID</param>
-    /// <param name="ownerRoleId">Owner 角色ID</param>
-    /// <param name="cancellationToken">取消令牌</param>
-    public async Task AssignAdminRoleAsync(SysTenant tenant, long adminUserId, long ownerRoleId, CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(tenant);
-        cancellationToken.ThrowIfCancellationRequested();
-
-        // 平台态代写：授权绑定落平台库（实体显式置 TenantId，平台态插入保留该预置值）
-        using var platformScope = _currentTenant.Change(null);
-
-        var userRole = new SysUserRole
-        {
-            TenantId = tenant.BasicId,
-            UserId = adminUserId,
-            RoleId = ownerRoleId,
-            Status = ValidityStatus.Valid
-        };
-        await _userRoleRepository.AddAsync(userRole, cancellationToken);
     }
 
     /// <summary>
@@ -249,15 +184,16 @@ public sealed class TenantProvisionDomainService
             return 0;
         }
 
-        // 平台态执行：版本白名单是平台数据，授权绑定与开通期一致地落在平台库；
-        //           租户范围显式落进下面的 WHERE，不依赖当前上下文
-        using var platformScope = _currentTenant.Change(null);
-
-        var whitelist = await _tenantEditionPermissionRepository.GetByEditionIdAsync(tenant.EditionId.Value, cancellationToken);
-        var allowedIds = whitelist
-            .Where(item => item.Status == ValidityStatus.Valid)
-            .Select(item => item.PermissionId)
-            .ToHashSet();
+        // 版本白名单是平台数据，在平台作用域读
+        HashSet<long> allowedIds;
+        using (_currentTenant.Change(null))
+        {
+            var whitelist = await _tenantEditionPermissionRepository.GetByEditionIdAsync(tenant.EditionId.Value, cancellationToken);
+            allowedIds = whitelist
+                .Where(item => item.Status == ValidityStatus.Valid)
+                .Select(item => item.PermissionId)
+                .ToHashSet();
+        }
 
         // 白名单为空视为门控未启用（与运行时鉴权门控语义一致），不做回收，避免误清
         if (allowedIds.Count == 0)
@@ -265,7 +201,9 @@ public sealed class TenantProvisionDomainService
             return 0;
         }
 
-        // 仅处理该租户自有绑定行（TenantId=本租户）；全局行（TenantId=0）属平台运维资产，不在回收范围
+        // 授权绑定是该租户的数据，切入该租户读写；只处理该租户自有绑定行，
+        // 读共享可见的全局行（TenantId=0）属平台资产，不在回收范围
+        using var tenantScope = EnterTenantScope(tenant);
         var tenantId = tenant.BasicId;
         var now = DateTimeOffset.UtcNow;
 
@@ -321,10 +259,13 @@ public sealed class TenantProvisionDomainService
             return 0;
         }
 
-        // 平台态执行：SysTenant 是平台数据
-        using var platformScope = _currentTenant.Change(null);
+        // 租户注册表是平台数据，在平台作用域读；逐个租户的回收各自切入该租户
+        IReadOnlyList<SysTenant> tenants;
+        using (_currentTenant.Change(null))
+        {
+            tenants = await _tenantRepository.GetListAsync(tenant => tenant.EditionId == editionId, cancellationToken);
+        }
 
-        var tenants = await _tenantRepository.GetListAsync(tenant => tenant.EditionId == editionId, cancellationToken);
         var total = 0;
         foreach (var tenant in tenants)
         {
@@ -335,52 +276,71 @@ public sealed class TenantProvisionDomainService
     }
 
     /// <summary>
-    /// 创建租户 Owner 角色，并按其版本(Edition)允许的权限白名单批量授权
+    /// 取待初始化管理员的租户
     /// </summary>
-    private async Task<long> CreateOwnerRoleWithEditionPermissionsAsync(SysTenant tenant, long? editionId, CancellationToken cancellationToken)
+    /// <remarks>
+    /// 任何隔离模式都是先建租户、再初始化管理员；库隔离租户在两步之间初始化独立库——开通过程中写成员、授权时
+    /// 会连带写日志等租户库数据，库得先在。租户可开通（见 <see cref="EnsureProvisionable"/>）且还没有所有者时才能初始化。
+    /// </remarks>
+    public async Task<SysTenant> GetTenantAwaitingAdminAsync(long tenantId, CancellationToken cancellationToken = default)
     {
-        var role = new SysRole
-        {
-            TenantId = tenant.BasicId,
-            RoleCode = TenantOwnerRoleCode,
-            RoleName = "租户所有者",
-            RoleDescription = "租户初始化所有者角色，拥有租户版本范围内全部权限",
-            RoleType = RoleType.Custom,
-            DataScope = DataPermissionScope.All,
-            MaxMembers = 0,
-            Status = EnableStatus.Enabled,
-            Sort = 1,
-            Remark = "租户开通初始化角色"
-        };
-        role = await _roleRepository.AddAsync(role, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
 
-        if (!editionId.HasValue)
+        if (tenantId <= 0)
         {
-            return role.BasicId;
+            throw new ArgumentOutOfRangeException(nameof(tenantId), "租户主键必须大于 0。");
         }
 
-        var whitelist = await _tenantEditionPermissionRepository.GetByEditionIdAsync(editionId.Value, cancellationToken);
-        var grants = whitelist
-            .Where(item => item.Status == ValidityStatus.Valid)
-            .Select(item => item.PermissionId)
-            .Distinct()
-            .Select(permissionId => new SysRolePermission
+        SysTenant tenant;
+        using (_currentTenant.Change(null))
+        {
+            tenant = await _tenantRepository.GetByIdAsync(tenantId, cancellationToken)
+                ?? throw new UserFriendlyException("租户不存在。");
+        }
+
+        EnsureProvisionable(tenant);
+
+        using (EnterTenantScope(tenant))
+        {
+            if (await _tenantUserRepository.AnyAsync(member => member.MemberType == TenantMemberType.Owner, cancellationToken))
             {
-                TenantId = tenant.BasicId,
-                RoleId = role.BasicId,
-                PermissionId = permissionId,
-                PermissionAction = PermissionAction.Grant,
-                Status = ValidityStatus.Valid,
-                GrantReason = "租户开通按版本白名单初始化",
-                Remark = "租户开通初始化授权"
-            })
-            .ToList();
-
-        if (grants.Count > 0)
-        {
-            _ = await _rolePermissionRepository.AddRangeAsync(grants, cancellationToken);
+                throw new UserFriendlyException("该租户已开通管理员。");
+            }
         }
 
-        return role.BasicId;
+        return tenant;
+    }
+
+    /// <summary>
+    /// 切入目标租户作用域：该租户的数据只在该作用域内写
+    /// </summary>
+    private IDisposable EnterTenantScope(SysTenant tenant)
+    {
+        return _currentTenant.Change(tenant.BasicId, tenant.TenantName);
+    }
+
+    /// <summary>
+    /// 校验租户可开通
+    /// </summary>
+    /// <remarks>
+    /// 账号、成员关系、角色与授权固定在平台库；开通时连带写的租户数据（日志等）在租户自己的库里，
+    /// 所以库隔离租户要等独立库配置完成。Schema 隔离尚未实装，一律拒绝。
+    /// </remarks>
+    private static void EnsureProvisionable(SysTenant tenant)
+    {
+        switch (tenant.IsolationMode)
+        {
+            case TenantIsolationMode.Field:
+                return;
+
+            case TenantIsolationMode.Database when tenant.ConfigStatus == TenantConfigStatus.Configured:
+                return;
+
+            case TenantIsolationMode.Database:
+                throw new UserFriendlyException("库隔离租户要先初始化数据库，再初始化管理员。");
+
+            default:
+                throw new UserFriendlyException("暂不支持 Schema 隔离，请选择字段隔离或库隔离。");
+        }
     }
 }

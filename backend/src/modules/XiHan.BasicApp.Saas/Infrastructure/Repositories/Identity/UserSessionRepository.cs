@@ -74,6 +74,33 @@ public sealed class UserSessionRepository(ISqlSugarClientResolver clientResolver
     }
 
     /// <summary>
+    /// 跨租户获取用户名下全部未吊销会话（自己的 + 由自己发起的模仿会话）
+    /// </summary>
+    public async Task<IReadOnlyList<SysUserSession>> GetNotRevokedByUserIgnoreTenantAsync(long userId, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // 同一个人在不同租户登录 / 切换后的会话行带不同租户戳，「我的设备」必须跨租户取全
+        return await CreateNoTenantQueryable()
+            .Where(session => (session.UserId == userId || session.ImpersonatorUserId == userId) && session.Status != SessionStatus.Revoked)
+            .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// 跨租户判断指定原会话下是否挂着进行中的模仿会话
+    /// </summary>
+    public async Task<bool> HasActiveImpersonationIgnoreTenantAsync(string impersonatorSessionId, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(impersonatorSessionId);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // 模仿会话行带目标租户戳，发起人的原会话可能在平台或别的租户
+        return await CreateNoTenantQueryable()
+            .Where(session => session.ImpersonatorSessionId == impersonatorSessionId && session.Status == SessionStatus.Active)
+            .AnyAsync(cancellationToken);
+    }
+
+    /// <summary>
     /// 吊销用户所有会话（跨租户）
     /// </summary>
     /// <remarks>

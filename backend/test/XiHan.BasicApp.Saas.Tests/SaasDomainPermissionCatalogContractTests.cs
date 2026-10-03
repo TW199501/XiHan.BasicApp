@@ -2,7 +2,12 @@
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using System.Reflection;
+using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
+using XiHan.BasicApp.Saas.Domain.Entities;
 using XiHan.BasicApp.Saas.Domain.Permissions;
+using XiHan.BasicApp.Saas.Infrastructure.Seeders;
+using XiHan.Framework.Data.SqlSugar.Clients;
 
 namespace XiHan.BasicApp.Saas.Tests;
 
@@ -135,32 +140,78 @@ public sealed class SaasDomainPermissionCatalogContractTests
     }
 
     /// <summary>
-    /// 扁平定义表由分组派生：模块码恒为 saas，优先级恒等于排序号，条数与分组内权限项总数一致。
+    /// 扁平定义表由分组派生：模块码恒为 saas、分组码取所在分组，条数与分组内权限项总数一致。
     /// </summary>
     [Fact]
-    public void SeedDefinitions_ShouldBeDerivedFromGroupsWithFixedModuleAndPriority()
+    public void SeedDefinitions_ShouldBeDerivedFromGroupsWithFixedModuleAndGroup()
     {
         var expectedCount = SaasPermissionDefinitions.Groups.Sum(group => group.Permissions.Count);
+        var groupByCode = SaasPermissionDefinitions.Groups
+            .SelectMany(group => group.Permissions.Select(item => (item.PermissionCode, group.GroupCode)))
+            .ToDictionary(item => item.PermissionCode, item => item.GroupCode, StringComparer.Ordinal);
 
         Assert.Equal(expectedCount, SaasPermissionDefinitions.All.Count);
         Assert.All(SaasPermissionDefinitions.All, definition =>
         {
             Assert.Equal(SaasPermissionCodes.Module, definition.ModuleCode, StringComparer.Ordinal);
-            Assert.Equal(definition.Sort, definition.Priority);
+            Assert.Equal(groupByCode[definition.PermissionCode], definition.GroupCode, StringComparer.Ordinal);
         });
     }
 
     /// <summary>
-    /// 标签由「模块 + 组码」生成，导出/导入动作追加动作段（与历史落库值一致）。
+    /// 落库标签由权限目录种子统一生成：[模块, 分组] 的 JSON 数组（权限页要求标签是 JSON 数组）。
     /// </summary>
     [Fact]
-    public void SeedDefinitions_Tags_ShouldAppendActionSegmentOnlyForExportAndImport()
+    public void CatalogSeeder_Tags_ShouldBeModuleAndGroupJsonArray()
     {
-        var tenantRead = FindDefinition(SaasPermissionCodes.Tenant.Read);
-        var tenantExport = FindDefinition(SaasPermissionCodes.Tenant.Export);
+        var seeder = new SaasPermissionCatalogSeeder(
+            Mock.Of<ISqlSugarClientResolver>(),
+            NullLogger<SaasPermissionCatalogSeeder>.Instance,
+            Mock.Of<IServiceProvider>());
+        var tenantExport = seeder.Permissions.Single(permission => permission.Code == SaasPermissionCodes.Tenant.Export);
 
-        Assert.Equal("[\"saas\",\"tenant\"]", tenantRead.Tags, StringComparer.Ordinal);
-        Assert.Equal("[\"saas\",\"tenant\",\"export\"]", tenantExport.Tags, StringComparer.Ordinal);
+        Assert.Equal("[\"saas\",\"tenant\"]", seeder.BuildTags(tenantExport), StringComparer.Ordinal);
+        Assert.Equal(SaasPermissionDefinitions.All.Count, seeder.Permissions.Count);
+    }
+
+    /// <summary>
+    /// 每个分组落成一个资源（编码即组码、名称即组名），每条权限挂在所在分组的资源上，
+    /// 操作取权限码的末段且必须在操作字典里；资源 + 操作两两不重，管理端按这一对反查权限。
+    /// </summary>
+    [Fact]
+    public void CatalogSeeder_EveryPermission_ShouldBindGroupResourceAndDictionaryOperation()
+    {
+        var seeder = new SaasPermissionCatalogSeeder(
+            Mock.Of<ISqlSugarClientResolver>(),
+            NullLogger<SaasPermissionCatalogSeeder>.Instance,
+            Mock.Of<IServiceProvider>());
+
+        Assert.Equal(
+            SaasPermissionDefinitions.Groups.Select(group => (group.GroupCode, group.GroupName)),
+            seeder.Resources.Select(resource => (resource.Code, resource.Name)));
+        Assert.All(seeder.Permissions, permission =>
+        {
+            Assert.NotNull(permission.Resource);
+            Assert.NotNull(permission.Operation);
+            Assert.Equal(permission.Group, permission.Resource.Code, StringComparer.Ordinal);
+            Assert.Equal($"{SaasPermissionCodes.Module}:{permission.Resource.Code}:{permission.Operation.Code}", permission.Code, StringComparer.Ordinal);
+            Assert.Contains(permission.Operation, OperationSeeds.All);
+        });
+        Assert.Equal(
+            seeder.Permissions.Count,
+            seeder.Permissions.Select(permission => (permission.Resource!.Code, permission.Operation!.Code)).Distinct().Count());
+    }
+
+    /// <summary>
+    /// 操作字典的编码与排序都不能重复：编码是唯一索引，排序决定操作页与选择项的顺序。
+    /// </summary>
+    [Fact]
+    public void OperationSeeds_CodesAndSorts_ShouldBeUnique()
+    {
+        Assert.Equal(OperationSeeds.All.Count, OperationSeeds.All.Select(operation => operation.Code).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(OperationSeeds.All.Count, OperationSeeds.All.Select(operation => operation.Sort).Distinct().Count());
+        Assert.Same(OperationSeeds.Status, OperationSeeds.Get("status"));
+        Assert.Throws<InvalidOperationException>(() => OperationSeeds.Get("no-such-operation"));
     }
 
     /// <summary>
@@ -286,57 +337,65 @@ public sealed class SaasDomainPermissionCatalogContractTests
     }
 
     /// <summary>
-    /// 平台专属权限码必须都是 Saas 模块自身的合法权限码，否则排除口径会落空。
+    /// 每个权限定义都声明了作用侧（平台 / 租户 / 两侧），没有未声明的 0
     /// </summary>
     [Fact]
-    public void PlatformOnlyCodes_ShouldAllBeDeclaredSaasCodes()
+    public void Definitions_ShouldAllDeclareSide()
     {
-        var declared = GetDeclaredCodes().Select(item => item.Code).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var undeclared = SaasPermissionDefinitions.All
+            .Where(definition => !definition.Side.IsDeclared())
+            .Select(definition => definition.PermissionCode)
+            .ToList();
 
-        // 只校验内置的租户/版本/资源等平台码，外部模块可通过 ContributePlatformOnly 追加自己的码
-        var builtInSample = new[]
-        {
-            SaasPermissionCodes.Tenant.Create,
-            SaasPermissionCodes.Tenant.InitDb,
-            SaasPermissionCodes.TenantEdition.Default,
-            SaasPermissionCodes.Cache.Clear,
-            SaasPermissionCodes.Numbering.GlobalManage
-        };
-
-        Assert.All(builtInSample, code =>
-        {
-            Assert.Contains(code, declared);
-            Assert.Contains(code, SaasPlatformPermissions.PlatformOnlyCodes);
-        });
+        Assert.True(undeclared.Count == 0, $"以下权限没有声明作用侧：{string.Join("、", undeclared)}");
     }
 
     /// <summary>
-    /// 租户可授予判定：必须同时满足「Saas 模块前缀」与「非平台专属」，缺一即拒。
+    /// 作用侧契约：平台运维与目录维护归平台，组织与数据范围归租户，其余两侧都生效
     /// </summary>
-    /// <param name="code">待判定的权限码。</param>
-    /// <param name="expected">期望是否可授予租户。</param>
+    /// <param name="code">权限码</param>
+    /// <param name="expected">期望作用侧</param>
     [Theory]
-    [InlineData("saas:user:read", true)]
-    [InlineData("saas:tenant:read", true)]
-    [InlineData("saas:tenant:create", false)]
-    [InlineData("saas:tenant:initdb", false)]
-    [InlineData("saas:tenant-edition:read", false)]
-    [InlineData("codegen:table:read", false)]
-    [InlineData("saasx:user:read", false)]
-    [InlineData("saas", false)]
-    public void IsTenantGrantable_ShouldRequireSaasPrefixAndNonPlatformCode(string code, bool expected)
+    // 租户目录是平台数据：SysTenant 行都在 0 号，租户持有查看码就能读到全部租户
+    [InlineData("saas:tenant:read", PermissionSide.Platform)]
+    [InlineData("saas:tenant:create", PermissionSide.Platform)]
+    [InlineData("saas:tenant:initdb", PermissionSide.Platform)]
+    [InlineData("saas:tenant-edition:read", PermissionSide.Platform)]
+    [InlineData("saas:cache:clear", PermissionSide.Platform)]
+    [InlineData("saas:task:read", PermissionSide.Platform)]
+    // 目录维护是平台的，查看两侧都要（授权界面要列出可授的权限、菜单）
+    [InlineData("saas:permission:create", PermissionSide.Platform)]
+    [InlineData("saas:permission:read", PermissionSide.Both)]
+    [InlineData("saas:menu:read", PermissionSide.Both)]
+    [InlineData("saas:department:read", PermissionSide.Tenant)]
+    [InlineData("saas:role-data-scope:update", PermissionSide.Both)]
+    [InlineData("saas:user-data-scope:update", PermissionSide.Tenant)]
+    [InlineData("saas:tenant-member:read", PermissionSide.Both)]
+    [InlineData("saas:tenant-member:update", PermissionSide.Tenant)]
+    [InlineData("saas:user:read", PermissionSide.Both)]
+    [InlineData("saas:role:create", PermissionSide.Both)]
+    public void Definitions_ShouldDeclareExpectedSide(string code, PermissionSide expected)
     {
-        Assert.Equal(expected, SaasPlatformPermissions.IsTenantGrantable(code));
+        var definition = SaasPermissionDefinitions.All.Single(item => string.Equals(item.PermissionCode, code, StringComparison.OrdinalIgnoreCase));
+
+        Assert.Equal(expected, definition.Side);
     }
 
     /// <summary>
-    /// 前缀与平台专属集合判定均为忽略大小写，避免大小写写法差异绕过平台排除。
+    /// 作用侧判定：两侧在平台与租户都生效，单侧只在自己那侧生效；未声明的不在任何一侧生效
     /// </summary>
     [Fact]
-    public void IsTenantGrantable_ShouldBeCaseInsensitive()
+    public void Side_ShouldBeEffectiveOnlyInDeclaredContext()
     {
-        Assert.True(SaasPlatformPermissions.IsTenantGrantable("SAAS:USER:READ"));
-        Assert.False(SaasPlatformPermissions.IsTenantGrantable("SAAS:TENANT:CREATE"));
+        Assert.True(PermissionSide.Both.IsEffectiveIn(isPlatformContext: true));
+        Assert.True(PermissionSide.Both.IsEffectiveIn(isPlatformContext: false));
+        Assert.True(PermissionSide.Platform.IsEffectiveIn(isPlatformContext: true));
+        Assert.False(PermissionSide.Platform.IsEffectiveIn(isPlatformContext: false));
+        Assert.False(PermissionSide.Tenant.IsEffectiveIn(isPlatformContext: true));
+        Assert.True(PermissionSide.Tenant.IsEffectiveIn(isPlatformContext: false));
+        Assert.False(default(PermissionSide).IsEffectiveIn(isPlatformContext: true));
+        Assert.False(default(PermissionSide).IsTenantEffective());
+        Assert.False(default(PermissionSide).IsDeclared());
     }
 
     private static IEnumerable<FieldInfo> EnumerateCodeFields(Type nestedType)
@@ -345,12 +404,6 @@ public sealed class SaasDomainPermissionCatalogContractTests
             .GetFields(BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy)
             .Where(field => field.IsLiteral && !field.IsInitOnly && field.FieldType == typeof(string))
             .Where(field => !string.Equals(field.Name, "Group", StringComparison.Ordinal));
-    }
-
-    private static SaasPermissionDefinition FindDefinition(string permissionCode)
-    {
-        return SaasPermissionDefinitions.All.Single(definition =>
-            string.Equals(definition.PermissionCode, permissionCode, StringComparison.Ordinal));
     }
 
     private static IReadOnlyList<(string Name, string Code)> GetDeclaredCodes()

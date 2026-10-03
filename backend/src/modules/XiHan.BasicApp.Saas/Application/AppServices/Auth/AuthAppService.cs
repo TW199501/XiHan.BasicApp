@@ -17,6 +17,7 @@ using XiHan.BasicApp.Saas.Application.Dtos;
 using XiHan.BasicApp.Saas.Application.QueryServices;
 using XiHan.BasicApp.Saas.Application.Services;
 using XiHan.BasicApp.Saas.Domain.DomainServices;
+using XiHan.BasicApp.Saas.Domain.Configurations;
 using XiHan.BasicApp.Saas.Domain.Entities;
 using XiHan.BasicApp.Saas.Domain.Enums;
 using XiHan.BasicApp.Saas.Domain.Events;
@@ -31,6 +32,7 @@ using XiHan.Framework.Bot.Email.Abstractions;
 using XiHan.Framework.Bot.Email.Options;
 using XiHan.Framework.Core.Exceptions;
 using XiHan.Framework.Domain.Entities.Abstracts;
+using XiHan.Framework.Domain.Repositories;
 using XiHan.Framework.EventBus.Abstractions.Local;
 using XiHan.Framework.Localization.Abstractions;
 using XiHan.Framework.MultiTenancy.Abstractions;
@@ -50,11 +52,6 @@ public sealed partial class AuthAppService
     : SaasApplicationService, IAuthAppService
 {
     /// <summary>
-    /// 超级管理员角色编码（与种子/授权快照约定一致，运行时特判 *）
-    /// </summary>
-    private const string SuperAdminRoleCode = "super_admin";
-
-    /// <summary>
     /// 默认租户标识：自助注册 / 找回密码在缺省范围时落到该租户（与基础身份种子约定一致）
     /// </summary>
     private const long DefaultRegistrationTenantId = 1;
@@ -63,6 +60,11 @@ public sealed partial class AuthAppService
     /// 解锁失败上限：超限直接吊销会话，防止锁屏页被暴力枚举
     /// </summary>
     private const int MaxUnlockAttempts = 5;
+
+    /// <summary>
+    /// 两步验证票据无效（不存在 / 过期 / 不属于本次认证用户）的统一提示：前端据此回到凭据阶段并刷新图形验证码
+    /// </summary>
+    private const string TwoFactorTicketExpiredMessage = "两步验证已过期，请重新登录。";
 
     private readonly IAuthContextQueryService _authContextQueryService;
 
@@ -134,6 +136,8 @@ public sealed partial class AuthAppService
 
     private readonly ICaptchaService _captchaService;
 
+    private readonly ITwoFactorTicketService _twoFactorTicketService;
+
     private readonly IConfiguration _configuration;
 
     private readonly ILogger<AuthAppService> _logger;
@@ -177,6 +181,7 @@ public sealed partial class AuthAppService
         IWebHostEnvironment webHostEnvironment,
         ILoginThrottleService loginThrottleService,
         ICaptchaService captchaService,
+        ITwoFactorTicketService twoFactorTicketService,
         IConfiguration configuration,
         ILogger<AuthAppService> logger)
     {
@@ -185,6 +190,7 @@ public sealed partial class AuthAppService
         _cacheInvalidator = cacheInvalidator;
         _loginThrottleService = loginThrottleService;
         _captchaService = captchaService;
+        _twoFactorTicketService = twoFactorTicketService;
         _authenticationDomainService = authenticationDomainService;
         _loginSessionDomainService = loginSessionDomainService;
         _authContextQueryService = authContextQueryService;
@@ -402,10 +408,11 @@ public sealed partial class AuthAppService
         // 频率限制（邮箱+IP）：对存在/不存在的邮箱一视同仁，既防刷又不泄露账号是否存在
         await EnsureNotRateLimitedAsync("pwd-reset", email, cancellationToken);
 
-        // 邮箱全平台唯一：平台态全局定位账号，无需调用方提供租户范围
+        // 邮箱全平台唯一：跨租户定位账号，无需调用方提供租户范围；
+        // 邮件配置、验证码缓存都是平台侧能力，在平台作用域进行
         using var platformScope = _currentTenant.Change(null);
 
-        var user = await _userRepository.GetByEmailAsync(email, cancellationToken);
+        var user = await _userRepository.GetByEmailGloballyAsync(email, cancellationToken);
         // 防用户枚举：邮箱不存在时同样返回受理，不暴露账号是否存在
         if (user is null)
         {
@@ -473,14 +480,16 @@ public sealed partial class AuthAppService
             throw new UserFriendlyException(new ResourceLocalizableString("Errors", "Auth.InvalidOrExpiredResetLink"), "重置链接无效或已过期，请重新申请找回密码。");
         }
 
-        using var platformScope = _currentTenant.Change(null);
         var user = await _userRepository.GetByIdIgnoreTenantAsync(userId, cancellationToken)
             ?? throw new UserFriendlyException(new ResourceLocalizableString("Errors", "Auth.UserNotFound"), "用户不存在。");
+
+        // 账号与安全信息归属账号的归属租户：重置在该租户作用域内进行（密码策略也取归属租户的配置）
+        using var accountScope = _currentTenant.Change(user.TenantId, user.TenantId.ToString());
 
         try
         {
             await _userDomainService.ResetUserPasswordAsync(
-                new UserPasswordResetCommand(user.BasicId, newPassword, PasswordExpirationTime: null, Remark: "找回密码-自助重置"),
+                new UserPasswordResetCommand(user.BasicId, newPassword, PasswordExpirationTime: null, Remark: "找回密码-自助重置", BySelf: true),
                 cancellationToken);
         }
         catch (InvalidOperationException ex)
@@ -511,8 +520,8 @@ public sealed partial class AuthAppService
         var now = DateTimeOffset.UtcNow;
         var snapshot = await _authorizationSnapshotQueryService.BuildAsync(userId, now, cancellationToken);
 
-        // 与鉴权入口同口径：模仿态下禁用清单里的码不下发
-        var deniedPermissionCodes = _currentUser.IsImpersonating() ? ImpersonationDefaults.DeniedPermissionCodes : null;
+        // 与鉴权入口同口径：作用侧不含当前上下文的码、模仿态禁用清单里的码都不下发
+        var deniedPermissionCodes = BuildContextDeniedPermissionCodes(snapshot);
         if (deniedPermissionCodes is not null)
         {
             snapshot = snapshot with
@@ -537,6 +546,21 @@ public sealed partial class AuthAppService
             Menus = menus,
             Buttons = buttons
         };
+    }
+
+    /// <summary>
+    /// 当前上下文里被禁用的权限码（与 <c>SaasPermissionChecker</c> 同口径）：作用侧不含当前上下文的码（随快照下发）
+    /// 与模仿态禁用清单；都不禁用时为 null
+    /// </summary>
+    private HashSet<string>? BuildContextDeniedPermissionCodes(AuthorizationSnapshot snapshot)
+    {
+        var denied = new HashSet<string>(snapshot.ContextDeniedCodes, StringComparer.OrdinalIgnoreCase);
+        if (_currentUser.IsImpersonating())
+        {
+            denied.UnionWith(ImpersonationDefaults.DeniedPermissionCodes);
+        }
+
+        return denied.Count == 0 ? null : denied;
     }
 
     /// <summary>
@@ -588,9 +612,25 @@ public sealed partial class AuthAppService
         // 防爆破节流：账号+IP 与纯 IP 双维度固定窗口计数，先于昂贵/带副作用的认证流程执行
         await _loginThrottleService.EnsureLoginAllowedAsync(login, _clientInfoProvider.GetCurrent().IpAddress, cancellationToken);
 
-        // 图形验证码（默认开启）：先于认证流程校验，消费即销毁——校验失败不可重试同一枚码
-        if (_captchaService.IsEnabled && !await _captchaService.TryConsumeAsync(input.CaptchaId, input.CaptchaCode, cancellationToken))
+        // 两步验证是无状态三段式，每段都重新提交本请求；图形验证码消费即销毁，只在首段校验。
+        // 首段通过后签发两步验证票据，后续阶段凭票免图形验证码。票据先于密码认证查存在性并比对签发时的登录名：
+        // 伪造票据不能借「带票免图形码」去试密码；持自己账号合法票据的人也不能拿它免图形码去试探他人账号——
+        // 登录名不匹配的票据在触碰凭据之前即作废并按过期拒绝，不区分「账号或密码错误」文案
+        var twoFactorTicket = string.IsNullOrWhiteSpace(input.TwoFactorTicket) ? null : input.TwoFactorTicket.Trim();
+        TwoFactorTicketPayload? ticketPayload = null;
+        if (twoFactorTicket is not null)
         {
+            ticketPayload = await _twoFactorTicketService.ResolveAsync(twoFactorTicket, cancellationToken)
+                ?? throw new InvalidOperationException(TwoFactorTicketExpiredMessage);
+            if (!string.Equals(ticketPayload.Login, login, StringComparison.OrdinalIgnoreCase))
+            {
+                await _twoFactorTicketService.RevokeAsync(twoFactorTicket, cancellationToken);
+                throw new InvalidOperationException(TwoFactorTicketExpiredMessage);
+            }
+        }
+        else if (_captchaService.IsEnabled && !await _captchaService.TryConsumeAsync(input.CaptchaId, input.CaptchaCode, cancellationToken))
+        {
+            // 图形验证码（默认开启）：先于认证流程校验，消费即销毁——校验失败不可重试同一枚码
             throw new InvalidOperationException("验证码错误或已过期，请重试。");
         }
 
@@ -605,8 +645,13 @@ public sealed partial class AuthAppService
             now,
             cancellationToken);
 
-        // 默认密码登录 → 会话创建即锁定（强制改密）；两条成功路径共用同一判定
-        var initialLockReason = ResolveInitialLockReason(password);
+        // 票据只替代图形验证码、不替代密码：出示的票据必须属于本次密码认证出的用户，
+        // 否则作废并视同过期（不区分错票与他人票，避免票据被当作用户枚举探针）
+        if (twoFactorTicket is not null && ticketPayload is not null && authResult.User is not null && ticketPayload.UserId != authResult.User.BasicId)
+        {
+            await _twoFactorTicketService.RevokeAsync(twoFactorTicket, cancellationToken);
+            throw new InvalidOperationException(TwoFactorTicketExpiredMessage);
+        }
 
         if (authResult.RequiresTwoFactor)
         {
@@ -614,17 +659,21 @@ public sealed partial class AuthAppService
             var twoFactorUser = authResult.User ?? throw new InvalidOperationException("认证用户不存在。");
             var availableMethods = ResolveTwoFactorMethods(twoFactorUser, security);
 
-            // 尚未提交验证码：进入方式选择 / 验证码下发阶段（不签发令牌）
+            // 尚未提交验证码：进入方式选择 / 验证码下发阶段（不签发令牌）。
+            // 首段签发票据随挑战下发；后续阶段沿用来票，票据在有效期内可多次出示直到登录完成
             if (string.IsNullOrWhiteSpace(input.TwoFactorCode))
             {
-                return await BuildTwoFactorChallengeAsync(twoFactorUser, availableMethods, input.TwoFactorMethod, tenantId: null, cancellationToken);
+                var challenge = await BuildTwoFactorChallengeAsync(twoFactorUser, availableMethods, input.TwoFactorMethod, tenantId: null, cancellationToken);
+                challenge.TwoFactorTicket = twoFactorTicket ?? await _twoFactorTicketService.IssueAsync(twoFactorUser.BasicId, login, cancellationToken);
+                return challenge;
             }
 
             // 已提交验证码：按所选方式校验，未通过抛出（记录失败事件）；通过则继续往下签发令牌
             await VerifyTwoFactorCodeOrThrowAsync(twoFactorUser, security, availableMethods, input.TwoFactorMethod, input.TwoFactorCode, tenantId: null, now, login, cancellationToken);
 
-            await NotifyDefaultPasswordLoginIfNeededAsync(twoFactorUser, initialLockReason, cancellationToken);
-            var twoFactorToken = await IssueLoginTokenWithLandingAsync(twoFactorUser, security, login, input.DeviceId, now, initialLockReason, cancellationToken);
+            var twoFactorLockReason = await ResolveInitialLockReasonAsync(twoFactorUser, security, cancellationToken);
+            var twoFactorToken = await IssueLoginTokenWithLandingAsync(twoFactorUser, security, login, input.DeviceId, now, twoFactorLockReason, cancellationToken);
+            await RevokeTwoFactorTicketAsync(twoFactorTicket, cancellationToken);
             return new LoginResponseDto
             {
                 RequiresTwoFactor = false,
@@ -651,8 +700,10 @@ public sealed partial class AuthAppService
         }
 
         var user = authResult.User ?? throw new InvalidOperationException("认证用户不存在。");
-        await NotifyDefaultPasswordLoginIfNeededAsync(user, initialLockReason, cancellationToken);
+        var initialLockReason = await ResolveInitialLockReasonAsync(user, authResult.Security, cancellationToken);
         var token = await IssueLoginTokenWithLandingAsync(user, authResult.Security, login, input.DeviceId, now, initialLockReason, cancellationToken);
+        // 两步验证在中途被关闭时带票也会走到这里：登录已完成，票据同样作废
+        await RevokeTwoFactorTicketAsync(twoFactorTicket, cancellationToken);
 
         return new LoginResponseDto
         {
@@ -844,10 +895,14 @@ public sealed partial class AuthAppService
     }
 
     /// <summary>
-    /// 切换租户 / 进入平台运维态：复用当前登录会话，在目标上下文内重新签发访问令牌
+    /// 切换租户 / 进入平台：在目标上下文里续接会话并签发访问令牌
     /// </summary>
-    /// <remarks>不是一次新登录：不新建登录设备记录，也不触发登录通知</remarks>
-    /// <param name="input">切换参数（目标租户，空表示平台态）</param>
+    /// <remarks>
+    /// 进入租户须是该租户的有效成员且租户可进入（与登录落点、控制中心同一口径），超管也不例外；
+    /// 平台是 0 号租户，只对平台账号开放。会话属于它所在的上下文：旧会话吊销、目标上下文里新建续接会话，
+    /// 旧令牌随之失效。不是一次新登录，不触发登录通知。
+    /// </remarks>
+    /// <param name="input">切换参数（目标租户，空表示平台）</param>
     /// <param name="cancellationToken">取消令牌</param>
     /// <returns>新的登录令牌</returns>
     [UnitOfWork(true)]
@@ -862,52 +917,34 @@ public sealed partial class AuthAppService
         var userId = _currentUser.UserId ?? throw new InvalidOperationException("当前用户未登录。");
         var now = DateTimeOffset.UtcNow;
 
-        // 归一目标租户：null 或 <=0 视为平台运维态（无租户上下文）
+        var user = await _userRepository.GetByIdIgnoreTenantAsync(userId, cancellationToken)
+            ?? throw new InvalidOperationException("当前用户不存在。");
+
+        // 归一目标租户：null 或 <=0 表示平台（0 号租户，令牌不带租户）
         var targetTenantId = input.TenantId is > 0 ? input.TenantId : null;
-        var isSuperAdmin = _currentUser.IsInRole(SuperAdminRoleCode);
-
-        // 跨租户读取当前用户的有效成员关系（忽略租户过滤）
-        var memberships = await _tenantUserRepository.GetActiveByUserIdAsync(userId, now, cancellationToken);
-
         string? targetTenantName = null;
         if (targetTenantId is null)
         {
-            // 平台运维态：仅超管或拥有平台管理员成员身份可进入
-            var canEnterPlatform = isSuperAdmin || memberships.Any(member => member.MemberType == TenantMemberType.PlatformAdmin);
-            if (!canEnterPlatform)
+            // 平台只对平台账号开放：租户账号在平台里没有任何身份
+            if (user.TenantId != 0)
             {
-                throw new InvalidOperationException("当前账号无权进入平台运维态。");
+                throw new InvalidOperationException("只有平台账号可以进入平台。");
             }
         }
         else
         {
-            // 切换到具体租户：超管可进入任意租户；否则必须是该租户的有效成员
-            var isMember = memberships.Any(member => member.TenantId == targetTenantId.Value);
-            if (!isMember && !isSuperAdmin)
-            {
-                throw new InvalidOperationException("当前账号不是目标租户的有效成员，无法切换。");
-            }
-
-            var tenant = await _authContextQueryService.GetLoginTenantOrThrowAsync(targetTenantId, now, cancellationToken)
-                ?? throw new InvalidOperationException("目标租户不存在或不可用。");
-            targetTenantId = tenant.TenantId;
-            targetTenantName = tenant.TenantName;
+            var accessible = await _authContextQueryService.GetAccessibleTenantsAsync(userId, now, cancellationToken);
+            var target = accessible.FirstOrDefault(item => item.Tenant.BasicId == targetTenantId.Value)
+                ?? throw new InvalidOperationException(await DescribeInaccessibleTenantAsync(userId, targetTenantId.Value, now, cancellationToken));
+            targetTenantName = target.Tenant.TenantName;
         }
 
-        var user = await _userRepository.GetByIdIgnoreTenantAsync(userId, cancellationToken)
-            ?? throw new InvalidOperationException("当前用户不存在。");
+        var currentSession = await GetCurrentSessionOrThrowAsync(cancellationToken);
 
-        // 切换租户是同一登录会话的上下文迁移，不是一次新登录：复用当前会话并轮换令牌。
-        // 不新建会话（否则设备列表每切一次多一台「设备」），不发布登录成功事件（否则每切一次误报「账号在新设备登录」）。
-        var session = await GetCurrentSessionOrThrowAsync(cancellationToken);
-        if (session.Status != SessionStatus.Active)
-        {
-            throw new InvalidOperationException("会话已失效，请重新登录。");
-        }
-
-        // 在目标上下文内重建授权快照并签发新令牌（平台态不带 TenantId claim）
+        // 在目标上下文内重建授权快照、续接会话并签发新令牌（平台不带 TenantId claim）
         using var tenantScope = _currentTenant.Change(targetTenantId, targetTenantName);
         var authSnapshot = await _authorizationSnapshotQueryService.BuildAsync(user.BasicId, now, cancellationToken);
+        var sessionBusinessId = Guid.NewGuid().ToString("N");
         var accessTokenJti = Guid.NewGuid().ToString("N");
 
         // 与登录同口径：token 不冻结具体权限，仅保留通配 * 作为超管快路径
@@ -916,16 +953,16 @@ public sealed partial class AuthAppService
             new AuthAccessTokenIssueCommand(
                 user,
                 targetTenantId,
-                session.UserSessionId,
+                sessionBusinessId,
                 accessTokenJti,
                 authSnapshot.Roles,
                 tokenPermissions,
-                session.DeviceId));
+                currentSession.DeviceId));
 
-        _ = await _loginSessionDomainService.SwitchTenantAsync(session, targetTenantId, accessTokenJti, tokenIssue.TokenResult, now, cancellationToken);
+        _ = await _loginSessionDomainService.SwitchTenantAsync(currentSession, sessionBusinessId, accessTokenJti, tokenIssue.TokenResult, now, cancellationToken);
 
-        // 会话行的租户戳/过期时间已变化，闸门缓存立即失效避免读到旧状态
-        await _cacheInvalidator.InvalidateSessionStateAsync(session.UserSessionId, cancellationToken);
+        // 旧会话已吊销：闸门缓存立即失效，旧令牌下一次请求即被拒
+        await _cacheInvalidator.InvalidateSessionStateAsync(currentSession.UserSessionId, cancellationToken);
 
         // 认证审计：切换租户落登录日志（不触发登录通知）
         await PublishSecurityAuditAsync(
@@ -1015,7 +1052,7 @@ public sealed partial class AuthAppService
         session.LockPasswordHash = _passwordHasher.HashPassword(input.Password);
         session.UnlockFailedAttempts = 0;
 
-        await _userSessionRepository.UpdateAsync(session, cancellationToken);
+        await UpdateOwnSessionAsync(session, cancellationToken);
         await _cacheInvalidator.InvalidateSessionStateAsync(session.UserSessionId, cancellationToken);
     }
 
@@ -1065,7 +1102,7 @@ public sealed partial class AuthAppService
                 throw new InvalidOperationException("解锁失败次数过多，会话已失效，请重新登录。");
             }
 
-            await _userSessionRepository.UpdateAsync(session, cancellationToken);
+            await UpdateOwnSessionAsync(session, cancellationToken);
             await _cacheInvalidator.InvalidateSessionStateAsync(session.UserSessionId, cancellationToken);
             throw new InvalidOperationException($"锁屏密码错误，还可尝试 {MaxUnlockAttempts - session.UnlockFailedAttempts} 次。");
         }
@@ -1076,7 +1113,7 @@ public sealed partial class AuthAppService
         session.LockPasswordHash = null;   // 会话级一次性口令：解锁即清除，不跨锁屏复用
         session.UnlockFailedAttempts = 0;
 
-        await _userSessionRepository.UpdateAsync(session, cancellationToken);
+        await UpdateOwnSessionAsync(session, cancellationToken);
         await _cacheInvalidator.InvalidateSessionStateAsync(session.UserSessionId, cancellationToken);
     }
 
@@ -1103,6 +1140,21 @@ public sealed partial class AuthAppService
     }
 
     /// <summary>
+    /// 回写当前用户自己的会话行
+    /// </summary>
+    /// <remarks>
+    /// 会话行带登录落点的租户戳，与当前请求的作用域不一定一致（例如切换过租户）；
+    /// 会话按 UserId/会话标识归属，是用户自有行，显式声明写边界豁免。
+    /// </remarks>
+    private async Task UpdateOwnSessionAsync(SysUserSession session, CancellationToken cancellationToken)
+    {
+        using (TenantWriteGuard.Suppress())
+        {
+            await _userSessionRepository.UpdateAsync(session, cancellationToken);
+        }
+    }
+
+    /// <summary>
     /// 解锁失败超限：吊销会话并清掉锁屏态（否则会留下一个既锁屏又失效的僵尸会话）
     /// </summary>
     private async Task RevokeLockedSessionAsync(SysUserSession session, string reason, CancellationToken cancellationToken)
@@ -1115,7 +1167,7 @@ public sealed partial class AuthAppService
         session.LockReason = null;
         session.LockPasswordHash = null;
 
-        await _userSessionRepository.UpdateAsync(session, cancellationToken);
+        await UpdateOwnSessionAsync(session, cancellationToken);
         await _cacheInvalidator.InvalidateSessionStateAsync(session.UserSessionId, cancellationToken);
     }
 
@@ -1389,33 +1441,30 @@ public sealed partial class AuthAppService
     /// 邮箱+IP 频率限制：同一邮箱+IP 在窗口期（60s）内只允许一次，防刷验证码/重置链接。超限抛友好异常。
     /// </summary>
     /// <summary>
-    /// 判定本次登录是否需要初始锁定（默认密码登录 → 强制改密锁）
+    /// 判定本次登录是否要先改密：参数「密码设置」的 forceChange 开启，且这个账号的密码由他人设置
     /// </summary>
-    private string? ResolveInitialLockReason(string password)
+    /// <remarks>要改密时会话创建即锁定（只放行改密、登出、刷新），并提醒用户去改密；提醒失败不影响锁定。</remarks>
+    private async Task<string?> ResolveInitialLockReasonAsync(SysUser user, SysUserSecurity? security, CancellationToken cancellationToken)
     {
-        return DefaultPasswordPolicy.IsDefaultPassword(password, _configuration[DefaultPasswordPolicy.SeedPasswordConfigKey])
-            ? SessionLockReasons.PasswordChangeRequired
-            : null;
-    }
-
-    /// <summary>
-    /// 默认密码登录时发送安全告警（尽力而为：通知失败不阻断登录主流程，会话锁才是硬约束）
-    /// </summary>
-    private async Task NotifyDefaultPasswordLoginIfNeededAsync(SysUser user, string? initialLockReason, CancellationToken cancellationToken)
-    {
-        if (initialLockReason != SessionLockReasons.PasswordChangeRequired)
+        if (security?.PasswordChangeRequired != true)
         {
-            return;
+            return null;
+        }
+
+        var settings = await _saasConfigurationService.GetJsonAsync(SaasConfigKeys.Auth.Password, new SaasPasswordSettings(), cancellationToken);
+        if (!settings.ForceChange)
+        {
+            return null;
         }
 
         try
         {
             await _userNotificationDispatchService.DispatchToUserAsync(
                 user.BasicId,
-                "检测到默认密码登录",
-                "您的账号正在使用系统默认密码，会话已被限制。请立即前往「个人中心 - 账号安全」修改密码，修改后即可正常使用。",
+                "请先修改密码",
+                "你的密码由管理员设置，按平台要求需要先修改密码才能继续使用。请前往「个人中心 - 账号安全」修改。",
                 NotificationType.Security,
-                businessType: "auth.default-password",
+                businessType: "auth.password-change-required",
                 businessId: user.BasicId,
                 link: "/workbench/profile",
                 icon: "lucide:shield-alert",
@@ -1423,8 +1472,10 @@ public sealed partial class AuthAppService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "默认密码登录告警通知发送失败 UserId={UserId}", user.BasicId);
+            _logger.LogWarning(ex, "改密提醒发送失败 UserId={UserId}", user.BasicId);
         }
+
+        return SessionLockReasons.PasswordChangeRequired;
     }
 
     private async Task EnsureNotRateLimitedAsync(string scope, string email, CancellationToken cancellationToken)
@@ -1736,31 +1787,46 @@ public sealed partial class AuthAppService
     }
 
     /// <summary>
-    /// 解析登录落点租户；返回 null 表示平台态（控制中心）。
+    /// 解析登录落点：平台账号落平台（返回 null）；租户账号落一个可进入的租户，一个都没有则拒绝登录
     /// </summary>
+    /// <remarks>
+    /// 租户账号依次取：最近进入过的可进入租户 → 归属租户 → 第一个可进入的租户。平台只对平台账号开放，
+    /// 租户账号不会落到平台上去。
+    /// </remarks>
     private async Task<LoginTenantContext?> ResolveLoginLandingAsync(SysUser user, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        // 平台账号（TenantId=0，如超管）恒落平台态
         if (user.TenantId == 0)
         {
             return null;
         }
 
-        // 拥有超管角色（全局绑定）的账号同样恒落平台态（平台态快照仅含全局绑定，普通用户在此为空）
-        var platformSnapshot = await _authorizationSnapshotQueryService.BuildAsync(user.BasicId, now, cancellationToken);
-        if (platformSnapshot.Roles.Contains(SuperAdminRoleCode, StringComparer.OrdinalIgnoreCase))
+        var accessible = await _authContextQueryService.GetAccessibleTenantsAsync(user.BasicId, now, cancellationToken);
+        if (accessible.Count == 0)
         {
-            return null;
+            var memberships = await _tenantUserRepository.GetActiveByUserIdAsync(user.BasicId, now, cancellationToken);
+            throw new InvalidOperationException(memberships.Count == 0
+                ? "当前账号没有有效的租户成员关系，无法登录。"
+                : "当前账号所在的租户均不可进入（已停用、未完成初始化或已过期），无法登录。");
         }
 
-        var memberships = await _tenantUserRepository.GetActiveByUserIdAsync(user.BasicId, now, cancellationToken);
-        if (memberships.Count != 1)
+        var landing = LoginLandingPolicy.Choose(accessible, user.TenantId);
+        return new LoginTenantContext(landing.Tenant.BasicId, landing.Tenant.TenantName);
+    }
+
+    /// <summary>
+    /// 说明目标租户为何不可进入：不是有效成员，或租户本身不可进入（带具体原因）
+    /// </summary>
+    private async Task<string> DescribeInaccessibleTenantAsync(long userId, long tenantId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var memberships = await _tenantUserRepository.GetActiveByUserIdAsync(userId, now, cancellationToken);
+        if (!memberships.Any(membership => membership.TenantId == tenantId))
         {
-            return null;
+            return "当前账号不是目标租户的有效成员，无法切换。";
         }
 
-        // 唯一租户也要确认可用（正常/已配置/未过期），不可用则落控制中心由前端展示原因
-        return await _authContextQueryService.FindAvailableLoginTenantAsync(memberships[0].TenantId, now, cancellationToken);
+        // 是成员但租户不可进入：取租户自身的不可用原因（不存在 / 未启用 / 未完成初始化 / 已过期）
+        _ = await _authContextQueryService.GetLoginTenantOrThrowAsync(tenantId, now, cancellationToken);
+        return "目标租户当前不可进入。";
     }
 
     /// <summary>
@@ -2029,6 +2095,16 @@ public sealed partial class AuthAppService
                 client.IpAddress,
                 client.UserAgent));
         throw new InvalidOperationException("双因素验证码无效或已过期。");
+    }
+
+    /// <summary>
+    /// 登录完成后作废两步验证票据（未带票的登录无事可做）
+    /// </summary>
+    private Task RevokeTwoFactorTicketAsync(string? twoFactorTicket, CancellationToken cancellationToken)
+    {
+        return twoFactorTicket is null
+            ? Task.CompletedTask
+            : _twoFactorTicketService.RevokeAsync(twoFactorTicket, cancellationToken);
     }
 
     /// <summary>

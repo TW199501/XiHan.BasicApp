@@ -25,6 +25,7 @@ export type SchemaFieldDataType
     | 'tag'
     | 'json'
     | 'image'
+    | 'file'
     | 'avatar'
     | 'email'
     | 'phone'
@@ -51,6 +52,8 @@ export interface ListFieldSchema<TRow = Record<string, unknown>> {
   searchRange?: boolean
   /** 搜索时支持多选（enum/tag 字段：渲染多选下拉；下发 conditions.filters In） */
   searchMultiple?: boolean
+  /** 搜索下拉可输入筛选（单选的 enum/tag 字段，选项多时用，如关联表：渲染可搜索下拉，在已取回的选项里筛） */
+  searchFilterable?: boolean
   /** 是否可排序（服务端排序） */
   sortable?: boolean
   /** 是否可作为筛选条件 */
@@ -67,8 +70,15 @@ export interface ListFieldSchema<TRow = Record<string, unknown>> {
   required?: boolean
   /** 字段级权限码；当前用户无此权限时该字段隐藏 */
   permission?: string
-  /** 字典码（enum/tag 异步取值，S2 接入；S1 优先使用 options） */
+  /** 后端枚举类型名（经枚举元数据取本地化选项；与 dictCode 二选一） */
   dictionaryCode?: string
+  /** 系统字典编码（字典管理里维护的字典，选项值为字典项编码；与 dictionaryCode 二选一） */
+  dictCode?: string
+  /**
+   * 异步选项加载器（如外键的关联记录选项）：SchemaPage 挂载时调用，结果注入 options。
+   * 同一加载器与页面表单下拉并发调用时只发一次请求（按函数引用去重）。
+   */
+  optionsLoader?: () => Promise<ReadonlyArray<SchemaSelectOption>>
   /** 即时下拉/标签选项（优先于 dictionaryCode；常引用 business 常量） */
   options?: ReadonlyArray<SchemaSelectOption>
   /** 自定义格式化器标识（由 useFieldFormat 解析，如 maskPhone/maskEmail） */
@@ -114,10 +124,10 @@ export interface ActionSchema<TRow = Record<string, unknown>> {
   icon?: string
   /** 所需权限码；无权限时不渲染 */
   permission?: string
-  /** 是否需要二次确认 */
+  /** 是否需要二次确认；type 为 error 的确认钮转危险色 */
   confirm?: boolean
-  /** 确认提示文案（i18n key） */
-  confirmText?: string
+  /** 确认提示文案；行级操作可传函数按行生成，写明操作对象（如「确定删除「某角色」？」） */
+  confirmText?: string | ((row: TRow) => string)
   /** 行级操作可见性判定（如内置数据不可删） */
   visible?: (row: TRow) => boolean
   /** 行级操作禁用判定 */
@@ -213,13 +223,23 @@ export interface SchemaResource<TRow> {
   create?: (record: Record<string, unknown>) => Promise<unknown>
   /**
    * 导出中心提交（可选）—— 存在时 SchemaPage 导出按钮提供「提交到导出中心」异步入口。
-   * businessType 须匹配后端 IExportProvider.BusinessType；buildQuery 复用页面适配器的查询构建，
-   * 返回资源自身分页查询 DTO（含分页/过滤），随快照交后端 Provider 反序列化（枚举须为数值以兼容 JSON 反序列化）。
+   * businessType 须匹配后端 IExportProvider.BusinessType（即导出按钮所属的后端页面码，与本页 pageCode 一致）；buildQuery 复用页面适配器的查询构建，
+   * 返回资源自身分页查询 DTO（含分页/过滤），随快照交后端 Provider 反序列化（与线上报文同形，枚举按成员名或数值均可）。
    */
   export?: {
     businessType: string
     buildQuery?: (params: SchemaQueryParams) => unknown
   }
+}
+
+/**
+ * SchemaPage 组件实例上页面常用的方法（经模板 ref 取得）。
+ */
+export interface SchemaPageInstance {
+  /** 按当前查询条件重新取数 */
+  reload: () => Promise<void>
+  /** 按字段把一行格式化成显示文本（选项列取名称、日期按格式、布尔为是/否，空值为空串） */
+  formatRow: (row: object) => Record<string, string>
 }
 
 /**

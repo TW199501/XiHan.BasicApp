@@ -76,6 +76,11 @@ public sealed class LoginRequestDto
     public string? TwoFactorMethod { get; set; }
 
     /// <summary>
+    /// 两步验证票据（首段通过图形验证码与密码后由服务端签发；后续阶段携带即免图形验证码）
+    /// </summary>
+    public string? TwoFactorTicket { get; set; }
+
+    /// <summary>
     /// 设备标识
     /// </summary>
     public string? DeviceId { get; set; }
@@ -105,6 +110,11 @@ public sealed class LoginResponseDto
     /// 验证码是否已发送
     /// </summary>
     public bool? CodeSent { get; set; }
+
+    /// <summary>
+    /// 两步验证票据（仅挑战响应携带；后续阶段回传即免图形验证码，登录完成后作废）
+    /// </summary>
+    public string? TwoFactorTicket { get; set; }
 
     /// <summary>
     /// 登录令牌
@@ -403,12 +413,17 @@ public sealed class UserInfoDto
     public long? TenantId { get; set; }
 
     /// <summary>
-    /// 是否处于平台运维态（无租户上下文）
+    /// 当前租户名称（平台为空）
+    /// </summary>
+    public string? TenantName { get; set; }
+
+    /// <summary>
+    /// 是否处于平台（0 号租户，令牌不带租户）
     /// </summary>
     public bool IsPlatform { get; set; }
 
     /// <summary>
-    /// 是否可进入平台运维态（超管 / 平台管理员）
+    /// 是否可进入平台（平台账号）
     /// </summary>
     public bool CanAccessPlatform { get; set; }
 

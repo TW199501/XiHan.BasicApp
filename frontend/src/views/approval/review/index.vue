@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import type { Tone } from '@xihan-ui/kernel'
+import type { Tone } from '@xihan-ui/core'
 import type { PageResult, ReviewDetailDto, ReviewListItemDto } from '@/api'
 import type { ListFieldSchema, PageSchema, SchemaActionPayload } from '~/components'
-import { XhButton, XhDescriptionsItem, XhDescriptionsLabel, XhDescriptionsRoot, XhDescriptionsValue, XhDrawerCloseTrigger, XhDrawerContent, XhDrawerRoot, XhDrawerTitle, XhFlex, XhPopconfirmCancelTrigger, XhPopconfirmConfirmTrigger, XhPopconfirmContent, XhPopconfirmDescription, XhPopconfirmPositioner, XhPopconfirmRoot, XhPopconfirmTrigger, XhSeparator, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
+import { XhButton, XhButtonIndicator, XhButtonLabel, XhButtonPrefix, XhDescriptionsItem, XhDescriptionsLabel, XhDescriptionsRoot, XhDescriptionsValue, XhDrawerCloseTrigger, XhDrawerContent, XhDrawerRoot, XhDrawerTitle, XhFlex, XhPopconfirmCancelTrigger, XhPopconfirmConfirmTrigger, XhPopconfirmContent, XhPopconfirmDescription, XhPopconfirmPositioner, XhPopconfirmRoot, XhPopconfirmTrigger, XhSeparator, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
 import { computed, h, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { approvalManagementApi, AuditResult, AuditStatus, createPageRequest, EnableStatus, querySortsFromSchema } from '@/api'
 import { STATUS_OPTIONS } from '@/constants'
-import { Icon, SchemaPage, XInput, XJsonBlock } from '~/components'
+import { deleteConfirmText, Icon, SchemaPage, statusConfirmText, XInput, XJsonBlock } from '~/components'
 import { toast } from '~/composables'
 import { useEnumOptions } from '~/hooks'
 import { formatDate, getOptionLabel } from '~/utils'
@@ -97,7 +97,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 1,
     render: (row) => {
       const r = row as unknown as ReviewListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: reviewStatusTag(r.reviewStatus) }, () => h(XhTagLabel, () => getOptionLabel(reviewStatusOptions.value, r.reviewStatus)))
+      return h(XhTagRoot, { variant: 'subtle', tone: reviewStatusTag(r.reviewStatus) }, () => h(XhTagLabel, () => getOptionLabel(reviewStatusOptions.value, r.reviewStatus)))
     },
   },
   {
@@ -114,7 +114,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 2,
     render: (row) => {
       const r = row as unknown as ReviewListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: reviewResultTag(r.reviewResult) }, () => h(XhTagLabel, () => (r.reviewResult === null || r.reviewResult === undefined ? t('approval.review.no_result') : getOptionLabel(reviewResultOptions.value, r.reviewResult))))
+      return h(XhTagRoot, { variant: 'subtle', tone: reviewResultTag(r.reviewResult) }, () => h(XhTagLabel, () => (r.reviewResult === null || r.reviewResult === undefined ? t('approval.review.no_result') : getOptionLabel(reviewResultOptions.value, r.reviewResult))))
     },
   },
   {
@@ -131,7 +131,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 3,
     render: (row) => {
       const r = row as unknown as ReviewListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: statusTag(r.status) }, () => h(XhTagLabel, () => getOptionLabel(enableStatusOptions.value, r.status)))
+      return h(XhTagRoot, { variant: 'subtle', tone: statusTag(r.status) }, () => h(XhTagLabel, () => getOptionLabel(enableStatusOptions.value, r.status)))
     },
   },
   // 仅列（不搜索）
@@ -149,7 +149,7 @@ const fields = computed<ListFieldSchema[]>(() => [
 ])
 
 const schema = computed<PageSchema>(() => ({
-  pageCode: 'platform.approval',
+  pageCode: 'approval.review',
   exportPermission: 'approval.review.export',
   pageName: t('approval.review.page_name'),
   batchRemovable: true,
@@ -173,10 +173,10 @@ const schema = computed<PageSchema>(() => ({
   },
   actions: [
     { key: 'view', title: t('approval.review.action_view'), scope: 'row', icon: 'lucide:eye' },
-    { key: 'approve', title: t('approval.review.action_approve'), scope: 'row', type: 'success', visible: row => canAuditRow(row as unknown as ReviewListItemDto) },
-    { key: 'reject', title: t('approval.review.action_reject'), scope: 'row', type: 'error', visible: row => canAuditRow(row as unknown as ReviewListItemDto) },
-    { key: 'toggle', title: t('approval.review.action_toggle'), scope: 'row' },
-    { key: 'delete', title: t('approval.review.action_delete'), scope: 'row', type: 'error' },
+    { key: 'approve', title: t('approval.review.action_approve'), scope: 'row', icon: 'lucide:check', type: 'success', visible: row => canAuditRow(row as unknown as ReviewListItemDto), permission: 'approval.review.audit' },
+    { key: 'reject', title: t('approval.review.action_reject'), scope: 'row', icon: 'lucide:x', type: 'error', visible: row => canAuditRow(row as unknown as ReviewListItemDto), permission: 'approval.review.audit' },
+    { key: 'toggle', title: t('approval.review.action_toggle'), scope: 'row', icon: 'lucide:power', confirm: true, confirmText: row => statusConfirmText(t, (row as unknown as ReviewListItemDto).status === EnableStatus.Enabled, (row as unknown as ReviewListItemDto).reviewTitle), permission: 'approval.review.status' },
+    { key: 'delete', title: t('approval.review.action_delete'), scope: 'row', icon: 'lucide:trash-2', type: 'error', confirm: true, confirmText: row => deleteConfirmText(t, (row as unknown as ReviewListItemDto).reviewTitle), permission: 'approval.review.delete' },
   ],
 }))
 
@@ -215,7 +215,7 @@ async function handleDetail(row: ReviewListItemDto) {
     detailData.value = await approvalManagementApi.detail(row.basicId) ?? null
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('approval.review.err_load_detail'))
+    toast.danger((error as Error)?.message || t('approval.review.err_load_detail'))
   }
   finally {
     detailLoading.value = false
@@ -251,7 +251,7 @@ async function handleAudit() {
     reload()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('approval.review.err_audit'))
+    toast.danger((error as Error)?.message || t('approval.review.err_audit'))
   }
   finally {
     actionLoading.value = false
@@ -269,7 +269,7 @@ async function handleWithdraw() {
     reload()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('approval.review.err_withdraw'))
+    toast.danger((error as Error)?.message || t('approval.review.err_withdraw'))
   }
   finally {
     actionLoading.value = false
@@ -284,7 +284,7 @@ async function handleToggleStatus(row: ReviewListItemDto) {
     reload()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('approval.review.err_update_status'))
+    toast.danger((error as Error)?.message || t('approval.review.err_update_status'))
   }
 }
 
@@ -295,7 +295,7 @@ async function handleDelete(row: ReviewListItemDto) {
     reload()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('approval.review.err_delete'))
+    toast.danger((error as Error)?.message || t('approval.review.err_delete'))
   }
 }
 
@@ -335,7 +335,7 @@ function onAction(payload: SchemaActionPayload) {
         <div v-if="detailLoading" class="py-8 text-center text-gray-400">
           {{ t('approval.review.loading') }}
         </div>
-        <XhDescriptionsRoot v-else-if="detailData" :columns="1" bordered placement="left" size="sm">
+        <XhDescriptionsRoot v-else-if="detailData" :columns="1" variant="outline" placement="left" size="sm">
           <XhDescriptionsItem>
             <XhDescriptionsLabel>{{ t('approval.review.review_title') }}</XhDescriptionsLabel>
             <XhDescriptionsValue>
@@ -493,17 +493,20 @@ function onAction(payload: SchemaActionPayload) {
             {{ t('approval.review.review_operation') }}
           </div>
           <XhFlex justify="start" gap="sm">
-            <XhButton tone="success" :disabled="!canAudit()" :loading="actionLoading" @click="openApproveDialog(AuditResult.Pass)">
-              <span><Icon icon="lucide:check" /></span>
-              {{ t('approval.review.btn_pass') }}
+            <XhButton variant="subtle" tone="success" :disabled="!canAudit()" :loading="actionLoading" @click="openApproveDialog(AuditResult.Pass)">
+              <XhButtonIndicator />
+              <XhButtonPrefix><Icon icon="lucide:check" /></XhButtonPrefix>
+              <XhButtonLabel>{{ t('approval.review.btn_pass') }}</XhButtonLabel>
             </XhButton>
-            <XhButton tone="danger" :disabled="!canAudit()" :loading="actionLoading" @click="openApproveDialog(AuditResult.Reject)">
-              <span><Icon icon="lucide:x" /></span>
-              {{ t('approval.review.btn_reject') }}
+            <XhButton variant="subtle" tone="danger" :disabled="!canAudit()" :loading="actionLoading" @click="openApproveDialog(AuditResult.Reject)">
+              <XhButtonIndicator />
+              <XhButtonPrefix><Icon icon="lucide:x" /></XhButtonPrefix>
+              <XhButtonLabel>{{ t('approval.review.btn_reject') }}</XhButtonLabel>
             </XhButton>
-            <XhButton tone="warning" :disabled="!canAudit()" :loading="actionLoading" @click="openApproveDialog(AuditResult.Return)">
-              <span><Icon icon="lucide:corner-down-left" /></span>
-              {{ t('approval.review.btn_return') }}
+            <XhButton variant="subtle" tone="warning" :disabled="!canAudit()" :loading="actionLoading" @click="openApproveDialog(AuditResult.Return)">
+              <XhButtonIndicator />
+              <XhButtonPrefix><Icon icon="lucide:corner-down-left" /></XhButtonPrefix>
+              <XhButtonLabel>{{ t('approval.review.btn_return') }}</XhButtonLabel>
             </XhButton>
             <XhPopconfirmRoot @confirm="handleWithdraw">
               <XhPopconfirmTrigger
@@ -515,7 +518,7 @@ function onAction(payload: SchemaActionPayload) {
                 {{ t('approval.review.btn_withdraw') }}
               </XhPopconfirmTrigger>
               <XhPopconfirmPositioner>
-                <XhPopconfirmContent>
+                <XhPopconfirmContent :aria-label="t('approval.review.btn_withdraw')">
                   <XhPopconfirmDescription>{{ t('approval.review.withdraw_confirm') }}</XhPopconfirmDescription>
                   <XhPopconfirmCancelTrigger>{{ t('common.actions.cancel') }}</XhPopconfirmCancelTrigger>
                   <XhPopconfirmConfirmTrigger>{{ t('common.actions.confirm') }}</XhPopconfirmConfirmTrigger>
@@ -531,7 +534,7 @@ function onAction(payload: SchemaActionPayload) {
       <XhDrawerContent style="--xh-drawer-size: 420px">
         <XhDrawerTitle>{{ auditResult === AuditResult.Pass ? t('approval.review.approve_dialog_pass') : auditResult === AuditResult.Reject ? t('approval.review.approve_dialog_reject') : t('approval.review.approve_dialog_return') }}</XhDrawerTitle>
         <XhDrawerCloseTrigger />
-        <XhFlex direction="column" gap="md">
+        <XhFlex orientation="vertical" gap="md">
           <XInput
             v-model:value="auditComment"
             :placeholder="t('approval.review.comment_placeholder')"
@@ -545,8 +548,9 @@ function onAction(payload: SchemaActionPayload) {
             :loading="actionLoading"
             @click="handleAudit"
           >
-            <span><Icon :icon="auditResult === AuditResult.Pass ? 'lucide:check' : auditResult === AuditResult.Reject ? 'lucide:x' : 'lucide:corner-down-left'" /></span>
-            {{ auditResult === AuditResult.Pass ? t('approval.review.confirm_pass') : auditResult === AuditResult.Reject ? t('approval.review.confirm_reject') : t('approval.review.confirm_return') }}
+            <XhButtonIndicator />
+            <XhButtonPrefix><Icon :icon="auditResult === AuditResult.Pass ? 'lucide:check' : auditResult === AuditResult.Reject ? 'lucide:x' : 'lucide:corner-down-left'" /></XhButtonPrefix>
+            <XhButtonLabel>{{ auditResult === AuditResult.Pass ? t('approval.review.confirm_pass') : auditResult === AuditResult.Reject ? t('approval.review.confirm_reject') : t('approval.review.confirm_return') }}</XhButtonLabel>
           </XhButton>
         </XhFlex>
       </XhDrawerContent>

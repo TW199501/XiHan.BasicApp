@@ -12,33 +12,9 @@ namespace XiHan.BasicApp.Saas.Application.Contracts;
 public interface IUserDataScopeAppService : IApplicationService
 {
     /// <summary>
-    /// 授予用户数据范围
+    /// 设置成员在本租户的数据范围：覆盖档位与自定义部门一次提交（单事务）
     /// </summary>
-    /// <param name="input">授权参数</param>
+    /// <param name="input">设置参数</param>
     /// <param name="cancellationToken">取消令牌</param>
-    /// <returns>用户数据范围详情</returns>
-    Task<UserDataScopeDetailDto> CreateUserDataScopeAsync(UserDataScopeGrantDto input, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// 更新用户数据范围
-    /// </summary>
-    /// <param name="input">更新参数</param>
-    /// <param name="cancellationToken">取消令牌</param>
-    /// <returns>用户数据范围详情</returns>
-    Task<UserDataScopeDetailDto> UpdateUserDataScopeAsync(UserDataScopeUpdateDto input, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// 更新用户数据范围状态
-    /// </summary>
-    /// <param name="input">状态更新参数</param>
-    /// <param name="cancellationToken">取消令牌</param>
-    /// <returns>用户数据范围详情</returns>
-    Task<UserDataScopeDetailDto> UpdateUserDataScopeStatusAsync(UserDataScopeStatusUpdateDto input, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// 撤销用户数据范围
-    /// </summary>
-    /// <param name="id">用户数据范围绑定主键</param>
-    /// <param name="cancellationToken">取消令牌</param>
-    Task DeleteUserDataScopeAsync(long id, CancellationToken cancellationToken = default);
+    Task SetUserDataScopeAsync(UserDataScopeSetDto input, CancellationToken cancellationToken = default);
 }

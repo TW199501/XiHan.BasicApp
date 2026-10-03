@@ -1,4 +1,5 @@
 <script lang="ts" setup>
+import type { Size } from '@xihan-ui/core'
 import {
   XhTagsInputControl,
   XhTagsInputInput,
@@ -15,13 +16,17 @@ defineOptions({ name: 'XTagsInput', inheritAttrs: false })
 
 withDefaults(defineProps<{
   placeholder?: string
+  /** 不写时随外层 Field / Form 的 disabled 走；写了以本处为准 */
   disabled?: boolean
   /** 最多几条 */
   max?: number
+  /** 与表单里的其它字段同一档：缺省 sm，与 XInput / XSelect 一致 */
+  size?: Size
 }>(), {
   placeholder: undefined,
-  disabled: false,
+  disabled: undefined,
   max: undefined,
+  size: 'sm',
 })
 
 // 字段挂来的 id 与 aria-* 转交给输入框，见 control-attrs.ts
@@ -39,6 +44,7 @@ const value = defineModel<string[]>('value', { default: () => [] })
     :value="value"
     :disabled="disabled"
     :max="max"
+    :size="size"
     @update:value="(next: string[]) => (value = next)"
   >
     <XhTagsInputControl>

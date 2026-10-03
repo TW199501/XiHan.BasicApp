@@ -10,6 +10,7 @@ import { createPageRequest, logManagementApi, querySortsFromSchema, SignatureTyp
 import { SchemaPage } from '~/components'
 import { toast } from '~/composables'
 import { getOptionLabel } from '~/utils'
+import { renderHttpMethod } from '../_components/http-method'
 import { apiLogDetailFields } from '../_components/log-detail-fields'
 import LogDetailDrawer from '../_components/LogDetailDrawer.vue'
 import { decorateTraceFields, gotoTrace } from '../_components/trace-nav'
@@ -68,8 +69,8 @@ const fields = computed<ListFieldSchema[]>(() => [
   { key: 'userId', title: t('log.common.user_id'), dataType: 'string', advancedSearch: true, sortable: true, minWidth: 90, order: 10 },
   { key: 'userName', title: t('log.common.user_name'), dataType: 'string', advancedSearch: true, sortable: true, minWidth: 100, order: 11 },
   { key: 'sessionId', title: t('log.common.session_id'), dataType: 'string', advancedSearch: true, minWidth: 160, order: 12 },
-  { key: 'requestId', title: t('log.common.request_id'), dataType: 'string', advancedSearch: true, minWidth: 160, order: 13 },
-  { key: 'traceId', title: t('log.common.trace_id'), dataType: 'string', advancedSearch: true, minWidth: 160, order: 14 },
+  { key: 'traceId', title: t('log.common.trace_id'), dataType: 'string', advancedSearch: true, minWidth: 160, order: 13 },
+  { key: 'requestId', title: t('log.common.request_id'), dataType: 'string', advancedSearch: true, minWidth: 160, order: 14 },
   { key: 'clientId', title: t('log.api.client_id'), dataType: 'string', advancedSearch: true, minWidth: 120, order: 15 },
   { key: 'appId', title: t('log.api.app_id'), dataType: 'string', advancedSearch: true, minWidth: 120, order: 16 },
   {
@@ -81,7 +82,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     options: [{ label: t('log.api.signature_valid'), value: 1 }, { label: t('log.api.signature_invalid'), value: 0 }],
     width: 120,
     order: 17,
-    render: row => h(XhTagRoot, { variant: 'outline', tone: (row as unknown as ApiLogListItemDto).isSignatureValid ? 'success' : 'warning' }, () => h(XhTagLabel, () => (row as unknown as ApiLogListItemDto).isSignatureValid ? t('log.api.signature_valid') : t('log.api.signature_invalid'))),
+    render: row => h(XhTagRoot, { variant: 'subtle', tone: (row as unknown as ApiLogListItemDto).isSignatureValid ? 'success' : 'warning' }, () => h(XhTagLabel, () => (row as unknown as ApiLogListItemDto).isSignatureValid ? t('log.api.signature_valid') : t('log.api.signature_invalid'))),
   },
   {
     key: 'signatureType',
@@ -97,7 +98,7 @@ const fields = computed<ListFieldSchema[]>(() => [
   },
   { key: 'apiPath', title: t('log.api.api_path'), dataType: 'string', advancedSearch: true, sortable: true, minWidth: 240, order: 19 },
   { key: 'apiName', title: t('log.api.api_name'), dataType: 'string', sortable: true, minWidth: 120, order: 20 },
-  { key: 'method', title: t('log.common.method'), dataType: 'enum', searchable: true, searchMultiple: true, sortable: true, dictionaryCode: 'HttpMethodType', options: methodOptions.value, searchPlaceholder: t('log.api.method_placeholder'), width: 100, order: 21 },
+  { key: 'method', title: t('log.common.method'), dataType: 'enum', searchable: true, searchMultiple: true, sortable: true, dictionaryCode: 'HttpMethodType', options: methodOptions.value, searchPlaceholder: t('log.api.method_placeholder'), width: 100, order: 21, render: row => renderHttpMethod((row as unknown as ApiLogListItemDto).method) },
   { key: 'controllerName', title: t('log.common.controller_name'), dataType: 'string', minWidth: 140, order: 22 },
   { key: 'actionName', title: t('log.common.action_name'), dataType: 'string', minWidth: 140, order: 23 },
   { key: 'statusCode', title: t('log.common.status_code'), dataType: 'number', advancedSearch: true, sortable: true, width: 100, order: 24 },
@@ -119,7 +120,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     searchPlaceholder: t('log.api.success_placeholder'),
     width: 100,
     order: 33,
-    render: row => h(XhTagRoot, { variant: 'outline', tone: (row as unknown as ApiLogListItemDto).isSuccess ? 'success' : 'danger' }, () => h(XhTagLabel, () => (row as unknown as ApiLogListItemDto).isSuccess ? t('common.statuses.success') : t('common.statuses.failed'))),
+    render: row => h(XhTagRoot, { variant: 'subtle', tone: (row as unknown as ApiLogListItemDto).isSuccess ? 'success' : 'danger' }, () => h(XhTagLabel, () => (row as unknown as ApiLogListItemDto).isSuccess ? t('common.statuses.success') : t('common.statuses.failed'))),
   },
   { key: 'apiVersion', title: t('log.api.api_version'), dataType: 'string', advancedSearch: true, sortable: true, minWidth: 90, order: 34 },
   { key: 'createdTime', title: t('common.fields.created_time'), dataType: 'datetime', sortable: true, minWidth: 170, order: 35 },
@@ -206,7 +207,7 @@ async function handleDetail(row: ApiLogListItemDto) {
   }
   catch (error) {
     detailData.value = row
-    toast.error((error as Error)?.message || t('log.api.detail_load_failed'))
+    toast.danger((error as Error)?.message || t('log.api.detail_load_failed'))
   }
   finally {
     detailLoading.value = false

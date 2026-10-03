@@ -5,6 +5,7 @@ using SqlSugar;
 using XiHan.BasicApp.CodeGeneration.Domain.Enums;
 using XiHan.BasicApp.Core.Entities;
 using XiHan.BasicApp.Saas.Domain.Enums;
+using XiHan.Framework.Data.SqlSugar.Routing;
 
 namespace XiHan.BasicApp.CodeGeneration.Domain.Entities;
 
@@ -41,6 +42,7 @@ namespace XiHan.BasicApp.CodeGeneration.Domain.Entities;
 [SugarIndex("IX_{table}_TeId_IsDe", nameof(TenantId), OrderByType.Asc, nameof(IsDeleted), OrderByType.Asc)]
 [SugarIndex("IX_{table}_TaId", nameof(TableId), OrderByType.Asc)]
 [SugarIndex("IX_{table}_CoNa", nameof(ColumnName), OrderByType.Asc)]
+[PlatformDataSource]
 public partial class SysCodeGenTableColumn : BasicAppFullAuditedEntity
 {
     /// <summary>
@@ -122,6 +124,12 @@ public partial class SysCodeGenTableColumn : BasicAppFullAuditedEntity
     public virtual bool IsRequired { get; set; } = false;
 
     /// <summary>
+    /// 是否唯一（生成租户内唯一索引，新增与更新时查重）
+    /// </summary>
+    [SugarColumn(ColumnName = "Is_Unique", ColumnDescription = "是否唯一")]
+    public virtual bool IsUnique { get; set; } = false;
+
+    /// <summary>
     /// 是否列表显示
     /// </summary>
     [SugarColumn(ColumnName = "Is_List", ColumnDescription = "是否列表显示")]
@@ -158,7 +166,7 @@ public partial class SysCodeGenTableColumn : BasicAppFullAuditedEntity
     public virtual HtmlType HtmlType { get; set; } = HtmlType.Input;
 
     /// <summary>
-    /// 字典选择器类型（字典/枚举/常量三分；决定 DictCode/EnumTypeName/ConstValues 哪个生效，空表示非选项列）
+    /// 选项来源（字典/枚举/常量/关联表/关联树；决定 DictCode/EnumTypeName/ConstValues/Relation* 哪组生效，空表示非选项列）
     /// </summary>
     [SugarColumn(ColumnName = "Dict_Selector_Type", ColumnDescription = "字典选择器类型", IsNullable = true)]
     public virtual DictSelectorType? DictSelectorType { get; set; }
@@ -180,6 +188,18 @@ public partial class SysCodeGenTableColumn : BasicAppFullAuditedEntity
     /// </summary>
     [SugarColumn(ColumnName = "Const_Values", ColumnDescription = "常量项JSON", ColumnDataType = StaticConfig.CodeFirst_BigString, IsNullable = true)]
     public virtual string? ConstValues { get; set; }
+
+    /// <summary>
+    /// 关联的表配置主键（TableSelector / TreeSelector 时生效；本列存目标表记录的主键）
+    /// </summary>
+    [SugarColumn(ColumnName = "Relation_Table_Id", ColumnDescription = "关联表配置ID", IsNullable = true)]
+    public virtual long? RelationTableId { get; set; }
+
+    /// <summary>
+    /// 关联表的显示列（目标表的列名；关联树可留空，取目标树表的名称列）
+    /// </summary>
+    [SugarColumn(ColumnName = "Relation_Label_Column", ColumnDescription = "关联显示列", Length = 100, IsNullable = true)]
+    public virtual string? RelationLabelColumn { get; set; }
 
     /// <summary>
     /// 默认值
