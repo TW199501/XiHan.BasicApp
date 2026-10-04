@@ -113,6 +113,7 @@ public sealed class OrderNumberService(INumberGenerator numberGenerator)
 - 取得、释放、标记不确定与清理使用独立连接立即提交；完成写入登记到当前工作单元，事务型工作单元内与业务同一事务提交或回滚。
 - 配置节沿用 `BasicApp:Web:Idempotency`；`MaxKeyLength` 不能超过 128（幂等键列长度），否则启动校验失败。
 - 请求路径超过 512 字符时截断写入端点列。
+- 响应体为空（null）时，记录的快照列保持为空，不写入占位内容。
 
 ## 架构与职责
 
