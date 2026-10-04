@@ -60,6 +60,7 @@ XiHan.BasicApp.Web.Core 提供基础应用的 Web 基础设施能力，整合 We
 | `MaxTotalResponseBytes` | `67108864`（64 MiB） | 进程内存储的响应快照总字节上限 |
 | `CompletedRetention` | `24:00:00` | 完成记录的保留时长 |
 | `ProcessingLease` | `00:05:00` | 事务型端点处理中记录的租约时长，过期后允许重新取得（仅落库存储使用） |
+| `PurgeInterval` | `01:00:00` | 过期记录的清理间隔（仅落库存储使用，必须大于零） |
 
 默认存储是进程内的 `DefaultIdempotencyStore`，有容量上限，重启后记录丢失；落库存储见 Saas 模块「接口幂等存储」。
 

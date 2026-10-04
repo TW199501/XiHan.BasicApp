@@ -21,7 +21,7 @@ namespace XiHan.BasicApp.Saas.Infrastructure.Idempotency;
 /// 唯一索引建在记录键摘要上，由数据库串行化同一键的并发取得。
 /// 完成与不确定记录超过保留期后可被重新取得；请求路径超过端点列长度时截断写入。
 /// </remarks>
-public class SaasIdempotencyStore : IIdempotencyStore
+public class SaasIdempotencyStore : IIdempotencyStore, IIdempotencyRecordPurger
 {
     /// <summary>
     /// 幂等键列长度（字符）
@@ -131,11 +131,7 @@ public class SaasIdempotencyStore : IIdempotencyStore
         await unitOfWork.CompleteAsync(cancellationToken);
     }
 
-    /// <summary>
-    /// 删除已过期的完成记录与不确定记录
-    /// </summary>
-    /// <param name="cancellationToken">取消令牌</param>
-    /// <returns>删除的记录数</returns>
+    /// <inheritdoc />
     public async Task<int> PurgeExpiredAsync(CancellationToken cancellationToken = default)
     {
         var now = _timeProvider.GetUtcNow();

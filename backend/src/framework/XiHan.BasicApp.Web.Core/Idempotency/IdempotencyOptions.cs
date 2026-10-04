@@ -52,4 +52,9 @@ public class IdempotencyOptions
     /// 事务型端点处理中记录的租约时长，过期后允许重新取得（仅落库存储使用）
     /// </summary>
     public TimeSpan ProcessingLease { get; set; } = TimeSpan.FromMinutes(5);
+
+    /// <summary>
+    /// 过期记录的清理间隔（仅落库存储使用）
+    /// </summary>
+    public TimeSpan PurgeInterval { get; set; } = TimeSpan.FromHours(1);
 }

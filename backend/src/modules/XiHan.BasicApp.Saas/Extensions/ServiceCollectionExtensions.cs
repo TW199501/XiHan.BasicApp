@@ -536,7 +536,8 @@ public static class ServiceCollectionExtensions
     /// </summary>
     /// <remarks>
     /// 以 <see cref="SaasIdempotencyStore"/> 替换默认的进程内存储，并在启动时校验幂等键最大长度不超过记录列长度；
-    /// 注册 <see cref="FieldSecurityIdempotencyResponseProcessor"/>，快照保存前按字段安全规则打码。
+    /// 注册 <see cref="FieldSecurityIdempotencyResponseProcessor"/>，快照保存前按字段安全规则打码；
+    /// 注册 <see cref="SaasIdempotencyPurgeHostedService"/>，按 <see cref="IdempotencyOptions.PurgeInterval"/> 定期清理过期记录。
     /// </remarks>
     /// <param name="services">服务集合</param>
     /// <param name="configuration">配置</param>
@@ -549,10 +550,13 @@ public static class ServiceCollectionExtensions
         services.AddOptions<IdempotencyOptions>()
             .Validate(options => options.MaxKeyLength <= SaasIdempotencyStore.MaxKeyColumnLength,
                 $"幂等配置无效：使用数据库存储时 MaxKeyLength 不能超过 {SaasIdempotencyStore.MaxKeyColumnLength}。")
+            .Validate(options => options.PurgeInterval > TimeSpan.Zero, "幂等配置无效：PurgeInterval 必须大于零。")
             .ValidateOnStart();
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddScoped<SaasIdempotencyStore>();
         services.Replace(ServiceDescriptor.Scoped<IIdempotencyStore, SaasIdempotencyStore>());
+        services.TryAddScoped<IIdempotencyRecordPurger>(provider => provider.GetRequiredService<SaasIdempotencyStore>());
+        services.AddHostedService<SaasIdempotencyPurgeHostedService>();
         services.TryAddEnumerable(ServiceDescriptor.Scoped<IIdempotencyResponseProcessor, FieldSecurityIdempotencyResponseProcessor>());
 
         return services;
