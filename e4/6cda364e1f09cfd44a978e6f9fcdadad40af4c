@@ -1,0 +1,18 @@
+backend/src/framework/XiHan.BasicApp.Web.Core/README.md
+  h_be8240d2cfaa4b 30-32,71-72,85-86
+backend/src/modules/XiHan.BasicApp.Saas/README.md
+  h_be8240d2cfaa4b 113-114
+backend/test/XiHan.BasicApp.Web.Core.Tests/Idempotency/IdempotencyDynamicApiTests.cs
+  h_be8240d2cfaa4b 41
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "e46cda364e1f09cfd44a978e6f9fcdadad40af4c",
+  "prompts": {},
+  "humans": {
+    "h_be8240d2cfaa4b": {
+      "author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
