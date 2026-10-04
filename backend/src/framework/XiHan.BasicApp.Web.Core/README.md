@@ -27,8 +27,9 @@ XiHan.BasicApp.Web.Core 提供基础应用的 Web 基础设施能力，整合 We
 在应用服务方法（或整个类）上标 `[Idempotent]`（`XiHan.BasicApp.Core.Attributes`），同一个幂等键的重复请求不会重复执行，而是重播第一次的响应。
 
 ### 用法
-- `[Idempotent]` 可标在方法或类上，可被继承；动态 API 以应用服务方法上的标注为准。
-- 调用方在请求头 `Idempotency-Key` 携带幂等键（头名可由 `HeaderName` 修改）。键按租户、调用用户、HTTP 方法、请求路径与键值共同区分，不同用户或租户之间互不影响。
+- `[Idempotent]` 可标在方法或类上，可被继承；控制器与动态 API 都识别方法上的标注和声明该方法的类上的标注，动态 API 以应用服务的方法与类为准。
+- 调用方在请求头 `Idempotency-Key` 携带幂等键（头名可由 `HeaderName` 修改）。有效的键非空、长度不超过 `MaxKeyLength`，且只含可见 ASCII 字符（`!` 到 `~`，不含空格）。
+- 记录键由租户、调用用户、HTTP 方法、请求路径（转为小写）与键值共同组成，不同用户或租户之间互不影响；仅大小写不同的路径视为同一端点。
 - 相同键且请求内容（方法、路径、查询串、动作参数）相同的重复请求，重播首次响应的状态码与响应体，并带响应头 `Idempotency-Replayed: true`。
 
 ### 响应语义
@@ -67,7 +68,8 @@ XiHan.BasicApp.Web.Core 提供基础应用的 Web 基础设施能力，整合 We
 ### 过滤器位置
 `AddBasicAppIdempotency` 在 MVC 过滤器中以 `XiHanUnitOfWorkFilter` 为锚点插入两层过滤器；找不到该过滤器时启动失败。
 - 外层 `IdempotencyFilter` 在工作单元之外：校验、取得幂等键与重播都发生在开启事务之前，重播不会开事务。
-- 内层 `IdempotencyCompletionFilter` 在工作单元之内、最贴近动作：动作正常返回后把结果写成快照并完成记录，事务型工作单元内与业务同一事务提交；业务回滚时完成记录一并回滚，完成写入失败则异常向外传播、工作单元不提交。
+- 内层 `IdempotencyCompletionFilter` 在工作单元之内、最贴近动作：动作正常返回后把结果写成快照并完成记录，完成写入登记到当前工作单元；完成写入失败则异常向外传播、工作单元不提交。
+- 完成记录与业务写入是否原子取决于存储与业务数据是否在同一连接：进程内存储的完成在工作单元提交成功后才生效；Saas 落库存储的记录在平台库，业务数据也在平台库时二者同一事务提交或回滚，数据库隔离租户的业务数据在租户库，两个事务按顺序分别提交，不是原子提交（见 Saas 模块「接口幂等存储」）。
 
 ### 响应处理器
 实现 `IIdempotencyResponseProcessor` 并注册到容器（可注册多个，按注册顺序执行），完成过滤器在保存快照之前对 `ObjectResult` 的非空结果值调用 `ProcessAsync` 就地处理；快照保存处理后的值，重播返回该快照。默认不注册任何处理器。处理器抛出异常时完成不写入，异常向外传播、工作单元不提交。
@@ -80,8 +82,8 @@ XiHan.BasicApp.Web.Core 提供基础应用的 Web 基础设施能力，整合 We
 ### 限制
 - 只适用于 MVC 控制器与动态 API，不适用于 Minimal API。
 - 含文件或流参数的动作会被拒绝（415）。
-- 快照只保存 `ObjectResult`（JSON 响应体）、空结果与仅状态码结果；响应体为空时按空保存，重播为 200 空响应或对应状态码。
-- 已知限制：BasicApp 以 fork 框架源码（`XiHanFun*.slnx` 源码模式）构建时，fork 自带的幂等过滤器也会被注册，直到 fork 移除相应实现为止。
+- 快照只保存 `ObjectResult`（JSON 响应体）、空结果与仅状态码结果：`EmptyResult`、动作结果为 null 与 `StatusCodeResult` 不保存响应体，重播为 200 空响应或对应状态码；`ObjectResult` 的值为 null 时按 JSON `null` 保存，重播响应体为 `null`。
+- 已知限制：BasicApp 以 fork 框架源码（`XiHanFun*.slnx` 源码模式）构建时，fork 自带的幂等过滤器也会被注册，直到 fork 移除相应实现为止；fork 的过滤器只识别 fork 自己的幂等标注，对标了 BasicApp `[Idempotent]` 的方法不起作用。
 
 ## 自动版本更新（UseAutoVersionUpdate）
 已在 `XiHanBasicAppWebHostModule.OnApplicationInitialization` 中接入。

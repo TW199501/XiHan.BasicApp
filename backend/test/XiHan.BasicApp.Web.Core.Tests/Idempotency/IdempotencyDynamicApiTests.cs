@@ -38,6 +38,7 @@ public class IdempotencySampleAppService : IApplicationService
     /// <summary>
     /// 构造函数
     /// </summary>
+    /// <param name="counter">执行计数器</param>
     public IdempotencySampleAppService(ExecutionCounter counter)
     {
         _counter = counter;
