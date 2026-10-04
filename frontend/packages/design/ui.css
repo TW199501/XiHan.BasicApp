@@ -119,18 +119,18 @@
 
 /* ==================== 偏好设置公共样式 ==================== */
 
-/* 每个分组的标题行 */
+/* 每个分组的标题行：面内标题，与 md 控件同档字号、semibold */
 .section-title {
   margin-bottom: 4px;
   padding: 0 6px;
-  font-weight: 600;
-  font-size: 13px;
+  font-weight: var(--xh-font-weight-semibold);
+  font-size: var(--xh-text-label-size);
   color: hsl(var(--foreground));
 }
 
-/* 数值输入框后的单位文字 */
+/* 数值输入框后的单位文字：次级标注 */
 .unit-label {
-  font-size: 12px;
+  font-size: var(--xh-text-caption-size);
   color: hsl(var(--muted-foreground));
   flex-shrink: 0;
 }
@@ -145,7 +145,8 @@
   padding: 0 6px;
   margin: 1px 0;
   height: 38px;
-  font-size: 13px;
+  /* 行内文字与右侧的 md 控件同档 */
+  font-size: var(--xh-font-size-md);
   transition: background-color var(--xh-motion-duration-micro) var(--xh-motion-ease-enter);
 }
 
@@ -155,7 +156,6 @@
   --xh-number-field-control-min-w: 0;
   --xh-select-control-min-w: 0;
   --xh-text-field-control-min-w: 0;
-  --xh-text-field-input-min-w: 0;
 }
 
 .pref-row [data-scope='number-field'][data-part='control'],
@@ -168,10 +168,11 @@
   background-color: hsl(var(--accent));
 }
 
+/* 首列是该行的标签：字号与并排的 md 控件同档，行距取紧档让折成两行的标签仍装在 38px 行高里 */
 .pref-row > span:first-child,
 .pref-row > label:first-child {
-  font-size: 13px;
-  line-height: 1.4;
+  font-size: var(--xh-text-label-size);
+  line-height: var(--xh-leading-tight);
   flex-shrink: 1;
   min-width: 0;
 }
@@ -210,41 +211,11 @@
   background: hsl(var(--card) / 70%);
 }
 
-/* 贴合成一组的输入与按钮：中缝不留描边，只在两端留圆角 */
-.xh-input-group {
-  display: flex;
-  align-items: stretch;
-  min-width: 0;
-}
-
-.xh-input-group > * {
-  --xh-text-field-input-radius: 0;
-  --xh-button-radius: 0;
-
-  margin-inline-end: calc(-1 * var(--xh-stroke-thin));
-}
-
-.xh-input-group > *:last-child {
-  margin-inline-end: 0;
-}
-
-.xh-input-group > *:first-child {
-  --xh-text-field-input-radius: var(--radius) 0 0 var(--radius);
-  --xh-button-radius: var(--radius) 0 0 var(--radius);
-}
-
-.xh-input-group > *:last-child {
-  --xh-text-field-input-radius: 0 var(--radius) var(--radius) 0;
-  --xh-button-radius: 0 var(--radius) var(--radius) 0;
-}
-
-.xh-input-group > *:only-child {
-  --xh-text-field-input-radius: var(--radius);
-  --xh-button-radius: var(--radius);
-}
-
-/* 命令式取值弹窗（prompt）的正文：字段竖排，撑到弹窗的取值宽度 */
+/* 命令式取值弹窗（prompt）的正文：字段竖排，撑到弹窗的取值宽度。
+   字段族控件缺省按控件宽（--xh-control-w）定宽，这里改一次让全部种类占满这一列 */
 .x-prompt__fields {
+  --xh-control-w: 100%;
+
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -300,7 +271,7 @@
   border-radius: var(--xh-shape-control);
   background: linear-gradient(90deg, var(--xh-bg-subtle) 25%, var(--xh-bg-subtle-hover) 37%, var(--xh-bg-subtle) 63%);
   background-size: 400% 100%;
-  animation: xh-app-skeleton-shimmer var(--xh-shimmer-duration) var(--xh-motion-ease-loop) infinite;
+  animation: xh-app-skeleton-shimmer var(--xh-motion-loop-shimmer) var(--xh-motion-ease-loop) infinite;
 }
 
 .xh-skeleton-bone--circle {
@@ -330,16 +301,30 @@
   white-space: pre-line;
 }
 
-/* 手写表格的共享皮肤：结构由页面自己写 thead/tbody，这里只给行线与紧排 */
+/* 卡片正文兜底限高：组件库不限描述长度，长文会把卡片撑到整屏高。超出的在卡片里滚动，
+   多行结果照样读得全。主动推送的通知本就只给一句摘要（utils/notification-text），这条只防漏网 */
+[data-scope='notification'][data-part='item-description'][data-preset='card'],
+[data-scope='notification'][data-part='item'][data-preset='card'] [data-part='item-description'] {
+  max-block-size: 40vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* 手写表格的共享皮肤：结构由页面自己写 thead/tbody，这里只给行线与紧排；
+   单元格文字与组件库 Table 的 md 档同一支令牌 */
 .xh-plain-table {
   inline-size: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: var(--xh-control-font-md);
 }
 
+/* 行高与列表的紧凑数据行同一把尺（control-h-sm + 4px×2 = 36）：md 标签行框 24 落在里面不撑高，
+   纯文本行也补到同高 */
 .xh-plain-table th,
 .xh-plain-table td {
-  padding: 6px 12px;
+  padding-block: var(--xh-space-1);
+  padding-inline: var(--xh-space-3);
+  block-size: calc(var(--xh-control-h-sm) + 2 * var(--xh-space-1));
   text-align: start;
   border-block-end: 1px solid var(--xh-border-subtle);
 }
@@ -350,13 +335,93 @@
   background: var(--xh-bg-subtle);
 }
 
-/* 圆形图标钮：工具栏里一排 28px 的透明底按钮（列设置/刷新/导出等），XIconButton 与借用它当触发器的菜单共用 */
+/* 抽屉 / 弹窗里的明细表（角色、权限、租户成员）：与 .xh-plain-table 同一把尺，只是四边描边的
+   网格形态；三处页面不再各自 scoped 一份 9px 竖衬的版本 */
+.xh-detail-table {
+  inline-size: 100%;
+  border-collapse: collapse;
+  font-size: var(--xh-control-font-md);
+}
+
+.xh-detail-table th,
+.xh-detail-table td {
+  padding-block: var(--xh-space-1);
+  padding-inline: var(--xh-space-2_5);
+  block-size: calc(var(--xh-control-h-sm) + 2 * var(--xh-space-1));
+  border: 1px solid var(--xh-border-default);
+  text-align: start;
+  vertical-align: middle;
+}
+
+.xh-detail-table th {
+  font-weight: var(--xh-font-weight-medium);
+  background: var(--xh-bg-subtle);
+}
+
+/* 紧凑密度下的中档表格回到迁移前的行距：每行都带一颗 sm 档的「更多」钮，库给的 md 竖衬（6px）
+   把行撑到 41px；这里把竖衬收到 sm 档那格（4px），再给单元格一个「刚好容下一颗 sm 控件」的下限，
+   纯文字行、chip 行与按钮行统一到 36px（加行间线 37px），不再随内容忽高忽低。
+   列标题没有控件，反向放宽到 8px 竖衬（32px + 底线 33px），标题行才压得住表体。
+   列表页的表格（.xh-table-panel）与弹窗、抽屉里的次级表格（.x-data-table）共用这一把尺，两处才长得一样；
+   宽松档与用户自选的 small / large 表格密度不碰，仍由组件库按 density 轴换档 */
+[data-density='compact']
+  :is(.xh-table-panel, .x-data-table)
+  [data-scope='table'][data-part='root'][data-size='md']
+  [data-scope='table'][data-part='cell'] {
+  --xh-table-cell-py: var(--xh-space-1);
+
+  min-block-size: calc(var(--xh-control-h-sm) + 2 * var(--xh-space-1));
+}
+
+[data-density='compact']
+  :is(.xh-table-panel, .x-data-table)
+  [data-scope='table'][data-part='root'][data-size='md']
+  [data-scope='table'][data-part='column-header'] {
+  --xh-table-cell-py: var(--xh-space-2);
+}
+
+/* @iconify/vue 的 svg 只认 1em，跟着字号走就只有 12px，在 28px 的图标钮里显得太小。
+   组件库的图标随控件尺寸档走（xs / sm 16、md 20、lg 24），XhIcon 自己会读家族下发的槽；
+   这里按 Action Control 的档位属性给直接塞进按钮 / 触发器的 Iconify 图标接上同一把尺，
+   没有档位的圆形图标钮与设置触发器取 sm 档字形 */
+[data-xh-action-control] > svg,
+.xh-icon-btn > svg,
+.xh-set-trigger > svg {
+  flex: none;
+  inline-size: var(--xh-glyph-size-sm);
+  block-size: var(--xh-glyph-size-sm);
+}
+
+[data-xh-action-control][data-xh-action-size='md']:not(.xh-set-trigger) > svg {
+  inline-size: var(--xh-glyph-size-md);
+  block-size: var(--xh-glyph-size-md);
+}
+
+[data-xh-action-control][data-xh-action-size='lg'] > svg {
+  inline-size: var(--xh-glyph-size-lg);
+  block-size: var(--xh-glyph-size-lg);
+}
+
+/* 菜单行首格里的 Iconify 图标（Schema 行操作、页面「更多」经 item-prefix 放入）：
+   行首格给 XhIcon 下发 --xh-icon-size，这里让 1em 的 svg 接上同一把尺。
+   行首格缺省取品牌色（给勾选标记的），放命令图标时改随条目字色：普通条目中性、危险条目随字转红 */
+[data-scope='menu'][data-part='item-indicator']:has(> svg) {
+  --xh-menu-item-indicator-fg: currentColor;
+}
+
+[data-scope='menu'][data-part='item-indicator'] > svg {
+  inline-size: var(--xh-icon-size);
+  block-size: var(--xh-icon-size);
+}
+
+/* 圆形图标钮：工具栏里一排透明底按钮（列设置/刷新/导出等），XIconButton 与借用它当触发器的菜单共用。
+   盒尺寸取 sm 档控件方盒，随密度轴换档（紧凑 28px、宽松 32px），与同排的 sm 按钮齐高 */
 .xh-icon-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  inline-size: 28px;
-  block-size: 28px;
+  inline-size: var(--xh-control-box-sm);
+  block-size: var(--xh-control-box-sm);
   padding: 0;
   border: 0;
   border-radius: var(--xh-radius-full);
@@ -426,6 +491,13 @@
   pointer-events: none;
 }
 
+/* 带文字的顶栏钮（如上下文切换）：皮肤同图标钮，宽度随内容 */
+.xihan-icon-btn.xihan-icon-btn--labeled {
+  inline-size: auto;
+  gap: var(--xh-space-2);
+  padding-inline: var(--xh-space-2);
+}
+
 /* 双类加权：在同文件里也稳压 :hover，不依赖书写顺序 */
 .xihan-icon-btn.xihan-icon-btn--active {
   background: var(--xh-bg-subtle-hover);
@@ -439,23 +511,65 @@
 .auth-submit {
   block-size: var(--xh-control-h-lg);
   border-radius: var(--xh-shape-control);
-  font-size: 15px;
-  font-weight: 600;
+  font-size: var(--xh-control-font-lg);
+  font-weight: var(--xh-font-weight-semibold);
 }
 
-/* 认证页「验证码输入 + 取得验证码」一行：按钮是独立动作，不拼进 .xh-input-group
-   （输入组只给「拼成一体」的附加件用，如手机号的国家下拉）；间距取与 size="lg" 同档的控件间距令牌 */
+/* 认证页的验证码行：六格分格输入在左，「发送验证码」钮在右。放得下时同一行、钮靠右缘；
+   放不下（手机宽）时钮整颗换到下一行仍靠右，格子不参与收缩——格子只会横向收窄、高度不变，
+   一收就成扁格。间距取控件档位的行内间距令牌 */
 .auth-code-row {
-  /* 窄屏时输入框只分到百来像素，放开组件库输入类的 12rem 最小宽（同 .pref-row），否则会顶掉间距压到按钮 */
-  --xh-text-field-control-min-w: 0;
-  --xh-text-field-input-min-w: 0;
-
   display: flex;
-  align-items: stretch;
+  flex-wrap: wrap;
+  align-items: center;
   gap: var(--xh-control-gap-lg);
 }
 
-.auth-code-row > :first-child {
-  flex: 1;
-  min-width: 0;
+.auth-code-row > [data-scope='button'],
+.auth-code-row > .auth-captcha {
+  flex: none;
+  margin-inline-start: auto;
+}
+
+/* 账号登录的图形验证码：高度取 lg 档控件高、随 density 换档，宽度按服务端 SVG 画布
+   （CaptchaSvgRenderer 的 120×44）的比例随高度走，图片铺满不留边。定宽 120px 时框比画布扁，
+   图片等比缩进去后左右露出垫底色，暗色下成了两道灰边。圆角与旁边的格子同一个控件令牌 */
+.auth-captcha {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  block-size: var(--xh-control-h-lg);
+  aspect-ratio: 120 / 44;
+  border-radius: var(--xh-shape-control);
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.auth-captcha > img {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}
+
+/* 认证页的辅助文字按 §6.4 角色取语义排版令牌，与 14px 的控件文字成阶：
+   tailwind 的 text-xs / text-sm 在 14px 根下是 10.5 / 12.25px，既非整数也不在字号阶梯上。
+   行高一并取令牌，不再由工具类写死。
+   正文：标题下的副标题（原 15px / 28 行高，字号阶梯上没有 15）、记住我 + 忘记密码一行、
+   注册页同意条款、两步验证方式项的名字、品牌面板的标语 chip */
+.auth-body {
+  font-size: var(--xh-text-body-size);
+  line-height: var(--xh-text-body-leading);
+}
+
+/* 说明 / helper：验证码提示、扫码提示、「还没有账号 / 已有账号 / 返回登录」这类表单下的引导句、
+   第三方回调页的跳转提示 */
+.auth-helper {
+  font-size: var(--xh-text-secondary-size);
+  line-height: var(--xh-leading-normal);
+}
+
+/* 次级标注：分隔线中缝的「第三方登录」、密码强度读数、品牌面板 logo 下的大写品牌字、页脚版本行 */
+.auth-caption {
+  font-size: var(--xh-text-caption-size);
+  line-height: var(--xh-leading-normal);
 }

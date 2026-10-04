@@ -29,11 +29,6 @@ public interface IRoleDomainService
     Task DeleteRoleAsync(long id, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// 授予角色权限
-    /// </summary>
-    Task<RolePermissionCommandResult> CreateRolePermissionAsync(RolePermissionGrantCommand command, CancellationToken cancellationToken = default);
-
-    /// <summary>
     /// 批量变更角色权限（批量撤销 + 批量授予，底层走 UpdateRange/AddRange 单次提交）
     /// </summary>
     /// <returns>本次实际发生变化的授予/撤销权限ID（供审计发事件）</returns>
@@ -50,37 +45,8 @@ public interface IRoleDomainService
     Task<RolePermissionCommandResult> UpdateRolePermissionStatusAsync(RolePermissionStatusChangeCommand command, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// 撤销角色权限
+    /// 设置角色数据范围：档位与自定义部门一次落地
     /// </summary>
-    Task DeleteRolePermissionAsync(long id, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// 授予角色数据范围
-    /// </summary>
-    Task<RoleDataScopeCommandResult> CreateRoleDataScopeAsync(RoleDataScopeGrantCommand command, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// 更新角色数据范围
-    /// </summary>
-    Task<RoleDataScopeCommandResult> UpdateRoleDataScopeAsync(RoleDataScopeUpdateCommand command, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// 更新角色数据范围状态
-    /// </summary>
-    Task<RoleDataScopeCommandResult> UpdateRoleDataScopeStatusAsync(RoleDataScopeStatusChangeCommand command, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// 撤销角色数据范围
-    /// </summary>
-    Task DeleteRoleDataScopeAsync(long id, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// 创建角色直接继承关系
-    /// </summary>
-    Task<RoleHierarchyCommandResult> CreateRoleHierarchyAsync(RoleHierarchyCreateCommand command, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// 删除角色直接继承关系
-    /// </summary>
-    Task DeleteRoleHierarchyAsync(long id, CancellationToken cancellationToken = default);
+    /// <returns>档位是否改变、本次实际变化的部门</returns>
+    Task<DataScopeSetResult> SetRoleDataScopeAsync(RoleDataScopeSetCommand command, CancellationToken cancellationToken = default);
 }

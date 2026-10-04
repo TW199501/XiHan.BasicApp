@@ -37,6 +37,7 @@ public class CodeGenTableColumnListItemDto : BasicAppDto
 
     public bool IsNullable { get; set; }
     public bool IsRequired { get; set; }
+    public bool IsUnique { get; set; }
     public bool IsList { get; set; }
     public bool IsInsert { get; set; }
     public bool IsEdit { get; set; }
@@ -47,6 +48,8 @@ public class CodeGenTableColumnListItemDto : BasicAppDto
     public string? DictCode { get; set; }
     public string? EnumTypeName { get; set; }
     public string? ConstValues { get; set; }
+    public long? RelationTableId { get; set; }
+    public string? RelationLabelColumn { get; set; }
     public int Sort { get; set; }
     public EnableStatus Status { get; set; }
 }
@@ -61,6 +64,7 @@ public sealed class CodeGenTableColumnUpdateDto : BasicAppUDto
     public string? CSharpProperty { get; set; }
     public string? TsType { get; set; }
     public bool IsRequired { get; set; }
+    public bool IsUnique { get; set; }
     public bool IsList { get; set; }
     public bool IsInsert { get; set; }
     public bool IsEdit { get; set; }
@@ -71,6 +75,8 @@ public sealed class CodeGenTableColumnUpdateDto : BasicAppUDto
     public string? DictCode { get; set; }
     public string? EnumTypeName { get; set; }
     public string? ConstValues { get; set; }
+    public long? RelationTableId { get; set; }
+    public string? RelationLabelColumn { get; set; }
     public string? DefaultValue { get; set; }
     public string? RegexPattern { get; set; }
     public string? ValidationMessage { get; set; }

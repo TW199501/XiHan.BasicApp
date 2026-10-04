@@ -2,6 +2,8 @@ import type {
   CaptchaChallenge,
   EmailLoginParams,
   ImpersonationCandidate,
+  ImpersonationCandidateQuery,
+  ImpersonationTenantOption,
   LoginConfig,
   LoginParams,
   LoginResponse,
@@ -171,12 +173,12 @@ export interface AppContextApis {
     save: (input: { scene: number, settingKey: string, settingValue?: null | string, clientId?: string, origin?: null | string }) => Promise<{ scene: number, settingKey: string, settingValue?: null | string }>
   }
   /** 时区目录（顶栏 / 个人中心 / 编号规则共用；后端已筛掉服务端无法解析的时区） */
+  /** 系统字典选项（业务表单下拉；只按登录态门控，值为字典项编码，树形字典按深度优先展平） */
+  dictApi: {
+    options: (dictCode: string) => Promise<Array<{ value: string, label: string, parentValue?: null | string, isDefault: boolean, disabled: boolean }>>
+  }
   timeZoneApi: {
     options: () => Promise<Array<{ id: string, displayName: string, baseUtcOffsetMinutes: number, supportsDaylightSavingTime: boolean }>>
-  }
-  /** 字段权限（按资源下发当前用户的有效 FLS 规则：可读/可编辑/脱敏策略） */
-  fieldSecurityApi: {
-    getMine: (resourceCode: string) => Promise<Array<{ fieldName: string, isReadable: boolean, isEditable: boolean, maskStrategy: number, maskPattern?: null | string }>>
   }
   /** 导入历史（Schema 页面导入留痕：执行完毕上报 + 当前用户最近导入记录） */
   importHistoryApi: {
@@ -210,7 +212,9 @@ export interface AppContextApis {
   /** 租户切换（控制中心 / 个人中心「我的租户」）：tenantId 传 null → 退回平台运维态 */
   /** 模仿登录：以他人身份登录排查问题；start/stop 都返回一枚新令牌，前端换令牌后整页重载 */
   impersonationApi: {
-    candidates: (keyword?: string) => Promise<ImpersonationCandidate[]>
+    /** 平台可在其中发起模仿的租户 */
+    tenants: () => Promise<ImpersonationTenantOption[]>
+    candidates: (input: ImpersonationCandidateQuery) => Promise<ImpersonationCandidate[]>
     start: (input: StartImpersonationParams) => Promise<LoginToken>
     stop: () => Promise<LoginToken>
   }

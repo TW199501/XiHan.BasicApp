@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using XiHan.BasicApp.Saas.Application.QueryServices;
+using XiHan.BasicApp.Saas.Domain.DomainServices;
 using XiHan.BasicApp.Saas.Domain.Entities;
 using XiHan.BasicApp.Saas.Domain.Enums;
 using XiHan.BasicApp.Saas.Domain.Permissions;
@@ -22,11 +23,6 @@ namespace XiHan.BasicApp.Saas.Application.Services;
 /// </remarks>
 public sealed class ImpersonationPolicyService : IImpersonationPolicyService
 {
-    /// <summary>
-    /// 超级管理员角色编码（与种子/授权快照约定一致）。
-    /// </summary>
-    private const string SuperAdminRoleCode = "super_admin";
-
     private readonly IAuthContextQueryService _authContextQueryService;
 
     private readonly IAuthorizationSnapshotQueryService _authorizationSnapshotQueryService;
@@ -124,17 +120,14 @@ public sealed class ImpersonationPolicyService : IImpersonationPolicyService
             throw new UserFriendlyException("目标用户已被禁用，无法模仿。");
         }
 
-        // 「是不是超管」必须是全局事实：租户上下文下的读过滤器会挡掉租户戳不同的授权行
-        using (_currentTenant.Change(null))
+        // 「是不是超管」是全局事实，由保护守卫跨租户判定
+        if (await _superAdminProtector.IsProtectedUserAsync(target.BasicId, cancellationToken))
         {
-            if (await _superAdminProtector.IsProtectedUserAsync(target.BasicId, cancellationToken))
-            {
-                throw new UserFriendlyException("不能模仿超级管理员。");
-            }
+            throw new UserFriendlyException("不能模仿超级管理员。");
         }
 
         var operatorSnapshot = await _authorizationSnapshotQueryService.BuildAsync(operatorUserId, now, cancellationToken);
-        var operatorIsSuperAdmin = operatorSnapshot.Roles.Contains(SuperAdminRoleCode, StringComparer.OrdinalIgnoreCase);
+        var operatorIsSuperAdmin = operatorSnapshot.Roles.Contains(SaasRoleCodes.SuperAdmin, StringComparer.OrdinalIgnoreCase);
 
         var targetTenantId = await ResolveTargetTenantIdAsync(
             operatorTenantId,
@@ -191,9 +184,18 @@ public sealed class ImpersonationPolicyService : IImpersonationPolicyService
     /// <summary>
     /// 判定当前用户能否授出指定权限，不能则抛出禁止异常。
     /// </summary>
+    /// <remarks>
+    /// 业务租户里只能授出租户能生效的权限（租户侧与两侧）：平台侧权限授给租户角色或成员既不会生效、也会误导授权结果。
+    /// 超管豁免只在平台成立，业务租户里谁来授都按这条判定。
+    /// </remarks>
     /// <param name="permissionIds">被授出的权限主键集合</param>
     /// <param name="cancellationToken">取消令牌</param>
-    public async Task EnsureCanGrantPermissionIdsAsync(IReadOnlyCollection<long> permissionIds, CancellationToken cancellationToken = default)
+    public Task EnsureCanGrantPermissionIdsAsync(IReadOnlyCollection<long> permissionIds, CancellationToken cancellationToken = default)
+    {
+        return EnsureCanGrantAsync(permissionIds, checkSide: true, cancellationToken);
+    }
+
+    private async Task EnsureCanGrantAsync(IReadOnlyCollection<long> permissionIds, bool checkSide, CancellationToken cancellationToken)
     {
         if (permissionIds is not { Count: > 0 })
         {
@@ -202,13 +204,14 @@ public sealed class ImpersonationPolicyService : IImpersonationPolicyService
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (_superAdminProtector.IsCurrentUserSuperAdmin())
+        var ids = permissionIds.Where(static id => id > 0).Distinct().ToList();
+        if (ids.Count == 0)
         {
             return;
         }
 
-        var ids = permissionIds.Where(static id => id > 0).Distinct().ToList();
-        if (ids.Count == 0)
+        // 超管只在平台成立，平台里什么侧的权限都可授
+        if (_superAdminProtector.IsCurrentUserSuperAdmin())
         {
             return;
         }
@@ -216,6 +219,19 @@ public sealed class ImpersonationPolicyService : IImpersonationPolicyService
         var permissions = await _permissionRepository.GetListAsync(
             permission => ids.Contains(permission.BasicId),
             cancellationToken);
+
+        if (checkSide && !_currentTenant.IsPlatformOperation())
+        {
+            var platformOnly = permissions
+                .Where(static permission => !permission.Side.IsTenantEffective())
+                .Select(static permission => permission.PermissionCode)
+                .ToList();
+            if (platformOnly.Count > 0)
+            {
+                throw new UserFriendlyException($"租户内不能授予平台侧权限：{string.Join("、", platformOnly)}。");
+            }
+        }
+
         var codes = permissions
             .Select(static permission => permission.PermissionCode)
             .Where(static code => !string.IsNullOrWhiteSpace(code))
@@ -225,12 +241,6 @@ public sealed class ImpersonationPolicyService : IImpersonationPolicyService
         if (codes.Count == 0)
         {
             return;
-        }
-
-        var platformOnly = codes.Where(SaasPlatformPermissions.PlatformOnlyCodes.Contains).ToList();
-        if (platformOnly.Count > 0)
-        {
-            throw new UserFriendlyException($"无权授予平台专属权限：{string.Join("、", platformOnly)}。");
         }
 
         var impersonationCodes = codes
@@ -258,6 +268,9 @@ public sealed class ImpersonationPolicyService : IImpersonationPolicyService
     /// <summary>
     /// 判定当前用户能否授出指定角色，不能则抛出禁止异常。
     /// </summary>
+    /// <remarks>
+    /// 分配角色不按作用侧拦：角色上的平台侧权限在租户里本就不生效（快照按作用侧裁掉），只校验模仿登录权限的授出规则。
+    /// </remarks>
     /// <param name="roleIds">被授出的角色主键集合</param>
     /// <param name="cancellationToken">取消令牌</param>
     public async Task EnsureCanGrantRoleIdsAsync(IReadOnlyCollection<long> roleIds, CancellationToken cancellationToken = default)
@@ -280,12 +293,10 @@ public sealed class ImpersonationPolicyService : IImpersonationPolicyService
             return;
         }
 
-        // 角色自身与继承链上的祖先角色都会把权限带给被授予者，一并展开
-        var expandedRoleIds = await _roleHierarchyRepository.GetAncestorIdsAsync(ids, includeSelf: true, cancellationToken);
-        if (expandedRoleIds.Count == 0)
-        {
-            return;
-        }
+        // 角色自身与继承链上的上级都会把权限带给被授予者，一并展开；
+        // 停用的上级随时可能重新启用，按结构展开、不看启停
+        var graph = RoleInheritanceGraph.FromEdges(await _roleHierarchyRepository.GetEdgesAsync(cancellationToken));
+        var expandedRoleIds = ids.SelectMany(id => graph.AncestorsOf(id).Keys.Append(id)).Distinct().ToList();
 
         var rolePermissions = await _rolePermissionRepository.GetValidByRoleIdsAsync(
             expandedRoleIds,
@@ -297,7 +308,7 @@ public sealed class ImpersonationPolicyService : IImpersonationPolicyService
             .Distinct()
             .ToList();
 
-        await EnsureCanGrantPermissionIdsAsync(permissionIds, cancellationToken);
+        await EnsureCanGrantAsync(permissionIds, checkSide: false, cancellationToken);
     }
 
     /// <summary>

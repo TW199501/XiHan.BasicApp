@@ -11,7 +11,7 @@ import type {
 } from '@/api'
 import type { ListFieldSchema, PageSchema, SchemaActionPayload, XDataTableColumn } from '~/components'
 import type { TreeSelectOption } from '~/types'
-import { XhButton, XhDescriptionsItem, XhDescriptionsLabel, XhDescriptionsRoot, XhDescriptionsValue, XhDialogCloseTrigger, XhDialogContent, XhDialogRoot, XhDialogTitle, XhEmptyStateDescription, XhEmptyStateIcon, XhEmptyStateRoot, XhEmptyStateTitle, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFlex, XhFormFieldGroup, XhFormRoot, XhTabsContent, XhTabsList, XhTabsRoot, XhTabsTrigger, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
+import { XhButton, XhDescriptionsItem, XhDescriptionsLabel, XhDescriptionsRoot, XhDescriptionsValue, XhDialogCloseTrigger, XhDialogContent, XhDialogRoot, XhDialogTitle, XhEmptyStateDescription, XhEmptyStateIndicator, XhEmptyStateRoot, XhEmptyStateTitle, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFlex, XhFormFieldGroup, XhFormRoot, XhTabsContent, XhTabsIndicator, XhTabsList, XhTabsRoot, XhTabsTrigger, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
 import { computed, h, onMounted, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
@@ -23,14 +23,15 @@ import {
   ValidityStatus,
 } from '@/api'
 import { DEPARTMENT_TYPE_OPTIONS, STATUS_OPTIONS } from '@/constants'
-import { Icon, SchemaPage, XCascader, XDataTable, XDatePicker, XEditModal, XInput, XNumberInput, XSelect } from '~/components'
+import { Icon, SchemaPage, statusConfirmText, XCascader, XDataTable, XDatePicker, XEditModal, XInput, XNumberInput, XSelect } from '~/components'
 import { toast } from '~/composables'
-import { useEnumOptions } from '~/hooks'
+import { useEnumOptions, usePermission } from '~/hooks'
 import { formatDate, getOptionLabel } from '~/utils'
 
 defineOptions({ name: 'SystemOrgPage' })
 
 const { t } = useI18n()
+const { hasPermission } = usePermission()
 
 /** 编辑弹窗的保存钮靠这个 id 关联到表单，点它才会走整表校验 */
 const editFormId = useId()
@@ -110,7 +111,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     dictionaryCode: 'EnableStatus',
     render: (row) => {
       const status = (row as unknown as DepartmentListItemDto).status
-      return h(XhTagRoot, { variant: 'outline', tone: status === EnableStatus.Enabled ? 'success' : 'danger' }, () => h(XhTagLabel, () => getOptionLabel(statusOptions.value, status)))
+      return h(XhTagRoot, { variant: 'subtle', tone: status === EnableStatus.Enabled ? 'success' : 'danger' }, () => h(XhTagLabel, () => getOptionLabel(statusOptions.value, status)))
     },
   },
   { key: 'phone', title: t('identity.org.col_phone'), dataType: 'phone', minWidth: 130, order: 5 },
@@ -122,7 +123,7 @@ const fields = computed<ListFieldSchema[]>(() => [
 // ── 资源适配器：归一化查询参数 → 后端 API ──────────────────────
 // DepartmentTreeQueryDto 仅支持 keyword/limit/onlyEnabled；类型/状态仅作为列展示。
 const schema = computed<PageSchema>(() => ({
-  pageCode: 'system.org',
+  pageCode: 'identity.org',
   exportPermission: 'identity.org.export',
   pageName: t('identity.org.page_name'),
   batchRemovable: true,
@@ -144,11 +145,11 @@ const schema = computed<PageSchema>(() => ({
     updateStatus: (id, enabled) => orgManagementApi.updateStatus({ basicId: id, status: enabled ? EnableStatus.Enabled : EnableStatus.Disabled }),
   },
   actions: [
-    { key: 'create', title: t('identity.org.action_create'), scope: 'page', type: 'primary', icon: 'lucide:plus' },
-    { key: 'addChild', title: t('identity.org.action_add_child'), scope: 'row' },
-    { key: 'view', title: t('identity.org.action_view'), scope: 'row' },
-    { key: 'edit', title: t('identity.org.action_edit'), scope: 'row' },
-    { key: 'toggle', title: t('identity.org.action_toggle'), scope: 'row' },
+    { key: 'create', title: t('identity.org.action_create'), scope: 'page', type: 'primary', icon: 'lucide:plus', permission: 'identity.org.create' },
+    { key: 'addChild', title: t('identity.org.action_add_child'), scope: 'row', icon: 'lucide:plus', permission: 'identity.org.create' },
+    { key: 'view', title: t('identity.org.action_view'), scope: 'row', icon: 'lucide:eye' },
+    { key: 'edit', title: t('identity.org.action_edit'), scope: 'row', icon: 'lucide:pencil', permission: 'identity.org.update' },
+    { key: 'toggle', title: t('identity.org.action_toggle'), scope: 'row', icon: 'lucide:power', confirm: true, confirmText: row => statusConfirmText(t, (row as unknown as DepartmentListItemDto).status === EnableStatus.Enabled, (row as unknown as DepartmentListItemDto).departmentName), permission: 'identity.org.status' },
   ],
 }))
 
@@ -258,7 +259,7 @@ const childDeptColumns = computed<XDataTableColumn<DepartmentListItemDto>[]>(() 
     title: t('identity.org.detail_table_status'),
     key: 'status',
     width: 72,
-    render: row => h(XhTagRoot, { variant: 'outline', tone: row.status === EnableStatus.Enabled ? 'success' : 'danger' }, () => h(XhTagLabel, () => formatStatus(row.status))),
+    render: row => h(XhTagRoot, { variant: 'subtle', tone: row.status === EnableStatus.Enabled ? 'success' : 'danger' }, () => h(XhTagLabel, () => formatStatus(row.status))),
   },
 ])
 
@@ -277,21 +278,24 @@ const memberColumns = computed<XDataTableColumn<DepartmentManagementMemberDto>[]
     key: 'isMain',
     width: 72,
     render: row => row.isMain
-      ? h(XhTagRoot, { variant: 'outline', tone: 'info' }, () => h(XhTagLabel, () => t('common.statuses.yes')))
+      ? h(XhTagRoot, { variant: 'subtle', tone: 'info' }, () => h(XhTagLabel, () => t('common.statuses.yes')))
       : h('span', { style: 'color:hsl(var(--muted-foreground))' }, '—'),
   },
   {
     title: t('identity.org.detail_table_status'),
     key: 'status',
     width: 72,
-    render: row => h(XhTagRoot, { variant: 'outline', tone: row.status === ValidityStatus.Valid ? 'success' : 'neutral' }, () => h(XhTagLabel, () => (row.status === ValidityStatus.Valid ? t('identity.org.member_valid') : t('identity.org.member_invalid')))),
+    render: row => h(XhTagRoot, { variant: 'subtle', tone: row.status === ValidityStatus.Valid ? 'success' : 'neutral' }, () => h(XhTagLabel, () => (row.status === ValidityStatus.Valid ? t('identity.org.member_valid') : t('identity.org.member_invalid')))),
   },
-  {
-    title: t('identity.org.detail_table_actions'),
-    key: 'actions',
-    width: 90,
-    render: row => h(XhButton, { size: 'sm', variant: 'ghost', tone: 'brand', onClick: () => openEditMembership(row) }, () => t('identity.org.action_edit_membership')),
-  },
+  // 编辑归属要用户部门更新权限，与部门本身的增删改不是一回事，单独按按钮码放出
+  ...(hasPermission('identity.org.edit-membership')
+    ? [{
+        title: t('identity.org.detail_table_actions'),
+        key: 'actions',
+        width: 90,
+        render: (row: DepartmentManagementMemberDto) => h(XhButton, { size: 'sm', variant: 'ghost', tone: 'brand', onClick: () => openEditMembership(row) }, () => t('identity.org.action_edit_membership')),
+      }]
+    : []),
 ])
 
 function handleAdd(parentId?: ApiId) {
@@ -324,7 +328,7 @@ async function handleEdit(row: DepartmentListItemDto) {
     deptForm.value = buildFormModel(detail ?? row)
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('identity.org.msg_load_detail_failed'))
+    toast.danger((error as Error)?.message || t('identity.org.msg_load_detail_failed'))
     deptForm.value = buildFormModel(row)
   }
   modalVisible.value = true
@@ -346,7 +350,7 @@ async function handleView(row: DepartmentListItemDto) {
     managementDetail.value = detail
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('identity.org.msg_load_detail_failed'))
+    toast.danger((error as Error)?.message || t('identity.org.msg_load_detail_failed'))
   }
   finally {
     detailLoading.value = false
@@ -361,7 +365,7 @@ async function handleToggleStatus(row: DepartmentListItemDto) {
     await reloadAll()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('identity.org.msg_status_failed'))
+    toast.danger((error as Error)?.message || t('identity.org.msg_status_failed'))
   }
 }
 
@@ -441,7 +445,7 @@ async function submitMembership() {
     await refreshManagementDetail()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('common.messages.save_failed'))
+    toast.danger((error as Error)?.message || t('common.messages.save_failed'))
   }
   finally {
     membershipLoading.value = false
@@ -505,7 +509,7 @@ async function handleSubmit() {
     await reloadAll()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('common.messages.save_failed'))
+    toast.danger((error as Error)?.message || t('common.messages.save_failed'))
   }
   finally {
     submitLoading.value = false
@@ -526,10 +530,14 @@ onMounted(() => {
   >
     <XhDialogRoot v-model:open="detailVisible">
       <XhDialogContent class="xh-mgmt-detail-modal" style="--xh-dialog-max-w: 720px">
-        <XhDialogTitle v-if="detDept">
-          <div class="det-hd-entity">
+        <!-- 标题须在弹窗打开期间一直在：详情未到时先念「加载中」 -->
+        <XhDialogTitle>
+          <template v-if="!detDept">
+            {{ t('common.loading') }}
+          </template>
+          <div v-else class="det-hd-entity">
             <div class="det-hd-ico">
-              <Icon icon="tabler:building" :size="22" />
+              <Icon icon="tabler:building" width="22" height="22" />
             </div>
             <div class="min-w-0">
               <div class="det-hd-name">
@@ -558,9 +566,10 @@ onMounted(() => {
             <XhTabsTrigger value="members">
               {{ t('identity.org.tab_members', { count: managementDetail.members?.length ?? 0 }) }}
             </XhTabsTrigger>
+            <XhTabsIndicator />
           </XhTabsList>
           <XhTabsContent value="overview">
-            <XhDescriptionsRoot :columns="2" bordered size="sm">
+            <XhDescriptionsRoot :columns="2" variant="outline" size="sm">
               <XhDescriptionsItem>
                 <XhDescriptionsLabel>{{ t('identity.org.label_department_type') }}</XhDescriptionsLabel>
                 <XhDescriptionsValue>
@@ -633,13 +642,12 @@ onMounted(() => {
                 v-if="managementDetail.childDepartments?.length"
                 :columns="childDeptColumns"
                 :data="managementDetail.childDepartments"
-                size="sm"
                 :row-key="(row: DepartmentListItemDto) => row.basicId"
               />
               <XhEmptyStateRoot v-else size="sm" style="padding: 32px 0">
-                <XhEmptyStateIcon>
+                <XhEmptyStateIndicator>
                   <Icon icon="lucide:inbox" width="24" />
-                </XhEmptyStateIcon>
+                </XhEmptyStateIndicator>
                 <XhEmptyStateTitle>{{ t('common.no_data') }}</XhEmptyStateTitle>
                 <XhEmptyStateDescription>{{ t('identity.org.empty_children') }}</XhEmptyStateDescription>
               </XhEmptyStateRoot>
@@ -651,13 +659,12 @@ onMounted(() => {
                 v-if="managementDetail.members?.length"
                 :columns="memberColumns"
                 :data="managementDetail.members"
-                size="sm"
                 :row-key="(row: DepartmentManagementMemberDto) => row.basicId"
               />
               <XhEmptyStateRoot v-else size="sm" style="padding: 32px 0">
-                <XhEmptyStateIcon>
+                <XhEmptyStateIndicator>
                   <Icon icon="lucide:inbox" width="24" />
-                </XhEmptyStateIcon>
+                </XhEmptyStateIndicator>
                 <XhEmptyStateTitle>{{ t('common.no_data') }}</XhEmptyStateTitle>
                 <XhEmptyStateDescription>{{ t('identity.org.empty_members') }}</XhEmptyStateDescription>
               </XhEmptyStateRoot>
@@ -665,20 +672,21 @@ onMounted(() => {
           </XhTabsContent>
         </XhTabsRoot>
         <XhEmptyStateRoot v-else style="padding: 48px 0">
-          <XhEmptyStateIcon>
+          <XhEmptyStateIndicator>
             <Icon icon="lucide:inbox" width="28" />
-          </XhEmptyStateIcon>
+          </XhEmptyStateIndicator>
           <XhEmptyStateTitle>{{ t('common.no_data') }}</XhEmptyStateTitle>
           <XhEmptyStateDescription>{{ t('identity.org.msg_detail_not_found') }}</XhEmptyStateDescription>
         </XhEmptyStateRoot>
 
         <div class="xh-dialog-footer">
           <XhFlex justify="end">
-            <XhButton size="sm" @click="detailVisible = false">
+            <XhButton variant="subtle" size="sm" @click="detailVisible = false">
               {{ t('common.actions.close') }}
             </XhButton>
             <XhButton
-              v-if="detDept"
+              v-if="detDept && hasPermission('identity.org.update')"
+              variant="subtle"
               size="sm"
               tone="brand"
               @click="detailVisible = false; handleEdit(detDept as DepartmentListItemDto)"
@@ -703,7 +711,7 @@ onMounted(() => {
         class="xh-edit-form-grid"
         @submit="handleSubmit"
       >
-        <XhFormFieldGroup value="departmentName">
+        <XhFormFieldGroup name="departmentName">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.org.label_department_name') }}</XhFieldLabel>
             <XhFieldControl>
@@ -712,7 +720,7 @@ onMounted(() => {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="departmentCode">
+        <XhFormFieldGroup name="departmentCode">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.org.label_department_code') }}</XhFieldLabel>
             <XhFieldControl>
@@ -726,7 +734,7 @@ onMounted(() => {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="parentId">
+        <XhFormFieldGroup name="parentId">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.org.label_parent_dept') }}</XhFieldLabel>
             <XhFieldControl>
@@ -741,7 +749,7 @@ onMounted(() => {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="departmentType">
+        <XhFormFieldGroup name="departmentType">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.org.label_department_type') }}</XhFieldLabel>
             <XhFieldControl>
@@ -750,7 +758,7 @@ onMounted(() => {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="phone">
+        <XhFormFieldGroup name="phone">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.org.label_phone') }}</XhFieldLabel>
             <XhFieldControl>
@@ -759,7 +767,7 @@ onMounted(() => {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="email">
+        <XhFormFieldGroup name="email">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.org.label_email') }}</XhFieldLabel>
             <XhFieldControl>
@@ -768,7 +776,7 @@ onMounted(() => {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="address">
+        <XhFormFieldGroup name="address">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.org.label_address') }}</XhFieldLabel>
             <XhFieldControl>
@@ -777,7 +785,7 @@ onMounted(() => {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="sort">
+        <XhFormFieldGroup name="sort">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.org.label_sort') }}</XhFieldLabel>
             <XhFieldControl>
@@ -786,7 +794,7 @@ onMounted(() => {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="remark" class="xh-span-2">
+        <XhFormFieldGroup name="remark" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.org.label_remark') }}</XhFieldLabel>
             <XhFieldControl>
@@ -810,7 +818,7 @@ onMounted(() => {
         class="xh-edit-form-grid"
         @submit="submitMembership"
       >
-        <XhFormFieldGroup value="positionId">
+        <XhFormFieldGroup name="positionId">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.org.label_position') }}</XhFieldLabel>
             <XhFieldControl>
@@ -824,7 +832,7 @@ onMounted(() => {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="jobNumber">
+        <XhFormFieldGroup name="jobNumber">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.org.label_job_number') }}</XhFieldLabel>
             <XhFieldControl>
@@ -833,7 +841,7 @@ onMounted(() => {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="jobLevel">
+        <XhFormFieldGroup name="jobLevel">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.org.label_job_level') }}</XhFieldLabel>
             <XhFieldControl>
@@ -842,16 +850,16 @@ onMounted(() => {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="joinTime">
+        <XhFormFieldGroup name="joinTime">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.org.label_join_time') }}</XhFieldLabel>
             <XhFieldControl>
-              <XDatePicker v-model:value="membershipForm.joinTime" type="date" clearable />
+              <XDatePicker v-model:value="membershipForm.joinTime" clearable />
             </XhFieldControl>
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="remark" class="xh-span-2">
+        <XhFormFieldGroup name="remark" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.org.label_remark') }}</XhFieldLabel>
             <XhFieldControl>

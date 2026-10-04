@@ -3,7 +3,7 @@
   职责：在不占用常驻画布空间的前提下，提供当前设计导出到 TextArea、手工编辑和回写画布入口。
 -->
 <script setup lang="ts">
-import { XhAlertDescription, XhAlertIcon, XhAlertRoot, XhButton, XhDialogCloseTrigger, XhDialogContent, XhDialogRoot, XhDialogTitle } from '@xihan-ui/vue'
+import { XhAlertContent, XhAlertDescription, XhAlertIndicator, XhAlertRoot, XhButton, XhButtonIndicator, XhButtonLabel, XhDialogCloseTrigger, XhDialogContent, XhDialogRoot, XhDialogTitle } from '@xihan-ui/vue'
 import { useI18n } from 'vue-i18n'
 import { XInput } from '~/components'
 import { Icon } from '~/iconify'
@@ -39,17 +39,20 @@ const textareaId = `print-template-json-${crypto.randomUUID()}`
       <XhDialogCloseTrigger />
       <div class="json-editor-toolbar">
         <div class="json-editor-intro">
-          <strong>{{ t('setting.print_template.json_template_content') }}</strong>
-          <span>{{ t('setting.print_template.json_editor_hint') }}</span>
+          <strong :id="`${textareaId}-label`">{{ t('setting.print_template.json_template_content') }}</strong>
+          <span :id="`${textareaId}-hint`">{{ t('setting.print_template.json_editor_hint') }}</span>
         </div>
-        <XhButton :disabled="disabled || applying" @click="emit('export')">
+        <XhButton variant="subtle" :disabled="disabled || applying" @click="emit('export')">
           {{ t('setting.print_template.export_json_to_textarea') }}
         </XhButton>
       </div>
 
+      <!-- 包着输入框的 label 里没有文字，名字取上方的标题行 -->
       <label class="json-textarea-field" :for="textareaId">
         <XInput
           :id="textareaId"
+          :aria-labelledby="`${textareaId}-label`"
+          :aria-describedby="`${textareaId}-hint`"
           :value="value"
           type="textarea"
           :autosize="{ minRows: 15, maxRows: 22 }"
@@ -61,12 +64,14 @@ const textareaId = `print-template-json-${crypto.randomUUID()}`
       </label>
 
       <XhAlertRoot v-if="error" tone="danger" class="json-error">
-        <XhAlertIcon>
+        <XhAlertIndicator>
           <Icon icon="lucide:circle-alert" width="16" />
-        </XhAlertIcon>
-        <XhAlertDescription>
-          {{ error }}
-        </XhAlertDescription>
+        </XhAlertIndicator>
+        <XhAlertContent>
+          <XhAlertDescription>
+            {{ error }}
+          </XhAlertDescription>
+        </XhAlertContent>
       </XhAlertRoot>
 
       <p class="json-memory-tip">
@@ -75,16 +80,18 @@ const textareaId = `print-template-json-${crypto.randomUUID()}`
 
       <div class="xh-dialog-footer">
         <div class="json-modal-actions">
-          <XhButton :disabled="applying" @click="emit('update:show', false)">
+          <XhButton variant="subtle" :disabled="applying" @click="emit('update:show', false)">
             {{ t('common.actions.cancel') }}
           </XhButton>
           <XhButton
+            variant="subtle"
             tone="brand"
             :loading="applying"
             :disabled="disabled || !value.trim()"
             @click="emit('apply')"
           >
-            {{ t('setting.print_template.apply_json_template') }}
+            <XhButtonIndicator />
+            <XhButtonLabel>{{ t('setting.print_template.apply_json_template') }}</XhButtonLabel>
           </XhButton>
         </div>
       </div>

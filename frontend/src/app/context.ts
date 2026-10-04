@@ -14,6 +14,7 @@ import type {
   ChangeUserNameParams,
   EmailLoginParams,
   ExternalLoginItem,
+  ImpersonationCandidateQuery,
   LoginConfig,
   LoginLogPage,
   LoginParams,
@@ -39,6 +40,7 @@ import type {
   VerificationCodeResult,
 } from '~/types'
 import { ResourceAccessLevel } from '@/api/modules/authorization'
+import { dictApi } from '@/api/modules/configuration'
 import { fileApi } from '@/api/modules/files'
 import { impersonationApi } from '@/api/modules/identity'
 import { enumMetadataApi } from '@/api/modules/metadata/enum-metadata'
@@ -361,20 +363,16 @@ function createShellApis() {
         return requestClient.post<{ scene: number, settingKey: string, settingValue?: null | string }>('/UserSetting/Save', input)
       },
     },
+    dictApi: {
+      options(dictCode: string) {
+        return dictApi.options(dictCode)
+      },
+    },
     timeZoneApi: {
       options() {
         return getWithFallback<Array<{ id: string, displayName: string, baseUtcOffsetMinutes: number, supportsDaylightSavingTime: boolean }>>(
           '/TimeZoneMetadata/TimeZoneOptions',
           [],
-        )
-      },
-    },
-    fieldSecurityApi: {
-      getMine(resourceCode: string) {
-        return getWithFallback<Array<{ fieldName: string, isReadable: boolean, isEditable: boolean, maskStrategy: number, maskPattern?: null | string }>>(
-          '/MyFieldSecurity/Mine',
-          [],
-          { params: { resourceCode } },
         )
       },
     },
@@ -432,7 +430,8 @@ function createShellApis() {
 function createImpersonationApis() {
   return {
     impersonationApi: {
-      candidates: (keyword?: string) => impersonationApi.candidates(keyword),
+      tenants: () => impersonationApi.tenants(),
+      candidates: (input: ImpersonationCandidateQuery) => impersonationApi.candidates(input),
       start: (input: StartImpersonationParams) => impersonationApi.start(input),
       stop: () => impersonationApi.stop(),
     },

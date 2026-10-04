@@ -17,7 +17,7 @@ import {
   querySortsFromSchema,
 } from '@/api'
 import { STATUS_OPTIONS } from '@/constants'
-import { SchemaPage, XEditModal, XInput, XNumberInput, XSelect } from '~/components'
+import { actionConfirmText, SchemaPage, XEditModal, XInput, XNumberInput, XSelect } from '~/components'
 import { dialog, notification, toast } from '~/composables'
 import { useEnumOptions } from '~/hooks'
 import { getOptionLabel } from '~/utils'
@@ -77,7 +77,7 @@ const fields = computed<ListFieldSchema[]>(() => [
       return h('div', { class: 'ap-name' }, [
         h('span', { class: 'ap-name__text' }, r.configName),
         r.isDefault
-          ? h(XhTagRoot, { variant: 'outline', tone: 'info' }, () => h(XhTagLabel, () => t('common.statuses.default_tag')))
+          ? h(XhTagRoot, { variant: 'subtle', tone: 'info' }, () => h(XhTagLabel, () => t('common.statuses.default_tag')))
           : null,
       ])
     },
@@ -93,7 +93,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 5,
     render: (row) => {
       const r = row as unknown as AiProviderListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: r.hasApiKey ? 'success' : 'warning' }, () => h(XhTagLabel, () => (r.hasApiKey ? t('develop.ai_provider.tag_configured') : t('develop.ai_provider.tag_unconfigured'))))
+      return h(XhTagRoot, { variant: 'subtle', tone: r.hasApiKey ? 'success' : 'warning' }, () => h(XhTagLabel, () => (r.hasApiKey ? t('develop.ai_provider.tag_configured') : t('develop.ai_provider.tag_unconfigured'))))
     },
   },
   {
@@ -105,7 +105,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 6,
     render: (row) => {
       const r = row as unknown as AiProviderListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: r.isEnabled ? 'success' : 'neutral' }, () => h(XhTagLabel, () => (r.isEnabled ? t('common.statuses.yes') : t('common.statuses.no'))))
+      return h(XhTagRoot, { variant: 'subtle', tone: r.isEnabled ? 'success' : 'neutral' }, () => h(XhTagLabel, () => (r.isEnabled ? t('common.statuses.yes') : t('common.statuses.no'))))
     },
   },
   {
@@ -122,14 +122,14 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 7,
     render: (row) => {
       const r = row as unknown as AiProviderListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: r.status === EnableStatus.Enabled ? 'success' : 'danger' }, () => h(XhTagLabel, () => getOptionLabel(statusEnumOptions.value, r.status)))
+      return h(XhTagRoot, { variant: 'subtle', tone: r.status === EnableStatus.Enabled ? 'success' : 'danger' }, () => h(XhTagLabel, () => getOptionLabel(statusEnumOptions.value, r.status)))
     },
   },
   { key: 'sort', title: t('common.fields.sort'), dataType: 'number', width: 80, sortable: true, order: 8 },
 ])
 
 const schema = computed<PageSchema>(() => ({
-  pageCode: 'develop.ai.provider',
+  pageCode: 'ai_provider',
   pageName: t('develop.ai_provider.page_name'),
   rowKey: 'basicId',
   batchRemovable: true,
@@ -149,11 +149,11 @@ const schema = computed<PageSchema>(() => ({
     remove: id => aiProviderApi.delete(id),
   },
   actions: [
-    { key: 'create', title: t('develop.ai_provider.add'), scope: 'page', type: 'primary', icon: 'lucide:plus' },
-    { key: 'test', title: t('develop.ai_provider.action_test'), scope: 'row', type: 'info', icon: 'lucide:plug' },
-    { key: 'default', title: t('develop.ai_provider.action_default'), scope: 'row', icon: 'lucide:star', disabled: row => (row as unknown as AiProviderListItemDto).isDefault },
-    { key: 'edit', title: t('common.actions.edit'), scope: 'row', icon: 'lucide:pencil' },
-    { key: 'delete', title: t('common.actions.delete'), scope: 'row', type: 'error', icon: 'lucide:trash-2' },
+    { key: 'create', title: t('develop.ai_provider.add'), scope: 'page', type: 'primary', icon: 'lucide:plus', permission: 'ai_provider.create' },
+    { key: 'test', title: t('develop.ai_provider.action_test'), scope: 'row', type: 'info', icon: 'lucide:plug', permission: 'ai_provider.test' },
+    { key: 'default', title: t('develop.ai_provider.action_default'), scope: 'row', icon: 'lucide:star', confirm: true, confirmText: row => actionConfirmText(t, t('develop.ai_provider.action_default'), (row as unknown as AiProviderListItemDto).configName), disabled: row => (row as unknown as AiProviderListItemDto).isDefault, permission: 'ai_provider.update' },
+    { key: 'edit', title: t('common.actions.edit'), scope: 'row', icon: 'lucide:pencil', permission: 'ai_provider.update' },
+    { key: 'delete', title: t('common.actions.delete'), scope: 'row', type: 'error', icon: 'lucide:trash-2', permission: 'ai_provider.delete' },
   ],
 }))
 
@@ -209,14 +209,14 @@ async function handleTest(row: AiProviderListItemDto) {
       : t('develop.ai_provider.probe_embedding_absent'))
 
     // 探测结果逐行罗列，一句话说不完：走通知的标题加正文两层
-    notification[result.success ? 'success' : 'error'](
+    notification[result.success ? 'success' : 'danger'](
       t(result.success ? 'develop.ai_provider.test_success' : 'develop.ai_provider.test_failed'),
       { description: lines.join('\n'), duration: result.success ? 5000 : 0 },
     )
   }
   catch (error) {
     reset.destroy()
-    toast.error((error as Error)?.message || t('develop.ai_provider.test_error'))
+    toast.danger((error as Error)?.message || t('develop.ai_provider.test_error'))
   }
 }
 
@@ -227,7 +227,7 @@ async function handleSetDefault(row: AiProviderListItemDto) {
     reload()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('develop.ai_provider.set_default_error'))
+    toast.danger((error as Error)?.message || t('develop.ai_provider.set_default_error'))
   }
 }
 
@@ -246,7 +246,7 @@ function handleDelete(row: AiProviderListItemDto) {
         reload()
       }
       catch (error) {
-        toast.error((error as Error)?.message || t('common.messages.delete_failed'))
+        toast.danger((error as Error)?.message || t('common.messages.delete_failed'))
       }
     },
   })
@@ -290,7 +290,7 @@ async function handleEdit(row: AiProviderListItemDto) {
   try {
     const detail = await aiProviderApi.detail(row.basicId)
     if (!detail) {
-      toast.error(t('develop.ai_provider.not_found'))
+      toast.danger(t('develop.ai_provider.not_found'))
       return
     }
     editingStatus.value = detail.status
@@ -317,7 +317,7 @@ async function handleEdit(row: AiProviderListItemDto) {
     modalVisible.value = true
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('develop.ai_provider.load_detail_failed'))
+    toast.danger((error as Error)?.message || t('develop.ai_provider.load_detail_failed'))
   }
 }
 
@@ -396,7 +396,7 @@ async function handleSubmit() {
     reload()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('common.messages.save_failed'))
+    toast.danger((error as Error)?.message || t('common.messages.save_failed'))
   }
   finally {
     submitLoading.value = false
@@ -419,7 +419,7 @@ async function handleSubmit() {
         class="xh-edit-form-grid"
         @submit="handleSubmit"
       >
-        <XhFormFieldGroup value="configCode">
+        <XhFormFieldGroup name="configCode">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.ai_provider.form_config_code') }}</XhFieldLabel>
             <XhFieldControl>
@@ -433,7 +433,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="configName">
+        <XhFormFieldGroup name="configName">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.ai_provider.form_config_name') }}</XhFieldLabel>
             <XhFieldControl>
@@ -442,7 +442,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="provider">
+        <XhFormFieldGroup name="provider">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.ai_provider.form_provider') }}</XhFieldLabel>
             <XhFieldControl>
@@ -455,7 +455,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="model">
+        <XhFormFieldGroup name="model">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.ai_provider.form_model') }}</XhFieldLabel>
             <XhFieldControl>
@@ -464,7 +464,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="embeddingModel">
+        <XhFormFieldGroup name="embeddingModel">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.ai_provider.form_embedding_model') }}</XhFieldLabel>
             <XhFieldControl>
@@ -473,7 +473,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="baseUrl" class="xh-span-2">
+        <XhFormFieldGroup name="baseUrl" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.ai_provider.form_base_url') }}</XhFieldLabel>
             <XhFieldControl>
@@ -482,7 +482,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="apiKey" class="xh-span-2">
+        <XhFormFieldGroup name="apiKey" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ form.basicId ? t('develop.ai_provider.form_api_key_edit') : t('develop.ai_provider.form_api_key') }}</XhFieldLabel>
             <XhFieldControl>
@@ -497,7 +497,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="maxOutputTokens">
+        <XhFormFieldGroup name="maxOutputTokens">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.ai_provider.form_max_output_tokens') }}</XhFieldLabel>
             <XhFieldControl>
@@ -506,7 +506,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="temperature">
+        <XhFormFieldGroup name="temperature">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.ai_provider.form_temperature') }}</XhFieldLabel>
             <XhFieldControl>
@@ -515,7 +515,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="timeoutSeconds">
+        <XhFormFieldGroup name="timeoutSeconds">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.ai_provider.form_timeout_seconds') }}</XhFieldLabel>
             <XhFieldControl>
@@ -524,7 +524,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="sort">
+        <XhFormFieldGroup name="sort">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.ai_provider.form_sort') }}</XhFieldLabel>
             <XhFieldControl>
@@ -533,7 +533,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="isDefault">
+        <XhFormFieldGroup name="isDefault">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.ai_provider.form_is_default') }}</XhFieldLabel>
             <XhFieldControl>
@@ -542,7 +542,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="isEnabled">
+        <XhFormFieldGroup name="isEnabled">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.ai_provider.form_is_enabled') }}</XhFieldLabel>
             <XhFieldControl>
@@ -551,7 +551,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup v-if="!form.basicId" value="status">
+        <XhFormFieldGroup v-if="!form.basicId" name="status">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('common.fields.status') }}</XhFieldLabel>
             <XhFieldControl>
@@ -560,7 +560,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="extraJson" class="xh-span-2">
+        <XhFormFieldGroup name="extraJson" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.ai_provider.form_extra_json') }}</XhFieldLabel>
             <XhFieldControl>
@@ -581,14 +581,14 @@ async function handleSubmit() {
 </template>
 
 <style scoped>
-.ap-name {
+:deep(.ap-name) {
   display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
 }
 
-.ap-name__text {
+:deep(.ap-name__text) {
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;

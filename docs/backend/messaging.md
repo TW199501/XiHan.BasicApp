@@ -73,7 +73,7 @@ XiHan.BasicApp 的消息能力横跨三块：**企业级消息中心（站内通
 
 ### 发布 → 展开 → 门控 → 推送
 
-发布走 `NotificationAppService.PublishNotificationAsync`（`[UnitOfWork(true)]` + 权限码 `SaasPermissionCodes.Message.Publish`），一个事务内完成：
+发布走 `NotificationAppService.PublishNotificationAsync`（`[UnitOfWork(true)]` + 权限码 `SaasPermissionCodes.Notification.Publish`；通知公告的菜单、查询与维护统一走 `saas:notification:*`，邮件短信记录走 `saas:message:*`），一个事务内完成：
 
 1. **展开**：`NotificationDomainService` 按 `TargetType` 解析收件人（All/Role/Department/User），批量 `INSERT` `SysUserNotification` 行。
 2. **偏好门控**：站内信落行前经 `FilterByPreferenceAsync` 过滤（见下节）；**强制阅读 / 紧急通知一律送达，不受门控**。
@@ -84,7 +84,7 @@ XiHan.BasicApp 的消息能力横跨三块：**企业级消息中心（站内通
 
 - **发 N 读 M / 已确认 K**：发布结果返回 `RecipientCount`；管理侧另有专用统计接口 `NotificationQueryService.GetNotificationReadStatsAsync`，一次性给出 `RecipientCount`/`ReadCount`/`UnreadCount`/`ConfirmCount`（按 `ConfirmTime` 非空统计）+ `NeedConfirm`，供详情页展示阅读进度。
 - **未读人员**：`GetNotificationUnreadUserPageAsync` 按通知 ID 分页查询未读用户（`NotificationStatus=Unread`），带出 `UserName`/`RealName`/`ReceivedTime`，可经通用导出机制导 CSV。
-- **催办**：`RemindAsync(id)` 查出该通知未读用户（`NotificationStatus=Unread`），对**在线未读者**重新实时推送 `ReceiveNotification`——**不改库**，仅即时再提醒（同样受权限码 `Message.Publish` 门控）。
+- **催办**：`RemindAsync(id)` 查出该通知未读用户（`NotificationStatus=Unread`），对**在线未读者**重新实时推送 `ReceiveNotification`——**不改库**，仅即时再提醒（同样受权限码 `Notification.Publish` 门控）。
 
 ### 用户侧：收件箱 API（UserInboxAppService）
 
@@ -245,7 +245,7 @@ Task Typing(string conversationId);             // 向组内其他连接广播 C
 
 独立权限码 `Chat.Audit`（`chat:audit`），由 `ChatAuditQueryService.GetChatMessagePageAsync` 承载：管理侧**跨会话**分页查询聊天消息（按会话/发送人/发送时间区间/关键字过滤，关键字匹配正文、发送人名、附件文件名），默认排除已撤回消息（`IncludeRecalled` 可选纳入），批量带出会话名称/类型免逐行 JOIN。菜单页 `/message/chat-audit`（`message.chat-audit`）独立于普通聊天入口，供管理员做内容合规审计，不占用 `Chat.Read`/`Chat.Send`/`Chat.Manage` 三档。
 
-**敏感词拦截**：发送/编辑文本前经 `IChatSensitiveWordGuard.EnsureAllowedAsync` 校验，命中即 fail-closed 抛业务异常拒绝。词库取自系统设置 `SysConfig` 键 `chat:sensitive-words`（全局 `TenantId=0`，换行/中英文逗号/分号分隔，空=关闭），进程内缓存 60 秒，`OrdinalIgnoreCase` 包含匹配。
+**敏感词拦截**：发送/编辑文本前经 `IChatSensitiveWordGuard.EnsureAllowedAsync` 校验，命中即 fail-closed 抛业务异常拒绝。词库是聊天策略参数 `chat.policy` 的 `sensitiveWords` 数组（空数组=关闭；租户有同键参数时用租户的），经配置值缓存读取、改参数即失效，`OrdinalIgnoreCase` 包含匹配。同一参数的 `retentionDays` 是聊天消息保留天数（缺省 365）。
 
 ---
 

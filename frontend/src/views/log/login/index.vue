@@ -9,6 +9,7 @@ import { useRouter } from 'vue-router'
 import { createPageRequest, LoginResult, logManagementApi, querySortsFromSchema } from '@/api'
 import { SchemaPage } from '~/components'
 import { toast } from '~/composables'
+import { useEnumOptions } from '~/hooks'
 import { getOptionLabel } from '~/utils'
 import { loginLogDetailFields } from '../_components/log-detail-fields'
 import LogDetailDrawer from '../_components/LogDetailDrawer.vue'
@@ -23,23 +24,8 @@ const detailVisible = ref(false)
 const detailLoading = ref(false)
 const detailData = ref<LoginLogDetailDto | null>(null)
 
-const loginResultOptions = computed(() => [
-  { label: t('log.login.result_success'), value: LoginResult.Success },
-  { label: t('log.login.result_invalid_credentials'), value: LoginResult.InvalidCredentials },
-  { label: t('log.login.result_account_locked'), value: LoginResult.AccountLocked },
-  { label: t('log.login.result_account_disabled'), value: LoginResult.AccountDisabled },
-  { label: t('log.login.result_requires_two_factor'), value: LoginResult.RequiresTwoFactor },
-  { label: t('log.login.result_two_factor_failed'), value: LoginResult.TwoFactorFailed },
-  { label: t('log.login.result_logout'), value: LoginResult.Logout },
-  { label: t('log.login.result_token_refreshed'), value: LoginResult.TokenRefreshed },
-  { label: t('log.login.result_password_changed'), value: LoginResult.PasswordChanged },
-  { label: t('log.login.result_password_reset'), value: LoginResult.PasswordReset },
-  { label: t('log.login.result_mfa_bound'), value: LoginResult.MfaBound },
-  { label: t('log.login.result_mfa_unbound'), value: LoginResult.MfaUnbound },
-  { label: t('log.login.result_tenant_switched'), value: LoginResult.TenantSwitched },
-  { label: t('log.login.result_session_revoked'), value: LoginResult.SessionRevoked },
-  { label: t('log.login.result_failed'), value: LoginResult.Failed },
-])
+// 登录结果随认证审计事件增长（模仿登录等），筛选项与单元格标签都取后端枚举元数据，前端只管配色
+const loginResultOptions = useEnumOptions('LoginResult')
 
 const riskOptions = computed(() => [
   { label: t('common.statuses.yes'), value: 1 },
@@ -62,7 +48,9 @@ function loginResultType(result: LoginResult) {
     case LoginResult.PasswordReset:
     case LoginResult.MfaBound:
     case LoginResult.MfaUnbound:
-    case LoginResult.SessionRevoked: return 'warning'
+    case LoginResult.SessionRevoked:
+    case LoginResult.ImpersonationStarted:
+    case LoginResult.ImpersonationEnded: return 'warning'
     default: return 'neutral'
   }
 }
@@ -90,7 +78,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     options: riskOptions.value,
     width: 120,
     order: 20,
-    render: row => h(XhTagRoot, { variant: 'outline', tone: (row as unknown as LoginLogListItemDto).isRiskLogin ? 'danger' : 'info' }, () => h(XhTagLabel, () => (row as unknown as LoginLogListItemDto).isRiskLogin ? t('common.statuses.yes') : t('common.statuses.no'))),
+    render: row => h(XhTagRoot, { variant: 'subtle', tone: (row as unknown as LoginLogListItemDto).isRiskLogin ? 'danger' : 'info' }, () => h(XhTagLabel, () => (row as unknown as LoginLogListItemDto).isRiskLogin ? t('common.statuses.yes') : t('common.statuses.no'))),
   },
   {
     key: 'loginResult',
@@ -103,7 +91,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     searchPlaceholder: t('log.login.login_result_placeholder'),
     width: 120,
     order: 21,
-    render: row => h(XhTagRoot, { variant: 'outline', tone: loginResultType((row as unknown as LoginLogListItemDto).loginResult) }, () => h(XhTagLabel, () => getOptionLabel(loginResultOptions.value, (row as unknown as LoginLogListItemDto).loginResult))),
+    render: row => h(XhTagRoot, { variant: 'subtle', tone: loginResultType((row as unknown as LoginLogListItemDto).loginResult) }, () => h(XhTagLabel, () => getOptionLabel(loginResultOptions.value, (row as unknown as LoginLogListItemDto).loginResult))),
   },
   { key: 'message', title: t('log.login.message'), dataType: 'string', minWidth: 220, order: 22 },
   { key: 'loginTime', title: t('log.login.login_time'), dataType: 'datetime', sortable: true, searchRange: true, advancedSearch: true, minWidth: 170, order: 23 },
@@ -173,7 +161,7 @@ async function handleDetail(row: LoginLogListItemDto) {
   }
   catch (error) {
     detailData.value = row
-    toast.error((error as Error)?.message || t('log.login.detail_load_failed'))
+    toast.danger((error as Error)?.message || t('log.login.detail_load_failed'))
   }
   finally {
     detailLoading.value = false

@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import type { OAuthAuthorizeRequestDto, OAuthConsentPreviewDto } from '@/api'
-import { XhAvatarFallback, XhAvatarImage, XhAvatarRoot, XhButton, XhSpinner } from '@xihan-ui/vue'
+import { XhAvatarFallback, XhAvatarImage, XhAvatarRoot, XhButton, XhButtonIndicator, XhButtonLabel, XhSpinner } from '@xihan-ui/vue'
 
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -164,8 +164,9 @@ onMounted(async () => {
 
       <!-- 授权确认态 -->
       <div v-else-if="preview?.valid" class="flex flex-col items-center">
-        <XhAvatarRoot v-if="preview.logo" class="shadow-sm" :style="{ '--xh-avatar-size': '64px' }">
-          <XhAvatarImage :src="preview.logo" :alt="preview.appName ?? ''" />
+        <!-- src / alt 是根部件的属性：写在 image 部件上状态机拿不到地址，只会一直显示首字母 -->
+        <XhAvatarRoot v-if="preview.logo" class="shadow-sm" :src="preview.logo" :alt="preview.appName ?? ''" :style="{ '--xh-avatar-size': '64px' }">
+          <XhAvatarImage />
           <XhAvatarFallback>{{ appInitial }}</XhAvatarFallback>
         </XhAvatarRoot>
         <div
@@ -220,6 +221,7 @@ onMounted(async () => {
         <!-- 操作按钮 -->
         <div class="grid grid-cols-2 gap-3 mt-6 w-full">
           <XhButton
+            variant="subtle"
             size="lg"
             :disabled="submitting"
             @click="deny"
@@ -227,12 +229,15 @@ onMounted(async () => {
             {{ t('page.oauth.deny') }}
           </XhButton>
           <XhButton
+            variant="subtle"
             tone="brand"
             size="lg"
             :loading="submitting"
             @click="approve"
           >
-            {{ submitting ? t('page.oauth.approving') : t('page.oauth.approve') }}
+            <!-- 在途由钮中的加载环表达，标签保持不变，钮宽不跳 -->
+            <XhButtonIndicator />
+            <XhButtonLabel>{{ t('page.oauth.approve') }}</XhButtonLabel>
           </XhButton>
         </div>
 

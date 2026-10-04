@@ -4,6 +4,8 @@
 using SqlSugar;
 using XiHan.BasicApp.Core.Entities;
 using XiHan.BasicApp.Saas.Domain.Enums;
+using XiHan.Framework.Data.SqlSugar.Routing;
+using XiHan.Framework.Domain.Entities.Abstracts;
 
 namespace XiHan.BasicApp.Saas.Domain.Entities;
 
@@ -14,6 +16,7 @@ namespace XiHan.BasicApp.Saas.Domain.Entities;
 /// <remarks>
 /// 职责边界：
 /// - 本表承载"谁能进入哪个租户"；"进入后有什么角色"由 SysUserRole 承载；"在租户内的哪些部门"由 SysUserDepartment 承载
+/// - 成员在本租户的数据范围覆盖（DataScopeOverride）也挂在本表：同一个人在不同租户各自设置，互不影响
 /// - 语义区分：
 ///     · SysUser.TenantId       = 用户的主账号归属租户（注册地）
 ///     · SysTenantUser.TenantId = 用户拥有成员身份的租户（含主租户 + 外部协作租户）
@@ -55,6 +58,8 @@ namespace XiHan.BasicApp.Saas.Domain.Entities;
 /// - 邀请外部供应商/顾问协作（External/Consultant）
 /// - 集团总部用户跨子公司访问（PlatformAdmin 或 Admin）
 /// - 登录后切换租户（类似 GitHub 切换 Org）
+///
+/// 租户隔离：严格——成员关系只属于它所在的租户，租户里看不到别处（含平台）的行；跨租户读取走显式通道。
 /// </remarks>
 [SugarTable(TableName = "Sys_Tenant_User", TableDescription = "系统租户成员表")]
 [SugarIndex("IX_{table}_TeId_CrTi", nameof(TenantId), OrderByType.Asc, nameof(CreatedTime), OrderByType.Desc)]
@@ -66,7 +71,8 @@ namespace XiHan.BasicApp.Saas.Domain.Entities;
 [SugarIndex("IX_{table}_InSt", nameof(InviteStatus), OrderByType.Asc)]
 [SugarIndex("IX_{table}_TeId_St", nameof(TenantId), OrderByType.Asc, nameof(Status), OrderByType.Asc)]
 [SugarIndex("IX_{table}_ExTi", nameof(ExpirationTime), OrderByType.Desc)]
-public partial class SysTenantUser : BasicAppFullAuditedEntity
+[PlatformDataSource]
+public partial class SysTenantUser : BasicAppFullAuditedEntity, IStrictMultiTenantEntity
 {
     /// <summary>
     /// 用户ID（指向 SysUser，与当前 TenantId 共同定位一条租户成员关系）
@@ -139,6 +145,18 @@ public partial class SysTenantUser : BasicAppFullAuditedEntity
     /// </summary>
     [SugarColumn(ColumnName = "Invite_Remark", ColumnDescription = "邀请备注", Length = 500, IsNullable = true)]
     public virtual string? InviteRemark { get; set; }
+
+    /// <summary>
+    /// 数据范围覆盖（null=按角色的数据范围生效）
+    /// </summary>
+    /// <remarks>
+    /// - 非空时取代该成员在本租户所有角色的数据范围（如 CEO 挂的是部门经理角色、但要看全部数据，可置 All）
+    /// - 取值 Custom 时，可见部门由 SysUserDataScope 枚举（本租户、本成员的行）
+    /// - 数据范围是租户侧概念：平台没有成员关系，也不施加数据范围
+    /// - 禁止依赖枚举数值大小做权限合并，必须按 DataPermissionScope 注释中的显式语义解释
+    /// </remarks>
+    [SugarColumn(ColumnName = "Data_Scope_Override", ColumnDescription = "数据范围覆盖", IsNullable = true)]
+    public virtual DataPermissionScope? DataScopeOverride { get; set; }
 
     /// <summary>
     /// 状态（Yes=有效 / No=暂停，暂停后不再生效但保留关系）

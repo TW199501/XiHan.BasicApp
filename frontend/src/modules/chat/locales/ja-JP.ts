@@ -4,8 +4,9 @@
 export default {
   chat: {
     bell: 'チャット',
+    unread_label: '未読チャット {n} 件',
     island_new_message_fallback: '新しいメッセージ',
-    drawer: {
+    panel: {
       title: 'チャット',
       open_page: '独立ページを開く',
     },
@@ -62,6 +63,7 @@ export default {
       assistant_thinking: '生成中…',
       assistant_dismiss: '閉じる',
       voice_unplayed: '未再生',
+      view_image: '画像を表示',
       recalled: 'メッセージを取り消しました',
       recall: '取り消し',
       recall_failed: '取り消しに失敗しました',
@@ -107,6 +109,7 @@ export default {
       send_key_enter: 'Enter キーでメッセージを送信',
       send_key_ctrl_enter: 'Ctrl + Enter キーでメッセージを送信',
       emoji: '絵文字',
+      mention: 'メンバーをメンション',
       image: '画像を送信',
       file: 'ファイルを送信',
       voice: '音声入力',

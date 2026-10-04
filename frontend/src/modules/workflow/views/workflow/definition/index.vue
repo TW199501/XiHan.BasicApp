@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Tone } from '@xihan-ui/kernel'
+import type { Tone } from '@xihan-ui/core'
 import type {
   WorkflowDefinitionDetailDto,
   WorkflowDefinitionListItemDto,
@@ -15,7 +15,7 @@ import {
   createPageRequest,
   querySortsFromSchema,
 } from '@/api'
-import { SchemaPage, XEditModal, XInput, XJsonBlock, XNumberInput } from '~/components'
+import { actionConfirmText, deleteConfirmText, SchemaPage, statusConfirmText, XEditModal, XInput, XJsonBlock, XNumberInput } from '~/components'
 import { toast } from '~/composables'
 import { formatDate } from '~/utils'
 import {
@@ -78,14 +78,14 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 1,
     render: (row) => {
       const r = row as unknown as WorkflowDefinitionListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: statusTag(r.status) }, () => h(XhTagLabel, () => statusLabel(r.status)))
+      return h(XhTagRoot, { variant: 'subtle', tone: statusTag(r.status) }, () => h(XhTagLabel, () => statusLabel(r.status)))
     },
   },
   { key: 'code', title: t('workflow.definition.code'), dataType: 'string', sortable: true, minWidth: 160, order: 10 },
   { key: 'name', title: t('workflow.definition.name'), dataType: 'string', sortable: true, minWidth: 180, order: 11 },
   { key: 'version', title: t('workflow.definition.version'), dataType: 'number', sortable: true, width: 90, order: 12, render: (row) => {
     const r = row as unknown as WorkflowDefinitionListItemDto
-    return h(XhTagRoot, { variant: 'outline', tone: 'neutral' }, () => h(XhTagLabel, () => `v${r.version}`))
+    return h(XhTagRoot, { variant: 'subtle', tone: 'neutral' }, () => h(XhTagLabel, () => `v${r.version}`))
   } },
   { key: 'category', title: t('workflow.definition.category'), dataType: 'string', searchable: true, minWidth: 120, order: 13 },
   { key: 'description', title: t('workflow.definition.description'), dataType: 'string', minWidth: 200, ellipsis: true, order: 14 },
@@ -96,8 +96,14 @@ const fields = computed<ListFieldSchema[]>(() => [
   { key: 'createdTime', title: t('workflow.definition.created_time'), dataType: 'datetime', sortable: true, searchable: true, searchRange: true, advancedSearch: true, minWidth: 170, order: 16 },
 ])
 
+/** 确认框里的流程名：名称 + 版本，发布、停用、归档都按版本走 */
+function definitionName(row: unknown) {
+  const definition = row as WorkflowDefinitionListItemDto
+  return `${definition.name} v${definition.version}`
+}
+
 const schema = computed<PageSchema>(() => ({
-  pageCode: 'workflow.definition',
+  pageCode: 'workflow_definition',
   pageName: t('workflow.definition.page_name'),
   rowKey: 'basicId',
   fields: fields.value,
@@ -118,13 +124,13 @@ const schema = computed<PageSchema>(() => ({
   actions: [
     { key: 'create', title: t('workflow.definition.action_create'), scope: 'page', type: 'primary', icon: 'lucide:plus', permission: 'workflow_definition.create' },
     { key: 'view', title: t('workflow.definition.action_view'), scope: 'row', icon: 'lucide:eye' },
-    { key: 'edit', title: t('workflow.definition.action_edit'), scope: 'row', permission: 'workflow_definition.update', visible: row => (row as unknown as WorkflowDefinitionListItemDto).status === WorkflowDefinitionStatus.Draft },
-    { key: 'publish', title: t('workflow.definition.action_publish'), scope: 'row', type: 'success', permission: 'workflow_definition.update', visible: row => (row as unknown as WorkflowDefinitionListItemDto).status === WorkflowDefinitionStatus.Draft },
-    { key: 'start', title: t('workflow.definition.action_start'), scope: 'row', type: 'primary', permission: 'workflow_definition.execute', visible: row => (row as unknown as WorkflowDefinitionListItemDto).status === WorkflowDefinitionStatus.Published },
-    { key: 'newVersion', title: t('workflow.definition.action_new_version'), scope: 'row', permission: 'workflow_definition.create', visible: row => (row as unknown as WorkflowDefinitionListItemDto).status !== WorkflowDefinitionStatus.Draft },
-    { key: 'disable', title: t('workflow.definition.action_disable'), scope: 'row', type: 'warning', permission: 'workflow_definition.update', visible: row => (row as unknown as WorkflowDefinitionListItemDto).status === WorkflowDefinitionStatus.Published },
-    { key: 'archive', title: t('workflow.definition.action_archive'), scope: 'row', permission: 'workflow_definition.update', visible: row => (row as unknown as WorkflowDefinitionListItemDto).status === WorkflowDefinitionStatus.Disabled },
-    { key: 'delete', title: t('workflow.definition.action_delete'), scope: 'row', type: 'error', permission: 'workflow_definition.delete', visible: row => (row as unknown as WorkflowDefinitionListItemDto).status === WorkflowDefinitionStatus.Draft },
+    { key: 'edit', title: t('workflow.definition.action_edit'), scope: 'row', icon: 'lucide:pencil', permission: 'workflow_definition.update', visible: row => (row as unknown as WorkflowDefinitionListItemDto).status === WorkflowDefinitionStatus.Draft },
+    { key: 'publish', title: t('workflow.definition.action_publish'), scope: 'row', icon: 'lucide:send', type: 'success', confirm: true, confirmText: row => actionConfirmText(t, t('workflow.definition.action_publish'), definitionName(row)), permission: 'workflow_definition.update', visible: row => (row as unknown as WorkflowDefinitionListItemDto).status === WorkflowDefinitionStatus.Draft },
+    { key: 'start', title: t('workflow.definition.action_start'), scope: 'row', icon: 'lucide:play', type: 'primary', permission: 'workflow_definition.execute', visible: row => (row as unknown as WorkflowDefinitionListItemDto).status === WorkflowDefinitionStatus.Published },
+    { key: 'newVersion', title: t('workflow.definition.action_new_version'), scope: 'row', icon: 'lucide:git-branch-plus', permission: 'workflow_definition.create', visible: row => (row as unknown as WorkflowDefinitionListItemDto).status !== WorkflowDefinitionStatus.Draft },
+    { key: 'disable', title: t('workflow.definition.action_disable'), scope: 'row', icon: 'lucide:pause', type: 'warning', confirm: true, confirmText: row => statusConfirmText(t, true, definitionName(row)), permission: 'workflow_definition.update', visible: row => (row as unknown as WorkflowDefinitionListItemDto).status === WorkflowDefinitionStatus.Published },
+    { key: 'archive', title: t('workflow.definition.action_archive'), scope: 'row', icon: 'lucide:archive', type: 'warning', confirm: true, confirmText: row => actionConfirmText(t, t('workflow.definition.action_archive'), definitionName(row)), permission: 'workflow_definition.update', visible: row => (row as unknown as WorkflowDefinitionListItemDto).status === WorkflowDefinitionStatus.Disabled },
+    { key: 'delete', title: t('workflow.definition.action_delete'), scope: 'row', icon: 'lucide:trash-2', type: 'error', confirm: true, confirmText: row => deleteConfirmText(t, definitionName(row)), permission: 'workflow_definition.delete', visible: row => (row as unknown as WorkflowDefinitionListItemDto).status === WorkflowDefinitionStatus.Draft },
   ],
 }))
 
@@ -142,7 +148,7 @@ async function handleDetail(row: WorkflowDefinitionListItemDto) {
     detailData.value = await workflowDefinitionApi.detail(row.basicId) ?? null
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('workflow.definition.err_load_detail'))
+    toast.danger((error as Error)?.message || t('workflow.definition.err_load_detail'))
   }
   finally {
     detailLoading.value = false
@@ -176,7 +182,7 @@ function openCreate() {
 async function openEdit(row: WorkflowDefinitionListItemDto) {
   const detail = await workflowDefinitionApi.detail(row.basicId)
   if (!detail) {
-    toast.error(t('workflow.definition.err_load_detail'))
+    toast.danger(t('workflow.definition.err_load_detail'))
     return
   }
   editMode.value = 'edit'
@@ -201,7 +207,7 @@ async function handleDesignerSave(json: string) {
     reload()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('workflow.definition.err_save'))
+    toast.danger((error as Error)?.message || t('workflow.definition.err_save'))
   }
   finally {
     editLoading.value = false
@@ -234,7 +240,7 @@ async function handleStart() {
     startVisible.value = false
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('workflow.definition.err_start'))
+    toast.danger((error as Error)?.message || t('workflow.definition.err_start'))
   }
   finally {
     startLoading.value = false
@@ -269,7 +275,7 @@ async function runLifecycle(action: 'publish' | 'newVersion' | 'disable' | 'arch
     reload()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('workflow.definition.err_operation'))
+    toast.danger((error as Error)?.message || t('workflow.definition.err_operation'))
   }
 }
 
@@ -314,7 +320,7 @@ function onAction(payload: SchemaActionPayload) {
           {{ t('workflow.definition.loading') }}
         </div>
         <template v-else-if="detailData">
-          <XhDescriptionsRoot :columns="2" bordered placement="left" size="sm">
+          <XhDescriptionsRoot :columns="2" variant="outline" placement="left" size="sm">
             <XhDescriptionsItem>
               <XhDescriptionsLabel>{{ t('workflow.definition.code') }}</XhDescriptionsLabel>
               <XhDescriptionsValue>
@@ -364,7 +370,7 @@ function onAction(payload: SchemaActionPayload) {
           </XhDescriptionsRoot>
           <div class="mb-2 mt-4 flex items-center justify-between">
             <span class="text-sm font-medium">{{ t('workflow.definition.graph_label') }}</span>
-            <XhButton text size="sm" @click="showDetailJson = !showDetailJson">
+            <XhButton variant="subtle" size="sm" @click="showDetailJson = !showDetailJson">
               {{ showDetailJson ? t('workflow.definition.hide_json') : t('workflow.definition.show_json') }}
             </XhButton>
           </div>
@@ -406,7 +412,7 @@ function onAction(payload: SchemaActionPayload) {
         class="xh-edit-form-grid"
         @submit="handleStart"
       >
-        <XhFormFieldGroup value="definitionCode">
+        <XhFormFieldGroup name="definitionCode">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('workflow.definition.code') }}</XhFieldLabel>
             <XhFieldControl>
@@ -415,7 +421,7 @@ function onAction(payload: SchemaActionPayload) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="definitionVersion">
+        <XhFormFieldGroup name="definitionVersion">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('workflow.definition.version') }}</XhFieldLabel>
             <XhFieldControl>
@@ -424,7 +430,7 @@ function onAction(payload: SchemaActionPayload) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="name">
+        <XhFormFieldGroup name="name">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('workflow.definition.instance_name') }}</XhFieldLabel>
             <XhFieldControl>
@@ -433,7 +439,7 @@ function onAction(payload: SchemaActionPayload) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="correlationId">
+        <XhFormFieldGroup name="correlationId">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('workflow.definition.correlation_id') }}</XhFieldLabel>
             <XhFieldControl>
@@ -442,7 +448,7 @@ function onAction(payload: SchemaActionPayload) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="variablesJson" class="xh-span-2">
+        <XhFormFieldGroup name="variablesJson" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('workflow.definition.variables') }}</XhFieldLabel>
             <XhFieldControl>

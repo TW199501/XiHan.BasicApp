@@ -1,4 +1,5 @@
 <script lang="ts" setup>
+import type { Size } from '@xihan-ui/core'
 import type { TreeSelectOption } from '~/types'
 import { XhTreeSelectClearTrigger, XhTreeSelectContent, XhTreeSelectControl, XhTreeSelectIndicator, XhTreeSelectPositioner, XhTreeSelectRoot, XhTreeSelectTree, XhTreeSelectTrigger, XhTreeSelectValueText } from '@xihan-ui/vue'
 import { computed } from 'vue'
@@ -12,16 +13,20 @@ const props = withDefaults(defineProps<{
   value?: string | number | null | undefined
   options?: TreeSelectOption[]
   placeholder?: string
+  /** 不写时随外层 Field / Form 的 disabled 走；写了以本处为准 */
   disabled?: boolean
   clearable?: boolean
   loading?: boolean
+  /** 与表单里的其它字段同一档：缺省 sm，与 XInput / XSelect 一致 */
+  size?: Size
 }>(), {
   value: null,
   options: () => [],
   placeholder: undefined,
-  disabled: false,
+  disabled: undefined,
   clearable: false,
   loading: false,
+  size: 'sm',
 })
 
 const emit = defineEmits<{
@@ -59,7 +64,8 @@ function handleChange(next: string[]) {
     :value="selected"
     :collection="collection"
     :placeholder="placeholder"
-    :disabled="disabled || loading"
+    :disabled="loading ? true : disabled"
+    :size="size"
     @update:value="handleChange"
   >
     <!-- 视觉盒在 Control 上；清空钮是 Trigger 的兄弟，塞进去会变成按钮套按钮、且点它会冒泡把浮层打开 -->

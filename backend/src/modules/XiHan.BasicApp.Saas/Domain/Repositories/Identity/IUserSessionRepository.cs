@@ -31,6 +31,27 @@ public interface IUserSessionRepository : ISaasRepository<SysUserSession>
     Task<IReadOnlyList<SysUserSession>> GetActiveByUserAndDeviceIgnoreTenantAsync(long userId, string deviceId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// 跨租户获取用户名下全部未吊销会话：自己的会话 + 由自己发起的模仿会话（后者 <c>UserId</c> 是被模仿者）
+    /// </summary>
+    /// <remarks>
+    /// 个人中心「登录设备」自助场景专用：会话行带发起登录 / 切换后的租户戳，同一个人的设备会散落在不同租户戳下。
+    /// </remarks>
+    /// <param name="userId">用户标识</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>未吊销的会话列表（含已过期行，过期口径由调用方裁决）</returns>
+    Task<IReadOnlyList<SysUserSession>> GetNotRevokedByUserIgnoreTenantAsync(long userId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 跨租户判断指定原会话下是否挂着进行中的模仿会话
+    /// </summary>
+    /// <remarks>
+    /// 模仿会话行带目标租户戳，发起人的原会话可能在平台或别的租户，必须跨租户查找。
+    /// </remarks>
+    /// <param name="impersonatorSessionId">发起人原会话业务标识</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    Task<bool> HasActiveImpersonationIgnoreTenantAsync(string impersonatorSessionId, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// 吊销用户所有会话
     /// </summary>
     Task<IReadOnlyList<string>> RevokeByUserIdAsync(long userId, CancellationToken cancellationToken = default);

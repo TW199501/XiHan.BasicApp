@@ -6,6 +6,7 @@ using XiHan.BasicApp.Saas.Domain.Entities;
 using XiHan.BasicApp.Saas.Domain.Enums;
 using XiHan.BasicApp.Saas.Domain.Repositories;
 using XiHan.Framework.Data.SqlSugar.Clients;
+using XiHan.Framework.Data.SqlSugar.Extensions;
 
 namespace XiHan.BasicApp.Saas.Infrastructure.Repositories;
 
@@ -50,11 +51,58 @@ public sealed class TenantUserRepository(ISqlSugarClientResolver clientResolver)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        // 清租户过滤后按 TenantId 精确匹配：平台态查某个租户的成员，读共享过滤器会把 TenantId=0 的行一并放行
+        // 清租户过滤后按 TenantId 精确匹配：要查的租户未必是当前上下文
         return await CreateNoTenantQueryable()
             .Where(user => user.TenantId == tenantId)
             .Where(user => user.UserId == userId)
             .FirstAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// 账号在所有租户的成员关系（任意状态，跨租户读取）
+    /// </summary>
+    public async Task<IReadOnlyList<SysTenantUser>> GetAllByUserIdIgnoreTenantAsync(long userId, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        return await CreateNoTenantQueryable()
+            .Where(member => member.UserId == userId)
+            .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// 按关键字检索租户成员，返回命中成员的用户主键
+    /// </summary>
+    public async Task<IReadOnlyList<long>> SearchMemberUserIdsAsync(long tenantId, string keyword, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(keyword);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var text = keyword.Trim();
+        var members = await CreateNoTenantQueryable()
+            .Where(member => member.TenantId == tenantId)
+            .Select(member => new { member.UserId, member.DisplayName, member.InviteRemark, member.Remark })
+            .ToListAsync(cancellationToken);
+        if (members.Count == 0)
+        {
+            return [];
+        }
+
+        // 账号属于来源租户（外部成员不在本租户），跨租户按主键取
+        var userIds = members.Select(member => member.UserId).Distinct().ToList();
+        var accounts = await CreateQueryable<SysUser>()
+            .ClearTenantFilter()
+            .Where(user => userIds.Contains(user.BasicId))
+            .Select(user => new { user.BasicId, user.UserName, user.NickName, user.RealName, user.Email })
+            .ToListAsync(cancellationToken);
+
+        var matched = members
+            .Where(member => Matches(text, member.DisplayName, member.InviteRemark, member.Remark))
+            .Select(member => member.UserId)
+            .Concat(accounts
+                .Where(account => Matches(text, account.UserName, account.NickName, account.RealName, account.Email))
+                .Select(account => account.BasicId));
+        return [.. matched.Distinct()];
     }
 
     /// <summary>
@@ -72,8 +120,8 @@ public sealed class TenantUserRepository(ISqlSugarClientResolver clientResolver)
 
         var ids = tenantIds.Distinct().ToList();
 
-        // 清租户过滤后按 TenantId 精确匹配：读共享过滤器会放行 TenantId=0 的平台级成员，
-        // 依赖它会把平台账号计进每个租户的席位。生效期口径与 GetActiveByUserIdAsync 的鉴权口径保持一致。
+        // 清租户过滤后按 TenantId 精确匹配：一次统计多个租户，不依赖当前上下文。
+        // 生效期口径与 GetActiveByUserIdAsync 的鉴权口径保持一致。
         var rows = await CreateNoTenantQueryable()
             .Where(user => ids.Contains(user.TenantId))
             .Where(user => user.InviteStatus == TenantMemberInviteStatus.Accepted)
@@ -86,5 +134,36 @@ public sealed class TenantUserRepository(ISqlSugarClientResolver clientResolver)
             .ToListAsync(cancellationToken);
 
         return rows.ToDictionary(row => row.TenantId, row => row.Value);
+    }
+
+    /// <summary>
+    /// 这些租户里已有所有者（已开通管理员）的租户
+    /// </summary>
+    public async Task<IReadOnlySet<long>> GetTenantIdsWithOwnerAsync(IReadOnlyCollection<long> tenantIds, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(tenantIds);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (tenantIds.Count == 0)
+        {
+            return new HashSet<long>();
+        }
+
+        var ids = tenantIds.Distinct().ToList();
+        var owners = await CreateNoTenantQueryable()
+            .Where(member => ids.Contains(member.TenantId) && member.MemberType == TenantMemberType.Owner)
+            .Select(member => member.TenantId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        return owners.ToHashSet();
+    }
+
+    /// <summary>
+    /// 任一文本包含关键字（忽略大小写）
+    /// </summary>
+    private static bool Matches(string keyword, params string?[] values)
+    {
+        return values.Any(value => value?.Contains(keyword, StringComparison.OrdinalIgnoreCase) == true);
     }
 }

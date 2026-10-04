@@ -112,7 +112,7 @@ async function load(): Promise<void> {
   }
   catch (error) {
     if (version === requestVersion)
-      toast.error((error as Error).message || t('setting.numbering.allocation_load_failed'))
+      toast.danger((error as Error).message || t('setting.numbering.allocation_load_failed'))
   }
   finally {
     if (version === requestVersion)
@@ -140,7 +140,7 @@ function changePage(page: number): void {
     <XhDrawerContent style="--xh-drawer-size: 1080px">
       <XhDrawerTitle>{{ title }}</XhDrawerTitle>
       <XhDrawerCloseTrigger />
-      <XhFlex direction="column" gap="md">
+      <XhFlex orientation="vertical" gap="md">
         <XInput
           v-model:value="keyword"
           clearable

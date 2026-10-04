@@ -7,13 +7,15 @@ import type {
   PermissionCreateDto,
   PermissionDetailDto,
   PermissionListItemDto,
+  PermissionSide,
   PermissionUpdateDto,
+
   ResourceSelectItemDto,
 
   ValidityStatus,
 } from '@/api'
 import type { ListFieldSchema, PageSchema, SchemaActionPayload } from '~/components'
-import { XhDescriptionsItem, XhDescriptionsLabel, XhDescriptionsRoot, XhDescriptionsValue, XhDrawerCloseTrigger, XhDrawerContent, XhDrawerRoot, XhDrawerTitle, XhEmptyStateDescription, XhEmptyStateIcon, XhEmptyStateRoot, XhEmptyStateTitle, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFormFieldGroup, XhFormRoot, XhSpinner, XhSwitch, XhTabsContent, XhTabsList, XhTabsRoot, XhTabsTrigger } from '@xihan-ui/vue'
+import { XhDescriptionsItem, XhDescriptionsLabel, XhDescriptionsRoot, XhDescriptionsValue, XhDrawerCloseTrigger, XhDrawerContent, XhDrawerRoot, XhDrawerTitle, XhEmptyStateDescription, XhEmptyStateIndicator, XhEmptyStateRoot, XhEmptyStateTitle, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFormFieldGroup, XhFormRoot, XhSpinner, XhSwitch, XhTabsContent, XhTabsIndicator, XhTabsList, XhTabsRoot, XhTabsTrigger } from '@xihan-ui/vue'
 import { computed, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
@@ -24,10 +26,11 @@ import {
   PermissionType,
   querySortsFromSchema,
 } from '@/api'
-import { CONDITION_OPERATOR_OPTIONS, CONFIG_DATA_TYPE_OPTIONS, DELEGATION_STATUS_OPTIONS, FIELD_MASK_STRATEGY_OPTIONS, FIELD_SECURITY_TARGET_TYPE_OPTIONS, HTTP_METHOD_OPTIONS, OPERATION_CATEGORY_OPTIONS, OPERATION_TYPE_OPTIONS, PERMISSION_CHANGE_TYPE_OPTIONS, PERMISSION_REQUEST_STATUS_OPTIONS, PERMISSION_TYPE_OPTIONS, RESOURCE_ACCESS_LEVEL_OPTIONS, RESOURCE_TYPE_OPTIONS, STATUS_OPTIONS, VALIDITY_STATUS_OPTIONS } from '@/constants'
-import { Icon, SchemaPage, XEditModal, XInput, XNumberInput, XSelect } from '~/components'
+import { CONDITION_OPERATOR_OPTIONS, CONFIG_DATA_TYPE_OPTIONS, DELEGATION_STATUS_OPTIONS, HTTP_METHOD_OPTIONS, OPERATION_CATEGORY_OPTIONS, OPERATION_TYPE_OPTIONS, PERMISSION_CHANGE_TYPE_OPTIONS, PERMISSION_REQUEST_STATUS_OPTIONS, PERMISSION_SIDE_OPTIONS, PERMISSION_TYPE_OPTIONS, RESOURCE_ACCESS_LEVEL_OPTIONS, RESOURCE_TYPE_OPTIONS, STATUS_OPTIONS, VALIDITY_STATUS_OPTIONS } from '@/constants'
+import { deleteConfirmText, Icon, SchemaPage, statusConfirmText, XCombobox, XEditModal, XInput, XNumberInput, XSelect } from '~/components'
 import { toast } from '~/composables'
 import { useEnumOptions } from '~/hooks'
+import { useUserStore } from '~/stores'
 import { formatDate, getOptionLabel } from '~/utils'
 
 defineOptions({ name: 'SystemPermissionPage' })
@@ -37,8 +40,10 @@ const { t } = useI18n()
 /** 编辑弹窗的保存钮靠这个 id 关联到表单，点它才会走整表校验 */
 const editFormId = useId()
 
-interface PermissionFormModel extends PermissionCreateDto {
+/** 作用侧没有默认值：新建时必须明确选平台 / 租户 / 两侧，选错会把平台能力放进租户或反之 */
+interface PermissionFormModel extends Omit<PermissionCreateDto, 'side'> {
   basicId?: ApiId
+  side: PermissionSide | null
 }
 
 interface NumericSelectOption {
@@ -59,6 +64,7 @@ const operationOptions = ref<NumericSelectOption[]>([])
 const modalVisible = ref(false)
 
 const permissionTypeOptions = useEnumOptions('PermissionType', PERMISSION_TYPE_OPTIONS)
+const permissionSideOptions = useEnumOptions('PermissionSide', PERMISSION_SIDE_OPTIONS)
 const validityStatusOptions = useEnumOptions('ValidityStatus', VALIDITY_STATUS_OPTIONS)
 const resourceTypeOptions = useEnumOptions('ResourceType', RESOURCE_TYPE_OPTIONS)
 const resourceAccessLevelOptions = useEnumOptions('ResourceAccessLevel', RESOURCE_ACCESS_LEVEL_OPTIONS)
@@ -76,8 +82,6 @@ const conditionOperatorOptions = useEnumOptions('ConditionOperator', CONDITION_O
 const configDataTypeOptions = useEnumOptions('ConfigDataType', CONFIG_DATA_TYPE_OPTIONS)
 const delegationStatusOptions = useEnumOptions('DelegationStatus', DELEGATION_STATUS_OPTIONS)
 const requestStatusOptions = useEnumOptions('PermissionRequestStatus', PERMISSION_REQUEST_STATUS_OPTIONS)
-const fieldMaskStrategyOptions = useEnumOptions('FieldMaskStrategy', FIELD_MASK_STRATEGY_OPTIONS)
-const fieldSecurityTargetTypeOptions = useEnumOptions('FieldSecurityTargetType', FIELD_SECURITY_TARGET_TYPE_OPTIONS)
 const changeTypeOptions = useEnumOptions('PermissionChangeType', PERMISSION_CHANGE_TYPE_OPTIONS)
 
 const globalOptions = computed(() => [
@@ -111,6 +115,7 @@ watch(
 
 function createDefaultForm(): PermissionFormModel {
   return {
+    side: null,
     isRequireAudit: false,
     moduleCode: null,
     operationId: null,
@@ -164,8 +169,14 @@ function formatValidityStatus(value?: ValidityStatus | null) {
   return getOptionLabel(validityStatusOptions.value, value)
 }
 
+const userStore = useUserStore()
+
+/**
+ * 全局权限(TenantId=0)是平台的目录，只在平台维护；非平台态隐藏编辑/启停/删除入口，
+ * 避免点击后撞后端「平台级全局权限仅平台运维态可维护」错误。
+ */
 function canMaintainPermission(row: PermissionListItemDto) {
-  return !row.isGlobal
+  return !row.isGlobal || (userStore.userInfo?.isPlatform ?? false)
 }
 
 // ── 字段单一事实源 ──────────────────────────────────────────────
@@ -187,8 +198,21 @@ const fields = computed<ListFieldSchema[]>(() => [
     minWidth: 110,
     order: 4,
   },
-  { key: 'resourceName', title: t('identity.permission.col_resource'), dataType: 'string', minWidth: 150, order: 5 },
-  { key: 'operationName', title: t('identity.permission.col_operation'), dataType: 'string', minWidth: 130, order: 6 },
+  {
+    key: 'side',
+    title: t('identity.permission.col_side'),
+    dataType: 'enum',
+    sortable: true,
+    searchable: true,
+    searchMultiple: true,
+    dictionaryCode: 'PermissionSide',
+    options: permissionSideOptions.value,
+    searchPlaceholder: t('identity.permission.side_placeholder'),
+    width: 90,
+    order: 5,
+  },
+  { key: 'resourceName', title: t('identity.permission.col_resource'), dataType: 'string', minWidth: 150, order: 6 },
+  { key: 'operationName', title: t('identity.permission.col_operation'), dataType: 'string', minWidth: 130, order: 7 },
   {
     key: 'isGlobal',
     title: t('identity.permission.col_is_global'),
@@ -197,7 +221,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     options: globalOptions.value,
     searchPlaceholder: t('identity.permission.is_global_placeholder'),
     width: 82,
-    order: 7,
+    order: 8,
   },
   {
     key: 'isRequireAudit',
@@ -207,10 +231,10 @@ const fields = computed<ListFieldSchema[]>(() => [
     options: auditOptions.value,
     searchPlaceholder: t('identity.permission.is_audit_placeholder'),
     width: 82,
-    order: 8,
+    order: 9,
   },
-  { key: 'priority', title: t('identity.permission.col_priority'), dataType: 'number', sortable: true, width: 90, order: 9 },
-  { key: 'sort', title: t('identity.permission.col_sort'), dataType: 'number', sortable: true, width: 80, order: 10 },
+  { key: 'priority', title: t('identity.permission.col_priority'), dataType: 'number', sortable: true, width: 90, order: 10 },
+  { key: 'sort', title: t('identity.permission.col_sort'), dataType: 'number', sortable: true, width: 80, order: 11 },
   {
     key: 'status',
     title: t('identity.permission.col_status'),
@@ -222,14 +246,14 @@ const fields = computed<ListFieldSchema[]>(() => [
     options: STATUS_OPTIONS,
     searchPlaceholder: t('identity.permission.status_placeholder'),
     width: 90,
-    order: 11,
+    order: 12,
   },
-  { key: 'createdTime', title: t('identity.permission.col_create_time'), dataType: 'datetime', sortable: true, searchable: true, searchRange: true, minWidth: 170, order: 12 },
+  { key: 'createdTime', title: t('identity.permission.col_create_time'), dataType: 'datetime', sortable: true, searchable: true, searchRange: true, minWidth: 170, order: 13 },
 ])
 
 // ── 资源适配器：归一化查询参数 → 后端 API ──────────────────────
 const schema = computed<PageSchema>(() => ({
-  pageCode: 'system.permission',
+  pageCode: 'identity.permission',
   exportPermission: 'identity.permission.export',
   pageName: t('identity.permission.page_name'),
   batchRemovable: true,
@@ -243,7 +267,7 @@ const schema = computed<PageSchema>(() => ({
       return permissionCenterApi.page({
         ...createPageRequest({
           page: { pageIndex: params.page, pageSize: params.pageSize },
-          // 排序 + 区间(createdTime)/多选(permissionType、status) 统一走 conditions
+          // 排序 + 区间(createdTime)/多选(permissionType、side、status) 统一走 conditions
           conditions: { sorts: querySortsFromSchema(params.sorts), filters: params.conditionFilters ?? [] },
         }),
         isGlobal: toBool(isGlobal),
@@ -257,11 +281,11 @@ const schema = computed<PageSchema>(() => ({
     updateStatus: (id, enabled) => permissionCenterApi.updateStatus({ basicId: id, status: enabled ? EnableStatus.Enabled : EnableStatus.Disabled, remark: enabled ? t('identity.permission.batch_enable_remark') : t('identity.permission.batch_disable_remark') }),
   },
   actions: [
-    { key: 'create', title: t('identity.permission.action_create'), scope: 'page', type: 'primary', icon: 'lucide:plus' },
-    { key: 'view', title: t('identity.permission.action_view'), scope: 'row' },
-    { key: 'edit', title: t('identity.permission.action_edit'), scope: 'row', visible: row => canMaintainPermission(row as unknown as PermissionListItemDto) },
-    { key: 'toggle', title: t('identity.permission.action_toggle'), scope: 'row', visible: row => canMaintainPermission(row as unknown as PermissionListItemDto) },
-    { key: 'delete', title: t('identity.permission.action_delete'), scope: 'row', visible: row => canMaintainPermission(row as unknown as PermissionListItemDto) },
+    { key: 'create', title: t('identity.permission.action_create'), scope: 'page', type: 'primary', icon: 'lucide:plus', permission: 'identity.permission.create' },
+    { key: 'view', title: t('identity.permission.action_view'), scope: 'row', icon: 'lucide:eye' },
+    { key: 'edit', title: t('identity.permission.action_edit'), scope: 'row', icon: 'lucide:pencil', visible: row => canMaintainPermission(row as unknown as PermissionListItemDto), permission: 'identity.permission.update' },
+    { key: 'toggle', title: t('identity.permission.action_toggle'), scope: 'row', icon: 'lucide:power', confirm: true, confirmText: row => statusConfirmText(t, (row as unknown as PermissionListItemDto).status === EnableStatus.Enabled, (row as unknown as PermissionListItemDto).permissionName), visible: row => canMaintainPermission(row as unknown as PermissionListItemDto), permission: 'identity.permission.status' },
+    { key: 'delete', title: t('identity.permission.action_delete'), scope: 'row', icon: 'lucide:trash-2', type: 'error', confirm: true, confirmText: row => deleteConfirmText(t, (row as unknown as PermissionListItemDto).permissionName), visible: row => canMaintainPermission(row as unknown as PermissionListItemDto), permission: 'identity.permission.delete' },
   ],
 }))
 
@@ -323,6 +347,7 @@ async function handleEdit(row: PermissionListItemDto) {
     priority: detail?.priority ?? row.priority,
     remark: detail?.remark ?? null,
     resourceId: detail?.resourceId ?? row.resourceId ?? null,
+    side: detail?.side ?? row.side,
     sort: detail?.sort ?? row.sort,
     status: detail?.status ?? row.status,
     tags: detail?.tags ?? null,
@@ -344,7 +369,7 @@ async function handleView(row: PermissionListItemDto) {
     }
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('identity.permission.msg_load_detail_failed'))
+    toast.danger((error as Error)?.message || t('identity.permission.msg_load_detail_failed'))
   }
   finally {
     detailLoading.value = false
@@ -361,7 +386,7 @@ async function loadResourceOptions(keyword = '') {
     resourceOptions.value = mergeOptions(resourceOptions.value, items.map(toResourceOption))
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('identity.permission.msg_load_resource_failed'))
+    toast.danger((error as Error)?.message || t('identity.permission.msg_load_resource_failed'))
   }
   finally {
     resourceLoading.value = false
@@ -378,7 +403,7 @@ async function loadOperationOptions(keyword = '') {
     operationOptions.value = mergeOptions(operationOptions.value, items.map(toOperationOption))
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('identity.permission.msg_load_operation_failed'))
+    toast.danger((error as Error)?.message || t('identity.permission.msg_load_operation_failed'))
   }
   finally {
     operationLoading.value = false
@@ -485,11 +510,17 @@ function validateForm() {
     return false
   }
 
+  if (!form.side) {
+    toast.warning(t('identity.permission.msg_side_required'))
+    return false
+  }
+
   return true
 }
 
 async function handleSubmit() {
-  if (!validateForm()) {
+  const side = permissionForm.value.side
+  if (!validateForm() || !side) {
     return
   }
 
@@ -508,6 +539,7 @@ async function handleSubmit() {
         permissionName: permissionForm.value.permissionName.trim(),
         priority: permissionForm.value.priority,
         remark: normalizeNullable(permissionForm.value.remark),
+        side,
         sort: permissionForm.value.sort,
         tags,
       }
@@ -526,6 +558,7 @@ async function handleSubmit() {
         priority: permissionForm.value.priority,
         remark: normalizeNullable(permissionForm.value.remark),
         resourceId: isResourceBasedForm.value ? permissionForm.value.resourceId : null,
+        side,
         sort: permissionForm.value.sort,
         status: permissionForm.value.status,
         tags,
@@ -539,7 +572,7 @@ async function handleSubmit() {
     reloadPermission()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('common.messages.save_failed'))
+    toast.danger((error as Error)?.message || t('common.messages.save_failed'))
   }
   finally {
     submitLoading.value = false
@@ -578,7 +611,7 @@ async function handleToggleStatus(row: PermissionListItemDto) {
             <XhSpinner />
           </div>
           <XhEmptyStateRoot v-if="!detailLoading && !currentDetail" class="xh-detail-empty">
-            <XhEmptyStateIcon><Icon icon="lucide:inbox" /></XhEmptyStateIcon>
+            <XhEmptyStateIndicator><Icon icon="lucide:inbox" /></XhEmptyStateIndicator>
             <XhEmptyStateTitle>{{ t('common.empty') }}</XhEmptyStateTitle>
             <XhEmptyStateDescription>{{ t('identity.permission.detail_empty') }}</XhEmptyStateDescription>
           </XhEmptyStateRoot>
@@ -598,15 +631,13 @@ async function handleToggleStatus(row: PermissionListItemDto) {
                 <XhTabsTrigger value="requests">
                   {{ t('identity.permission.tab_requests', { count: currentDetail.requests.length }) }}
                 </XhTabsTrigger>
-                <XhTabsTrigger value="fieldSecurities">
-                  {{ t('identity.permission.tab_field_securities', { count: currentDetail.fieldSecurities.length }) }}
-                </XhTabsTrigger>
                 <XhTabsTrigger value="changeLogs">
                   {{ t('identity.permission.tab_change_logs', { count: currentDetail.changeLogs.length }) }}
                 </XhTabsTrigger>
+                <XhTabsIndicator />
               </XhTabsList>
               <XhTabsContent value="overview">
-                <XhDescriptionsRoot :columns="2" bordered size="sm">
+                <XhDescriptionsRoot :columns="2" variant="outline" size="sm">
                   <XhDescriptionsItem>
                     <XhDescriptionsLabel>{{ t('identity.permission.label_permission_name') }}</XhDescriptionsLabel>
                     <XhDescriptionsValue>
@@ -629,6 +660,12 @@ async function handleToggleStatus(row: PermissionListItemDto) {
                     <XhDescriptionsLabel>{{ t('identity.permission.label_permission_type') }}</XhDescriptionsLabel>
                     <XhDescriptionsValue>
                       {{ getOptionLabel(permissionTypeOptions, currentDetail.permission.permissionType) }}
+                    </XhDescriptionsValue>
+                  </XhDescriptionsItem>
+                  <XhDescriptionsItem>
+                    <XhDescriptionsLabel>{{ t('identity.permission.label_side') }}</XhDescriptionsLabel>
+                    <XhDescriptionsValue>
+                      {{ getOptionLabel(permissionSideOptions, currentDetail.permission.side) }}
                     </XhDescriptionsValue>
                   </XhDescriptionsItem>
                   <XhDescriptionsItem>
@@ -765,7 +802,7 @@ async function handleToggleStatus(row: PermissionListItemDto) {
                   </tbody>
                 </table>
                 <XhEmptyStateRoot v-else style="padding: 40px 0">
-                  <XhEmptyStateIcon><Icon icon="lucide:inbox" /></XhEmptyStateIcon>
+                  <XhEmptyStateIndicator><Icon icon="lucide:inbox" /></XhEmptyStateIndicator>
                   <XhEmptyStateTitle>{{ t('common.empty') }}</XhEmptyStateTitle>
                   <XhEmptyStateDescription>{{ t('identity.permission.empty_conditions') }}</XhEmptyStateDescription>
                 </XhEmptyStateRoot>
@@ -794,7 +831,7 @@ async function handleToggleStatus(row: PermissionListItemDto) {
                   </tbody>
                 </table>
                 <XhEmptyStateRoot v-else style="padding: 40px 0">
-                  <XhEmptyStateIcon><Icon icon="lucide:inbox" /></XhEmptyStateIcon>
+                  <XhEmptyStateIndicator><Icon icon="lucide:inbox" /></XhEmptyStateIndicator>
                   <XhEmptyStateTitle>{{ t('common.empty') }}</XhEmptyStateTitle>
                   <XhEmptyStateDescription>{{ t('identity.permission.empty_delegations') }}</XhEmptyStateDescription>
                 </XhEmptyStateRoot>
@@ -823,40 +860,9 @@ async function handleToggleStatus(row: PermissionListItemDto) {
                   </tbody>
                 </table>
                 <XhEmptyStateRoot v-else style="padding: 40px 0">
-                  <XhEmptyStateIcon><Icon icon="lucide:inbox" /></XhEmptyStateIcon>
+                  <XhEmptyStateIndicator><Icon icon="lucide:inbox" /></XhEmptyStateIndicator>
                   <XhEmptyStateTitle>{{ t('common.empty') }}</XhEmptyStateTitle>
                   <XhEmptyStateDescription>{{ t('identity.permission.empty_requests') }}</XhEmptyStateDescription>
-                </XhEmptyStateRoot>
-              </XhTabsContent>
-              <XhTabsContent value="fieldSecurities">
-                <table v-if="currentDetail.fieldSecurities.length" class="xh-detail-table">
-                  <thead>
-                    <tr>
-                      <th>{{ t('identity.permission.th_field') }}</th>
-                      <th>{{ t('identity.permission.th_resource') }}</th>
-                      <th>{{ t('identity.permission.th_target') }}</th>
-                      <th>{{ t('identity.permission.th_readable') }}</th>
-                      <th>{{ t('identity.permission.th_editable') }}</th>
-                      <th>{{ t('identity.permission.th_mask') }}</th>
-                      <th>{{ t('identity.permission.th_status') }}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="item in currentDetail.fieldSecurities" :key="item.basicId">
-                      <td>{{ item.fieldName }}</td>
-                      <td>{{ formatNullable(item.resourceName || item.resourceCode) }}</td>
-                      <td>{{ getOptionLabel(fieldSecurityTargetTypeOptions, item.targetType) }} / {{ formatNullable(item.targetName || item.targetCode) }}</td>
-                      <td>{{ formatBoolean(item.isReadable) }}</td>
-                      <td>{{ formatBoolean(item.isEditable) }}</td>
-                      <td>{{ getOptionLabel(fieldMaskStrategyOptions, item.maskStrategy) }}</td>
-                      <td>{{ formatStatus(item.status) }}</td>
-                    </tr>
-                  </tbody>
-                </table>
-                <XhEmptyStateRoot v-else style="padding: 40px 0">
-                  <XhEmptyStateIcon><Icon icon="lucide:inbox" /></XhEmptyStateIcon>
-                  <XhEmptyStateTitle>{{ t('common.empty') }}</XhEmptyStateTitle>
-                  <XhEmptyStateDescription>{{ t('identity.permission.empty_field_securities') }}</XhEmptyStateDescription>
                 </XhEmptyStateRoot>
               </XhTabsContent>
               <XhTabsContent value="changeLogs">
@@ -885,7 +891,7 @@ async function handleToggleStatus(row: PermissionListItemDto) {
                   </tbody>
                 </table>
                 <XhEmptyStateRoot v-else style="padding: 40px 0">
-                  <XhEmptyStateIcon><Icon icon="lucide:inbox" /></XhEmptyStateIcon>
+                  <XhEmptyStateIndicator><Icon icon="lucide:inbox" /></XhEmptyStateIndicator>
                   <XhEmptyStateTitle>{{ t('common.empty') }}</XhEmptyStateTitle>
                   <XhEmptyStateDescription>{{ t('identity.permission.empty_change_logs') }}</XhEmptyStateDescription>
                 </XhEmptyStateRoot>
@@ -909,7 +915,7 @@ async function handleToggleStatus(row: PermissionListItemDto) {
         class="xh-edit-form-grid"
         @submit="handleSubmit"
       >
-        <XhFormFieldGroup value="permissionName">
+        <XhFormFieldGroup name="permissionName">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.permission.label_form_permission_name') }}</XhFieldLabel>
             <XhFieldControl>
@@ -918,7 +924,7 @@ async function handleToggleStatus(row: PermissionListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="permissionCode">
+        <XhFormFieldGroup name="permissionCode">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.permission.label_form_permission_code') }}</XhFieldLabel>
             <XhFieldControl>
@@ -932,7 +938,7 @@ async function handleToggleStatus(row: PermissionListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="moduleCode">
+        <XhFormFieldGroup name="moduleCode">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.permission.label_form_module_code') }}</XhFieldLabel>
             <XhFieldControl>
@@ -946,7 +952,7 @@ async function handleToggleStatus(row: PermissionListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="permissionType">
+        <XhFormFieldGroup name="permissionType">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.permission.label_form_permission_type') }}</XhFieldLabel>
             <XhFieldControl>
@@ -959,14 +965,15 @@ async function handleToggleStatus(row: PermissionListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup v-if="isResourceBasedForm" value="resourceId">
+        <XhFormFieldGroup v-if="isResourceBasedForm" name="resourceId">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.permission.label_form_resource') }}</XhFieldLabel>
             <XhFieldControl>
-              <XSelect
+              <XCombobox
                 v-model:value="permissionForm.resourceId"
                 :disabled="Boolean(permissionForm.basicId)"
                 :options="resourceOptions"
+                :loading="resourceLoading"
                 clearable
                 :placeholder="t('identity.permission.ph_resource')"
                 @focus="loadResourceOptions()"
@@ -976,14 +983,15 @@ async function handleToggleStatus(row: PermissionListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup v-if="isResourceBasedForm" value="operationId">
+        <XhFormFieldGroup v-if="isResourceBasedForm" name="operationId">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.permission.label_form_operation') }}</XhFieldLabel>
             <XhFieldControl>
-              <XSelect
+              <XCombobox
                 v-model:value="permissionForm.operationId"
                 :disabled="Boolean(permissionForm.basicId)"
                 :options="operationOptions"
+                :loading="operationLoading"
                 clearable
                 :placeholder="t('identity.permission.ph_operation')"
                 @focus="loadOperationOptions()"
@@ -993,7 +1001,20 @@ async function handleToggleStatus(row: PermissionListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="isRequireAudit">
+        <XhFormFieldGroup name="side">
+          <XhFieldRoot>
+            <XhFieldLabel>{{ t('identity.permission.label_form_side') }}</XhFieldLabel>
+            <XhFieldControl>
+              <XSelect
+                v-model:value="permissionForm.side"
+                :options="permissionSideOptions"
+                :placeholder="t('identity.permission.side_placeholder')"
+              />
+            </XhFieldControl>
+            <XhFieldErrorText />
+          </XhFieldRoot>
+        </XhFormFieldGroup>
+        <XhFormFieldGroup name="isRequireAudit">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.permission.label_form_need_audit') }}</XhFieldLabel>
             <XhFieldControl>
@@ -1002,7 +1023,7 @@ async function handleToggleStatus(row: PermissionListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup v-if="!permissionForm.basicId" value="status">
+        <XhFormFieldGroup v-if="!permissionForm.basicId" name="status">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.permission.label_form_status') }}</XhFieldLabel>
             <XhFieldControl>
@@ -1011,7 +1032,7 @@ async function handleToggleStatus(row: PermissionListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="priority">
+        <XhFormFieldGroup name="priority">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.permission.label_form_priority') }}</XhFieldLabel>
             <XhFieldControl>
@@ -1020,7 +1041,7 @@ async function handleToggleStatus(row: PermissionListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="sort">
+        <XhFormFieldGroup name="sort">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.permission.label_form_sort') }}</XhFieldLabel>
             <XhFieldControl>
@@ -1029,7 +1050,7 @@ async function handleToggleStatus(row: PermissionListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="tags" class="xh-span-2">
+        <XhFormFieldGroup name="tags" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.permission.label_form_tags_json') }}</XhFieldLabel>
             <XhFieldControl>
@@ -1044,7 +1065,7 @@ async function handleToggleStatus(row: PermissionListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="remark">
+        <XhFormFieldGroup name="remark">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.permission.label_form_remark') }}</XhFieldLabel>
             <XhFieldControl>
@@ -1053,7 +1074,7 @@ async function handleToggleStatus(row: PermissionListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="permissionDescription" class="xh-span-2">
+        <XhFormFieldGroup name="permissionDescription" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.permission.label_form_description') }}</XhFieldLabel>
             <XhFieldControl>
@@ -1076,24 +1097,5 @@ async function handleToggleStatus(row: PermissionListItemDto) {
 <style scoped>
 .xh-detail-empty {
   padding: 48px 0;
-}
-
-.xh-detail-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-
-.xh-detail-table th,
-.xh-detail-table td {
-  padding: 9px 10px;
-  border: 1px solid hsl(var(--border));
-  text-align: left;
-  vertical-align: top;
-}
-
-.xh-detail-table th {
-  background: hsl(var(--muted));
-  font-weight: 500;
 }
 </style>

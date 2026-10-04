@@ -1,7 +1,9 @@
 // Copyright (c) 2021-Present XiHanFun and contributors.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
+using System.CodeDom.Compiler;
 using System.Diagnostics;
+using System.Reflection;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using XiHan.BasicApp.CodeGeneration.Domain.Entities;
@@ -9,6 +11,7 @@ using XiHan.BasicApp.CodeGeneration.Domain.Enums;
 using XiHan.BasicApp.CodeGeneration.Domain.Generation;
 using XiHan.BasicApp.CodeGeneration.Domain.Repositories;
 using XiHan.BasicApp.Saas.Domain.Repositories;
+using MenuType = XiHan.BasicApp.Saas.Domain.Entities.MenuType;
 
 namespace XiHan.BasicApp.CodeGeneration.Infrastructure.Generation;
 
@@ -27,9 +30,11 @@ public sealed partial class CodeGenerationEngine(
     ITemplateRendererResolver rendererResolver,
     ITypeMappingProvider typeMappingProvider,
     IEnumTypeCatalog enumTypeCatalog,
+    IEntityMetadataCatalog entityCatalog,
     IGeneratedArtifactPackager packager,
     IGeneratedArtifactWriter artifactWriter,
     IPermissionRepository permissionRepository,
+    IMenuRepository menuRepository,
     ILogger<CodeGenerationEngine> logger) : ICodeGenerationEngine
 {
     private readonly ICodeGenTableRepository _tableRepository = tableRepository;
@@ -38,9 +43,11 @@ public sealed partial class CodeGenerationEngine(
     private readonly ITemplateRendererResolver _rendererResolver = rendererResolver;
     private readonly ITypeMappingProvider _typeMappingProvider = typeMappingProvider;
     private readonly IEnumTypeCatalog _enumTypeCatalog = enumTypeCatalog;
+    private readonly IEntityMetadataCatalog _entityCatalog = entityCatalog;
     private readonly IGeneratedArtifactPackager _packager = packager;
     private readonly IGeneratedArtifactWriter _artifactWriter = artifactWriter;
     private readonly IPermissionRepository _permissionRepository = permissionRepository;
+    private readonly IMenuRepository _menuRepository = menuRepository;
     private readonly ILogger<CodeGenerationEngine> _logger = logger;
 
     /// <summary>
@@ -74,21 +81,22 @@ public sealed partial class CodeGenerationEngine(
                 result.Package = await _packager.PackAsync(result.Artifacts, cancellationToken);
                 break;
 
-            case GenType.CustomPath:
-                // 受控落盘：默认禁用 + 白名单根目录 + 路径穿越校验（fail-closed），审计经生成历史留痕
+            case GenType.Project:
+                // 生成到项目：后端写进与命名空间同名的模块项目，前端写进前端工程（位置由配置推导，默认关闭），审计经生成历史留痕
                 var table = await _tableRepository.GetByIdAsync(request.TableId, cancellationToken);
-                var writeResult = await _artifactWriter.WriteAsync(result.Artifacts, table?.GenPath, cancellationToken);
+                var writeResult = await _artifactWriter.WriteToProjectAsync(result.Artifacts, table?.Namespace, cancellationToken);
                 if (!writeResult.Success)
                 {
-                    return GenerationResult.Fail(writeResult.Message ?? "自定义路径落盘失败。");
+                    return GenerationResult.Fail(writeResult.Message ?? "生成到项目失败。");
                 }
 
                 result.WrittenCount = writeResult.WrittenCount;
                 result.SkippedPaths = writeResult.SkippedPaths;
+                result.TargetRoots = writeResult.TargetRoots;
 
                 _logger.LogInformation(
-                    "代码生成落盘完成：TableId={TableId}，路径={Path}，写入={Written}，跳过={Skipped}（手动文件已存在）",
-                    request.TableId, table?.GenPath, writeResult.WrittenCount, writeResult.SkippedCount);
+                    "代码生成到项目完成：TableId={TableId}，位置={Roots}，写入={Written}，跳过={Skipped}（手动文件已存在）",
+                    request.TableId, string.Join("；", writeResult.TargetRoots), writeResult.WrittenCount, writeResult.SkippedCount);
                 break;
 
             default:
@@ -130,6 +138,12 @@ public sealed partial class CodeGenerationEngine(
         // 生成范围裁剪：按模板分组前缀（backend-* / frontend-*）过滤
         templates = FilterByScope(templates, table.GenerationScope);
 
+        // 表由手写实体建出：沿用那个实体，不再生成实体（否则与它重复定义）
+        if (context.ExistingEntityNamespace is not null)
+        {
+            templates = [.. templates.Where(template => template.TemplateCode is not (EntityTemplateCode or EntityManualTemplateCode))];
+        }
+
         if (templates.Count == 0)
         {
             return GenerationResult.Fail("未找到可用模板（请检查模板类型/编码、启用状态与生成范围）。");
@@ -162,7 +176,7 @@ public sealed partial class CodeGenerationEngine(
                 return GenerationResult.Fail($"模板 {template.TemplateCode}（{template.TemplateName}）渲染失败：{ex.Message}");
             }
 
-            artifacts.Add(new GeneratedArtifact(relativePath, fileName, content, template.TemplateCode, template.WriteMode));
+            artifacts.Add(new GeneratedArtifact(relativePath, fileName, content, template.TemplateCode, template.WriteMode, SideOf(template.TemplateGroup)));
         }
 
         // 二阶产物：菜单/权限接线代码（待并入源码 → 重建库经既有 Seeder 链生效，非运行时写库）。
@@ -194,6 +208,12 @@ public sealed partial class CodeGenerationEngine(
     }
 
     /// <summary>
+    /// 模板产物的归属：生成到项目时据此决定写进后端项目还是前端工程
+    /// </summary>
+    private static ArtifactSide? SideOf(string? templateGroup)
+        => IsBackend(templateGroup) ? ArtifactSide.Backend : IsFrontend(templateGroup) ? ArtifactSide.Frontend : null;
+
+    /// <summary>
     /// 模板分组是否属后端
     /// </summary>
     private static bool IsBackend(string? templateGroup)
@@ -204,28 +224,6 @@ public sealed partial class CodeGenerationEngine(
     /// </summary>
     private static bool IsFrontend(string? templateGroup)
         => templateGroup?.Contains("frontend", StringComparison.OrdinalIgnoreCase) == true;
-
-    /// <summary>
-    /// 可裁剪的写操作全集（读取基线 list/detail 始终生成，不在此列）
-    /// </summary>
-    private static readonly string[] CrudActions = ["create", "update", "delete"];
-
-    /// <summary>
-    /// 归一化包含操作：null/空（未配置或全选）→ 全开；非空则按规范集合过滤
-    /// </summary>
-    private static IReadOnlyList<string> NormalizeEnabledActions(string? raw)
-    {
-        if (string.IsNullOrWhiteSpace(raw))
-        {
-            return CrudActions;
-        }
-
-        var selected = raw
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Select(action => action.ToLowerInvariant())
-            .ToHashSet();
-        return [.. CrudActions.Where(selected.Contains)];
-    }
 
     /// <summary>
     /// 查已存在的权限码（生成前的全局唯一性预检；仅用于 README 顶部醒目告警）
@@ -281,7 +279,7 @@ public sealed partial class CodeGenerationEngine(
             FunctionName = table.FunctionName,
             Author = table.Author,
             TemplateType = table.TemplateType,
-            EnabledActions = NormalizeEnabledActions(table.EnabledActions),
+            EnabledActions = CodeGenActions.Normalize(table.EnabledActions),
             Columns = columnSchemas,
             PrimaryKey = columnSchemas.FirstOrDefault(column => column.IsPrimaryKey)
                 ?? columnSchemas.FirstOrDefault(column => column.ColumnName == table.PrimaryKeyColumn),
@@ -291,10 +289,27 @@ public sealed partial class CodeGenerationEngine(
                 ["TreeParentColumn"] = table.TreeParentColumn,
                 ["TreeNameColumn"] = table.TreeNameColumn,
                 ["MasterTableId"] = table.MasterTableId?.ToString(),
-                ["MasterForeignKey"] = table.MasterForeignKey,
-                ["ParentMenuId"] = table.ParentMenuId?.ToString()
+                ["MasterForeignKey"] = table.MasterForeignKey
             }
         };
+
+        // 表已有手写实体（实体建表的常规路径）：沿用它，类名须一致，生成的代码按它的命名空间引用
+        var existingEntity = FindHandWrittenEntity(table.TableName);
+        if (existingEntity is not null)
+        {
+            if (!string.Equals(existingEntity.Name, table.ClassName, StringComparison.Ordinal))
+            {
+                return (null, $"表 {table.TableName} 已有实体 {existingEntity.FullName}，表配置的类名却是 {table.ClassName}：生成的代码沿用这个实体，请把类名改成 {existingEntity.Name}。");
+            }
+
+            context.ExistingEntityNamespace = existingEntity.Namespace;
+        }
+
+        var parentMenuError = await ResolveParentMenuAsync(table, context, cancellationToken);
+        if (parentMenuError is not null)
+        {
+            return (null, parentMenuError);
+        }
 
         // 页面码是表级推导，在这里一次校验：模块名是自由输入，填中文或带空格照样能两端一致地产出，
         // 但前端权限码卫生门禁的码形正则匹配不上，整页按钮码会被静默跳过检查。
@@ -302,7 +317,41 @@ public sealed partial class CodeGenerationEngine(
         var pageCode = MenuPermissionArtifactShared.PageCode(context);
         if (!PageCodeRegex().IsMatch(pageCode))
         {
-            return (context, $"表 {table.TableName} 推导出的页面码 {pageCode} 不合规：模块名须为 [a-z][a-z0-9_-]*，请在表配置里改成英文模块名。");
+            return (null, $"表 {table.TableName} 推导出的页面码 {pageCode} 不合规：模块名须为 [a-z][a-z0-9_-]*，请在表配置里改成英文模块名。");
+        }
+
+        // 存量配置可能早于保存侧校验写入，生成前再判一次，不产出调不通的导入按钮
+        var actionConflict = CodeGenActions.FindConflict(context.EnabledActions);
+        if (actionConflict is not null)
+        {
+            return (null, $"表 {table.TableName} 的{actionConflict}");
+        }
+
+        var dictError = ValidateDictSelectors(table, columnSchemas);
+        if (dictError is not null)
+        {
+            return (null, dictError);
+        }
+
+        var relationError = await ResolveRelationsAsync(table, columnSchemas, cancellationToken);
+        if (relationError is not null)
+        {
+            return (null, relationError);
+        }
+
+        var uniqueError = ValidateUniqueColumns(table, columnSchemas);
+        if (uniqueError is not null)
+        {
+            return (null, uniqueError);
+        }
+
+        if (context.EnabledActions.Contains(CodeGenActions.Status))
+        {
+            var statusError = ResolveStatusColumn(table, columnSchemas, context);
+            if (statusError is not null)
+            {
+                return (null, statusError);
+            }
         }
 
         if (table.TemplateType == TemplateType.Tree)
@@ -485,6 +534,7 @@ public sealed partial class CodeGenerationEngine(
             IsIdentity = column.IsIdentity,
             IsNullable = column.IsNullable,
             IsRequired = column.IsRequired,
+            IsUnique = column.IsUnique,
             IsList = column.IsList,
             IsInsert = column.IsInsert,
             IsEdit = column.IsEdit,
@@ -496,7 +546,9 @@ public sealed partial class CodeGenerationEngine(
             DictSelectorType = column.DictSelectorType,
             DictCode = column.DictCode,
             EnumTypeName = column.EnumTypeName,
-            ConstValues = column.ConstValues
+            ConstValues = column.ConstValues,
+            RelationTableId = column.RelationTableId,
+            RelationLabelColumn = column.RelationLabelColumn
         };
 
         // 列配置未填类型时，按 DB 类型回退映射（导入流程会预填，此处为兜底）
@@ -528,14 +580,6 @@ public sealed partial class CodeGenerationEngine(
     /// </remarks>
     private void ResolveEnumFacts(SysCodeGenTable table, SysCodeGenTableColumn column, ColumnSchema schema)
     {
-        if (schema.DictSelectorType == DictSelectorType.DictSelector)
-        {
-            _logger.LogWarning(
-                "表 {Table} 的列 {Column} 配置为字典选择器（字典码 {DictCode}），前端尚无字典选项通道，生成的下拉将是禁用占位项。",
-                table.TableName, column.ColumnName, schema.DictCode);
-            return;
-        }
-
         if (schema.DictSelectorType != DictSelectorType.EnumSelector)
         {
             return;
@@ -554,6 +598,275 @@ public sealed partial class CodeGenerationEngine(
         _logger.LogWarning(
             "表 {Table} 的列 {Column} 配置为枚举选择器，但类型 {EnumType} 未解析、或 C# 类型仍为 {CSharpType}；本次生成的下拉不接选项来源，请对该表执行重新同步。",
             table.TableName, column.ColumnName, schema.EnumTypeName, schema.CSharpType);
+    }
+
+    /// <summary>
+    /// 校验字典选择器列
+    /// </summary>
+    /// <remarks>
+    /// 字典下拉按字典编码取选项，选中值是字典项编码（文本）。没填字典编码会产出一个取不到选项的下拉，
+    /// 非文本列（含 long 标识）装不下字典项编码、提交必被后端拒，两者都在生成期挡下。
+    /// 基类托管列与主键不进任何产物，不校验。
+    /// </remarks>
+    private static string? ValidateDictSelectors(SysCodeGenTable table, IReadOnlyList<ColumnSchema> columns)
+    {
+        foreach (var column in columns)
+        {
+            if (column.DictSelectorType != DictSelectorType.DictSelector
+                || column.IsPrimaryKey
+                || GeneratedColumnNames.IsBaseColumn(column.ColumnName))
+            {
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(column.DictCode))
+            {
+                return $"表 {table.TableName} 的列 {column.ColumnName} 选了字典选择器但没填字典编码，请在列配置里选择字典。";
+            }
+
+            if (column.CSharpType.TrimEnd('?') != "string")
+            {
+                return $"表 {table.TableName} 的列 {column.ColumnName} 选了字典选择器，但 C# 类型是 {column.CSharpType}：字典项按编码（文本）存储，列须为 string。";
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// 实体模板编码（自动文件 / 手动文件）：表已有手写实体时不生成
+    /// </summary>
+    private const string EntityTemplateCode = "backend.entity";
+
+    private const string EntityManualTemplateCode = "backend.entity.manual";
+
+    /// <summary>
+    /// 生成器给生成的实体打的工具名（<see cref="GeneratedCodeAttribute"/>），据此区分生成的与手写的
+    /// </summary>
+    private const string GeneratedCodeTool = "XiHan.CodeGen";
+
+    /// <summary>
+    /// 解析父菜单（fail-closed）：表配置存菜单主键，生成的菜单登记按菜单码挂靠
+    /// </summary>
+    /// <remarks>
+    /// 只能挂在平台目录下：页面挂在页面或按钮下没有意义，租户菜单不进平台种子。目录须有菜单码，菜单登记靠它找父级。
+    /// 选的若是在菜单管理里手建的目录，它只存在于当前库；新建的库里没有它，汇总菜单种子会因找不到父菜单报错。
+    /// </remarks>
+    private async Task<string?> ResolveParentMenuAsync(SysCodeGenTable table, CodeGenerationContext context, CancellationToken cancellationToken)
+    {
+        if (table.ParentMenuId is not { } parentMenuId)
+        {
+            return null;
+        }
+
+        var parent = await _menuRepository.GetByIdAsync(parentMenuId, cancellationToken);
+        if (parent is null || parent.TenantId != 0)
+        {
+            return $"表 {table.TableName} 配置的父菜单（{parentMenuId}）不存在或不是平台菜单：请在表配置里重新选择父菜单。";
+        }
+
+        if (parent.MenuType != MenuType.Directory)
+        {
+            return $"表 {table.TableName} 配置的父菜单「{parent.MenuName}」不是目录：页面只能挂在目录下，请重新选择。";
+        }
+
+        if (string.IsNullOrWhiteSpace(parent.MenuCode))
+        {
+            return $"表 {table.TableName} 配置的父菜单「{parent.MenuName}」没有菜单码：菜单登记按菜单码找父级，请先在菜单管理里给它填菜单码。";
+        }
+
+        context.ParentMenuCode = parent.MenuCode;
+        return null;
+    }
+
+    /// <summary>
+    /// 找表对应的手写实体
+    /// </summary>
+    /// <remarks>
+    /// 本仓库的表一般由实体自动建出，导入后实体已在代码里，生成时沿用它。
+    /// 生成器产出的实体带 <see cref="GeneratedCodeAttribute"/>（工具名 XiHan.CodeGen），那是生成器自己的，照常重新生成；
+    /// 外部库的表没有实体，同样照常生成。
+    /// </remarks>
+    private Type? FindHandWrittenEntity(string tableName)
+    {
+        if (!_entityCatalog.TryGetEntityType(tableName, out var entityType))
+        {
+            return null;
+        }
+
+        var generated = entityType.GetCustomAttributes<GeneratedCodeAttribute>(inherit: false)
+            .Any(attribute => attribute.Tool == GeneratedCodeTool);
+        return generated ? null : entityType;
+    }
+
+    /// <summary>
+    /// 状态列的枚举短名（平台统一的启用/停用枚举）
+    /// </summary>
+    private const string StatusEnumName = "EnableStatus";
+
+    /// <summary>
+    /// 解析状态切换用的状态列（fail-closed）
+    /// </summary>
+    /// <remarks>
+    /// 取表里已解析成 EnableStatus 枚举的业务列：有名为 Status 的就用它，否则须恰好一列。
+    /// 找不到或有多列又没有名为 Status 的，都不猜，直接报错。
+    /// </remarks>
+    private static string? ResolveStatusColumn(SysCodeGenTable table, IReadOnlyList<ColumnSchema> columnSchemas, CodeGenerationContext context)
+    {
+        var candidates = columnSchemas
+            .Where(column => column.EnumTypeShortName == StatusEnumName
+                && !column.IsPrimaryKey
+                && !GeneratedColumnNames.IsBaseColumn(column.ColumnName))
+            .ToList();
+        var status = candidates.FirstOrDefault(column => column.CSharpProperty == "Status")
+            ?? (candidates.Count == 1 ? candidates[0] : null);
+        if (status is not null)
+        {
+            // 行内启停按列表行上的状态值决定是启用还是停用，状态列必须进列表
+            if (!status.IsList)
+            {
+                return $"表 {table.TableName} 的状态列 {status.ColumnName} 没有勾选「列表」：行内启用/停用要按列表里的状态值切换，请在列配置里勾选。";
+            }
+
+            context.StatusColumn = status;
+            return null;
+        }
+
+        return candidates.Count == 0
+            ? $"表 {table.TableName} 勾选了状态切换，但没有 {StatusEnumName} 类型的状态列：请把状态列的选项来源设为枚举 {StatusEnumName} 并重新同步表结构。"
+            : $"表 {table.TableName} 有多个 {StatusEnumName} 列（{string.Join("、", candidates.Select(column => column.ColumnName))}），无法确定状态切换用哪一列：把状态列的属性名定为 Status。";
+    }
+
+    /// <summary>
+    /// 校验唯一列：二进制与布尔列做不了唯一校验
+    /// </summary>
+    private static string? ValidateUniqueColumns(SysCodeGenTable table, IReadOnlyList<ColumnSchema> columnSchemas)
+    {
+        foreach (var column in columnSchemas)
+        {
+            if (!column.IsUnique || column.IsPrimaryKey || GeneratedColumnNames.IsBaseColumn(column.ColumnName))
+            {
+                continue;
+            }
+
+            var type = column.CSharpType.TrimEnd('?');
+            if (CSharpTypeFacts.IsBinary(column.CSharpType) || type is "bool" or "Boolean")
+            {
+                return $"表 {table.TableName} 的列 {column.ColumnName} 勾了唯一，但 {column.CSharpType} 类型做不了唯一校验，请取消。";
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// 解析关联选择器列的目标（fail-closed）
+    /// </summary>
+    /// <remarks>
+    /// 本列存被关联记录的主键，须为 long；显示列须为目标表的文本列；关联树要求目标是配好父级列的树表，
+    /// 显示列缺省取其名称列。任何一项对不上都在生成期挡下，不产出编译不过或下拉取不到数的代码。
+    /// 目标可以是本表（自关联，如「上级负责人」指向同一张人员表）。
+    /// </remarks>
+    private async Task<string?> ResolveRelationsAsync(
+        SysCodeGenTable table,
+        IReadOnlyList<ColumnSchema> columnSchemas,
+        CancellationToken cancellationToken)
+    {
+        foreach (var column in columnSchemas)
+        {
+            if (column.DictSelectorType is not (DictSelectorType.TableSelector or DictSelectorType.TreeSelector)
+                || column.IsPrimaryKey
+                || GeneratedColumnNames.IsBaseColumn(column.ColumnName))
+            {
+                continue;
+            }
+
+            var where = $"表 {table.TableName} 的列 {column.ColumnName}";
+            if (column.CSharpType.TrimEnd('?') != "long")
+            {
+                return $"{where} 选了关联选择器，但 C# 类型是 {column.CSharpType}：关联按被关联记录的主键存储，列须为 long。";
+            }
+
+            if (column.RelationTableId is not > 0)
+            {
+                return $"{where} 选了关联选择器但没选关联的表，请在列配置里选择。";
+            }
+
+            var target = column.RelationTableId == table.BasicId
+                ? table
+                : await _tableRepository.GetByIdAsync(column.RelationTableId.Value, cancellationToken);
+            if (target is null)
+            {
+                return $"{where} 关联的表配置（{column.RelationTableId}）不存在，请在列配置里重新选择。";
+            }
+
+            var targetColumns = target.BasicId == table.BasicId
+                ? columnSchemas
+                : [.. (await _columnRepository.GetByTableIdAsync(target.BasicId, cancellationToken)).Select(targetColumn => MapColumn(target, targetColumn))];
+
+            var isTree = column.DictSelectorType == DictSelectorType.TreeSelector;
+            string? parentProperty = null;
+            if (isTree)
+            {
+                if (target.TemplateType != TemplateType.Tree || string.IsNullOrWhiteSpace(target.TreeParentColumn))
+                {
+                    return $"{where} 选了关联树，但关联的表 {target.TableName} 不是树表：它的表配置须为树表模板并选好父级列。";
+                }
+
+                var parent = FindColumn(targetColumns, target.TreeParentColumn);
+                if (parent is null || parent.CSharpType.TrimEnd('?') != "long")
+                {
+                    return $"{where} 关联的树表 {target.TableName} 的父级列 {target.TreeParentColumn} 不在列配置中或不是 long 列。";
+                }
+
+                parentProperty = parent.CSharpProperty;
+            }
+
+            var labelColumn = string.IsNullOrWhiteSpace(column.RelationLabelColumn)
+                ? isTree ? target.TreeNameColumn : null
+                : column.RelationLabelColumn;
+            if (string.IsNullOrWhiteSpace(labelColumn))
+            {
+                return $"{where} 选了关联表但没选显示列，请在列配置里选择。";
+            }
+
+            var label = FindColumn(targetColumns, labelColumn);
+            if (label is null)
+            {
+                return $"{where} 的显示列 {labelColumn} 不在关联的表 {target.TableName} 的列配置中。";
+            }
+
+            if (label.CSharpType.TrimEnd('?') != "string")
+            {
+                return $"{where} 的显示列 {labelColumn} 是 {label.CSharpType}：下拉按文本显示，显示列须为 string。";
+            }
+
+            var targetNamespace = MenuPermissionArtifactShared.ResolveNamespace(new CodeGenerationContext
+            {
+                ClassName = target.ClassName,
+                Namespace = target.Namespace,
+                ModuleName = target.ModuleName
+            });
+            column.Relation = new RelationTarget
+            {
+                TableId = target.BasicId,
+                TableName = target.TableName,
+                TableComment = target.TableComment,
+                ClassName = target.ClassName,
+                // 目标表已有实体时用它的真实类型（实体建表的常规路径），否则按目标表配置推导生成后的位置
+                EntityTypeQualified = _entityCatalog.TryGetEntityType(target.TableName, out var targetEntity)
+                    ? targetEntity.FullName!
+                    : $"{targetNamespace}.Domain.Entities.{target.ClassName}",
+                LabelProperty = label.CSharpProperty,
+                ParentProperty = parentProperty,
+                IsTree = isTree
+            };
+        }
+
+        return null;
+
+        static ColumnSchema? FindColumn(IEnumerable<ColumnSchema> candidates, string? columnName)
+            => candidates.FirstOrDefault(candidate => string.Equals(candidate.ColumnName, columnName, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

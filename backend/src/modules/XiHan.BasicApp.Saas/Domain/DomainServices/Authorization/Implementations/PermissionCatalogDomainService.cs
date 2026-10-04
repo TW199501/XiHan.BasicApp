@@ -4,6 +4,7 @@
 using System.Text.Json;
 using XiHan.BasicApp.Saas.Domain.Entities;
 using XiHan.BasicApp.Saas.Domain.Enums;
+using XiHan.BasicApp.Saas.Domain.Permissions;
 using XiHan.BasicApp.Saas.Domain.Repositories;
 using XiHan.Framework.MultiTenancy.Abstractions;
 
@@ -16,8 +17,6 @@ public sealed class PermissionCatalogDomainService
     : IPermissionCatalogDomainService
 {
     private readonly ICurrentTenant _currentTenant;
-
-    private readonly IFieldLevelSecurityRepository _fieldLevelSecurityRepository;
 
     private readonly IMenuRepository _menuRepository;
 
@@ -50,7 +49,6 @@ public sealed class PermissionCatalogDomainService
         IMenuRepository menuRepository,
         IPermissionDelegationRepository permissionDelegationRepository,
         IPermissionRequestRepository permissionRequestRepository,
-        IFieldLevelSecurityRepository fieldLevelSecurityRepository,
         ICurrentTenant currentTenant)
     {
         _permissionRepository = permissionRepository;
@@ -62,7 +60,6 @@ public sealed class PermissionCatalogDomainService
         _menuRepository = menuRepository;
         _permissionDelegationRepository = permissionDelegationRepository;
         _permissionRequestRepository = permissionRequestRepository;
-        _fieldLevelSecurityRepository = fieldLevelSecurityRepository;
         _currentTenant = currentTenant;
     }
 
@@ -101,6 +98,7 @@ public sealed class PermissionCatalogDomainService
             PermissionDescription = NormalizeNullable(command.PermissionDescription),
             Tags = NormalizeTags(command.Tags),
             IsRequireAudit = command.IsRequireAudit,
+            Side = command.Side,
             Priority = command.Priority,
             Status = command.Status,
             Sort = command.Sort,
@@ -142,6 +140,7 @@ public sealed class PermissionCatalogDomainService
         permission.PermissionDescription = NormalizeNullable(command.PermissionDescription);
         permission.Tags = NormalizeTags(command.Tags);
         permission.IsRequireAudit = command.IsRequireAudit;
+        permission.Side = command.Side;
         permission.Priority = command.Priority;
         permission.Sort = command.Sort;
         permission.Remark = NormalizeNullable(command.Remark);
@@ -495,6 +494,18 @@ public sealed class PermissionCatalogDomainService
         ValidatePermissionTargetInput(command.PermissionType, command.ResourceId, command.OperationId);
         ValidateCommonInput(command.PermissionName, command.PermissionDescription, command.Tags, command.Remark);
         ValidateEnum(command.Status, nameof(command.Status));
+        ValidateSide(command.Side);
+    }
+
+    /// <summary>
+    /// 权限必须声明作用侧：未声明的不静默落成两侧，否则平台能力会被放进租户
+    /// </summary>
+    private static void ValidateSide(PermissionSide side)
+    {
+        if (!side.IsDeclared())
+        {
+            throw new InvalidOperationException("权限必须声明作用侧（平台 / 租户 / 两侧）。");
+        }
     }
 
     private static void ValidateEnum<TEnum>(TEnum value, string paramName)
@@ -679,6 +690,7 @@ public sealed class PermissionCatalogDomainService
         }
 
         ValidateCommonInput(command.PermissionName, command.PermissionDescription, command.Tags, command.Remark);
+        ValidateSide(command.Side);
     }
 
     private async Task EnsureOperationNotReferencedAsync(long operationId, CancellationToken cancellationToken)
@@ -720,11 +732,6 @@ public sealed class PermissionCatalogDomainService
         {
             throw new InvalidOperationException("权限已被权限申请引用，不能删除。");
         }
-
-        if (await _fieldLevelSecurityRepository.AnyAsync(policy => policy.TargetType == FieldSecurityTargetType.Permission && policy.TargetId == permissionId, cancellationToken))
-        {
-            throw new InvalidOperationException("权限已被字段级安全策略引用，不能删除。");
-        }
     }
 
     private async Task EnsureResourceNotReferencedAsync(long resourceId, CancellationToken cancellationToken)
@@ -732,11 +739,6 @@ public sealed class PermissionCatalogDomainService
         if (await _permissionRepository.AnyAsync(permission => permission.ResourceId == resourceId, cancellationToken))
         {
             throw new InvalidOperationException("资源已被权限定义引用，不能删除。");
-        }
-
-        if (await _fieldLevelSecurityRepository.AnyAsync(policy => policy.ResourceId == resourceId, cancellationToken))
-        {
-            throw new InvalidOperationException("资源已被字段级安全策略引用，不能删除。");
         }
     }
 

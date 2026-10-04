@@ -1,6 +1,7 @@
 // Copyright (c) 2021-Present XiHanFun and contributors.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using XiHan.BasicApp.Saas.Application.Authorization;
@@ -11,16 +12,18 @@ using XiHan.BasicApp.Saas.Application.Exporting;
 using XiHan.BasicApp.Saas.Application.QueryServices;
 using XiHan.BasicApp.Saas.Application.Services;
 using XiHan.BasicApp.Saas.Domain.DomainServices;
+using XiHan.BasicApp.Saas.Domain.Entities;
 using XiHan.BasicApp.Saas.Domain.Numbering;
+using XiHan.BasicApp.Saas.Domain.Repositories;
 using XiHan.BasicApp.Saas.Infrastructure.Auth;
 using XiHan.BasicApp.Saas.Infrastructure.Exporting;
 using XiHan.BasicApp.Saas.Infrastructure.Upgrade;
 using XiHan.BasicApp.Saas.Infrastructure.Logging;
 using XiHan.BasicApp.Saas.Infrastructure.Messaging;
 using XiHan.BasicApp.Saas.Infrastructure.MultiTenancy;
+using XiHan.BasicApp.Saas.Infrastructure.Repositories;
 using XiHan.BasicApp.Saas.Infrastructure.Security;
-using XiHan.BasicApp.Saas.Infrastructure.Seeders.Demo;
-using XiHan.BasicApp.Saas.Infrastructure.Seeders.System;
+using XiHan.BasicApp.Saas.Infrastructure.Seeders;
 using XiHan.BasicApp.Saas.Infrastructure.Tasks;
 using XiHan.Framework.Auditing;
 using XiHan.Framework.Auditing.Writers;
@@ -36,6 +39,7 @@ using XiHan.Framework.Bot.Telegram.Abstractions;
 using XiHan.Framework.Bot.Telegram.Extensions.DependencyInjection;
 using XiHan.Framework.Bot.WeCom.Abstractions;
 using XiHan.Framework.Data.Extensions.DependencyInjection;
+using XiHan.Framework.Data.SqlSugar.Initializers;
 using XiHan.Framework.Data.SqlSugar.Tenanting;
 using XiHan.Framework.EventBus.Local;
 using XiHan.Framework.Messaging.Abstractions;
@@ -79,6 +83,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IUpgradeLockProvider, SaasUpgradeLockProvider>();
         services.AddScoped<IUpgradeTenantProvider, SaasUpgradeTenantProvider>();
         services.AddScoped<IUpgradeMigrationExecutor, SaasUpgradeMigrationExecutor>();
+        // 升级脚本先于种子执行：存量表的新列补齐后，种子才能按最新实体读写
+        services.AddScoped<IDbSchemaUpgrader, SaasSchemaUpgrader>();
 
         // 依赖仓储的领域服务（跟随仓储生命周期，注册为 Scoped）
         services.AddScoped<IAuthenticationDomainService, AuthenticationDomainService>();
@@ -92,6 +98,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IConstraintRuleDomainService, ConstraintRuleDomainService>();
         services.AddScoped<IConstraintRuleEnforcementDomainService, ConstraintRuleEnforcementDomainService>();
         services.AddScoped<IFieldLevelSecurityDomainService, FieldLevelSecurityDomainService>();
+        services.AddSingleton<IFieldSecurityEntityCatalog, FieldSecurityEntityCatalog>();
         services.AddScoped<IFileDomainService, FileDomainService>();
         services.AddScoped<IStorageConfigDomainService, StorageConfigDomainService>();
         services.AddSingleton<IStorageSecretProtector, DataProtectionStorageSecretProtector>();
@@ -103,6 +110,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<SaasTenantConnectionProvider>();
         services.AddSingleton<ISqlSugarTenantConnectionProvider>(sp => sp.GetRequiredService<SaasTenantConnectionProvider>());
         services.AddSingleton<ITenantConnectionCacheInvalidator>(sp => sp.GetRequiredService<SaasTenantConnectionProvider>());
+        // 跨租户后台作业逐作用域（平台与每个数据可达的租户）切入执行，不靠「无租户上下文看全部」
+        services.AddScoped<ITenantDataScopeRunner, TenantDataScopeRunner>();
         services.AddScoped<IConfigDomainService, ConfigDomainService>();
         // 系统配置加密值保护器（Data Protection，独立 Purpose；IsEncrypted 行写侧加密/读侧解密）
         services.AddSingleton<IConfigValueSecretProtector, DataProtectionConfigValueSecretProtector>();
@@ -192,6 +201,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IMessageDeliveryService, MessageDeliveryService>();
         services.AddScoped<ILoginThrottleService, LoginThrottleService>();
         services.AddScoped<ICaptchaService, CaptchaService>();
+        // 两步验证票据：首段通过图形验证码后签发，后续阶段凭票免图形验证码（图形码消费即销毁，无法重校验）
+        services.AddScoped<ITwoFactorTicketService, TwoFactorTicketService>();
         // 通知多渠道扇出：发布后按投递渠道扇出到 邮箱/短信（发件箱异步）与 机器人（UoW 提交后广播）
         services.AddScoped<INotificationFanoutService, NotificationFanoutService>();
         services.AddScoped<IMessageTemplateRenderer, MessageTemplateRenderer>();
@@ -208,6 +219,8 @@ public static class ServiceCollectionExtensions
         // Telegram 机器人配置/平台设置存储：以数据库实现覆盖框架默认 Options 实现（框架模块 TryAdd 先注册，故须 Replace）
         services.Replace(ServiceDescriptor.Singleton<ITelegramBotConfigStore, SaasTelegramBotConfigStore>());
         services.Replace(ServiceDescriptor.Singleton<ITelegramBotSettingsStore, SaasTelegramBotSettingsStore>());
+        // Telegram 广播通道（机器人通知的一个提供者）：只在平台上下文生效，租户的通知不借平台的机器人
+        services.Replace(ServiceDescriptor.Singleton<ITelegramConfigStore, SaasTelegramConfigStore>());
         // Telegram 分布式三件套（多实例安全）：Update 幂等去重（Redis SET NX，未启用 Redis 回退进程内）/
         // 会话状态（分布式缓存）/ 出站审计（月分表落库，异常吞掉不阻断发送）——均覆盖框架默认实现，故须 Replace
         services.Replace(ServiceDescriptor.Singleton<ITelegramUpdateDeduplicator, SaasTelegramUpdateDeduplicator>());
@@ -218,6 +231,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IFileTransferService, FileTransferService>();
         services.AddScoped<IAuthTokenIssueService, AuthTokenIssueService>();
         services.AddScoped<IImpersonationPolicyService, ImpersonationPolicyService>();
+        // 角色继承读取：继承链与继承来的权限，角色继承查询与角色详情聚合共用
+        services.AddScoped<IRoleInheritanceReader, RoleInheritanceReader>();
         // OAuth2 授权服务端协议服务：普通 Scoped（非 [DynamicApi]/不被代理），供同意页 AppService 与匿名 /connect/token 端点直接调用
         services.AddScoped<IOAuthServerService, OAuthServerService>();
         // OpenAPI 安全客户端存储：以数据库凭证（SysUserApiCredential）实现覆盖框架默认配置源实现
@@ -229,7 +244,15 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IVerificationThrottleService, VerificationThrottleService>();
         services.AddScoped<IProfileVerificationService, ProfileVerificationService>();
         services.AddScoped<IFieldSecurityService, FieldSecurityService>();
+        services.AddScoped<IFieldSecurityEntityReader, FieldSecurityEntityReader>();
+        services.AddSingleton<IFieldSecurityDtoCatalog, FieldSecurityDtoCatalog>();
+        // 字段安全的输出边界：所有接口的响应统一打码，排在响应缓存外层（见过滤器说明）
+        services.AddScoped<FieldSecurityResponseFilter>();
+        services.Configure<MvcOptions>(options => options.Filters.AddService<FieldSecurityResponseFilter>(FieldSecurityResponseFilter.FilterOrder));
         services.AddScoped<ISuperAdminProtector, SuperAdminProtector>();
+        services.AddScoped<IOperationPermissionGuard, OperationPermissionGuard>();
+        services.AddScoped<IUserDirectory, UserDirectory>();
+        services.AddScoped<IAccountScope, AccountScope>();
         services.AddScoped<ICacheManagementService, CacheManagementService>();
         services.AddScoped<ISaasConfigurationService, SaasConfigurationService>();
         services.AddScoped<ISaasCacheInvalidator, SaasCacheInvalidator>();
@@ -239,6 +262,66 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<INumberGenerator, NumberGenerator>();
         return services;
+    }
+
+    /// <summary>
+    /// 登记可配置字段安全的实体（各模块登记自己的实体）
+    /// </summary>
+    /// <remarks>
+    /// 登记即承诺：该实体的查询服务返回前要打码并门控查询条件，应用服务新建、修改前要做写校验，否则配出的规则不生效（有测试钉住）。
+    /// </remarks>
+    /// <param name="services">服务集合</param>
+    /// <param name="configure">登记动作</param>
+    /// <returns>服务集合</returns>
+    public static IServiceCollection AddFieldSecurityEntities(this IServiceCollection services, Action<FieldSecurityEntityOptions> configure)
+    {
+        ArgumentNullException.ThrowIfNull(configure);
+        services.Configure(configure);
+        return services;
+    }
+
+    /// <summary>
+    /// 登记 SaaS 模块可配置字段安全的实体
+    /// </summary>
+    /// <param name="services">服务集合</param>
+    /// <returns>服务集合</returns>
+    public static IServiceCollection AddSaasFieldSecurityEntities(this IServiceCollection services)
+    {
+        return services.AddFieldSecurityEntities(entities => entities
+            .Add<SysUser>()
+            .Add<SysUserSession>()
+            .Add<SysRole>()
+            .Add<SysPermission>()
+            .Add<SysConstraintRule>()
+            .Add<SysPosition>()
+            .Add<SysTenant>()
+            .Add<SysTenantEdition>()
+            .Add<SysOAuthApp>()
+            .Add<SysConfig>()
+            .Add<SysDict>()
+            .Add<SysDictItem>()
+            .Add<SysVersion>()
+            .Add<SysMigrationHistory>()
+            .Add<SysFile>()
+            .Add<SysFileStorage>()
+            .Add<SysStorageConfig>()
+            .Add<SysNumberingRule>()
+            .Add<SysNumberingAllocation>()
+            .Add<SysReview>()
+            .Add<SysNotification>()
+            .Add<SysMessageTemplate>()
+            .Add<SysEmail>()
+            .Add<SysSms>()
+            .Add<SysEmailConfig>()
+            .Add<SysSmsConfig>()
+            .Add<SysBotConfig>()
+            .Add<SysTelegramBot>()
+            .Add<SysAccessLog>()
+            .Add<SysOpenApiLog>()
+            .Add<SysOperationLog>()
+            .Add<SysLoginLog>()
+            .Add<SysExceptionLog>()
+            .Add<SysDiffLog>());
     }
 
     /// <summary>
@@ -272,8 +355,6 @@ public static class ServiceCollectionExtensions
         // 授权事件
         services.AddSaasLocalEventHandler<AuthorizationChangedEventHandler>();
         services.AddSaasLocalEventHandler<PermissionChangeLogEventHandler>();
-        services.AddSaasLocalEventHandler<DataScopeChangedEventHandler>();
-        services.AddSaasLocalEventHandler<FieldLevelSecurityChangedEventHandler>();
 
         // 组织层级事件
         services.AddSaasLocalEventHandler<HierarchyChangedEventHandler>();
@@ -282,43 +363,44 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// 添加 SaaS 系统基线种子数据提供者（身份/权限/版本/配置/字典/菜单/通知/存储/任务等，始终播种）
+    /// 添加 SaaS 基础种子：系统运行所需的数据，始终播种
     /// </summary>
+    /// <remarks>
+    /// 执行顺序见 <see cref="SeedOrders"/>：超级管理员 → 操作字典 → 权限目录 → 菜单 → 套餐 → 参数、存储、消息模板、OAuth 应用、定时任务。
+    /// </remarks>
     /// <param name="services">服务集合</param>
     /// <returns>服务集合</returns>
     public static IServiceCollection AddSaasDataSeeders(this IServiceCollection services)
     {
-        services.AddDataSeeder<SaasIdentitySeeder>();
-        services.AddDataSeeder<SaasPermissionSeeder>();
-        services.AddDataSeeder<SaasTenantEditionSeeder>();
-        services.AddDataSeeder<SaasConfigurationSeeder>();
-        services.AddDataSeeder<SaasDictSeeder>();
+        services.AddDataSeeder<SaasSuperAdminSeeder>();
+        services.AddDataSeeder<SaasOperationSeeder>();
+        services.AddDataSeeder<SaasPermissionCatalogSeeder>();
         services.AddDataSeeder<SaasMenuSeeder>();
+        // 业务模块（含代码生成产物）的权限目录与菜单登记：在两个阶段最后统一写入
+        services.AddDataSeeder<ContributedPermissionCatalogSeeder>();
+        services.AddDataSeeder<ContributedMenuSeeder>();
+        services.AddDataSeeder<SaasEditionSeeder>();
+        services.AddDataSeeder<SaasSettingSeeder>();
+        services.AddDataSeeder<SaasStorageSeeder>();
         services.AddDataSeeder<SaasMessageTemplateSeeder>();
         services.AddDataSeeder<SaasOAuthAppSeeder>();
-        services.AddDataSeeder<SaasNotificationSeeder>();
-        services.AddDataSeeder<SaasStorageConfigSeeder>();
         services.AddDataSeeder<SaasTaskSeeder>();
-        // 版本白名单重算（Order 900）：在全部模块权限种子之后重跑版本权限绑定，模块权限首启即进白名单
-        services.AddDataSeeder<SaasTenantEditionReconcileSeeder>();
         return services;
     }
 
     /// <summary>
-    /// 添加 SaaS 演示种子数据提供者（示例组织/演示账号/演示业务租户）
+    /// 添加 SaaS 演示种子：示例租户、组织、角色、账号、通知与字典
     /// </summary>
     /// <remarks>
-    /// 与系统基线种子分离：这批数据由配置开关 <c>Saas:Seed:EnableDemoData</c> 控制是否真正播种
-    /// （缺省/true 播种，显式 false 整体跳过），切换仅需改配置 + 重启。执行顺序仍按各自 Order。
+    /// 只在配置 <c>Saas:Seed:EnableDemoData</c> 为 true 时写入（见 <see cref="DemoDataSeederBase"/>），缺省不写。
     /// </remarks>
     /// <param name="services">服务集合</param>
     /// <returns>服务集合</returns>
     public static IServiceCollection AddSaasDemoDataSeeders(this IServiceCollection services)
     {
-        services.AddDataSeeder<SaasOrganizationSeeder>();
-        services.AddDataSeeder<SaasSampleIdentitySeeder>();
-        // 必须在演示身份之后执行（Order=37 > 35）：跨租户成员依赖默认租户样例用户（zhangsan/lisi）。
-        services.AddDataSeeder<SaasBusinessTenantSeeder>();
+        services.AddDataSeeder<SaasDemoSeeder>();
+        services.AddDataSeeder<SaasDemoNotificationSeeder>();
+        services.AddDataSeeder<SaasDemoDictSeeder>();
         return services;
     }
 
@@ -410,7 +492,7 @@ public static class ServiceCollectionExtensions
     /// 添加 SaaS 导出中心基础设施
     /// </summary>
     /// <remarks>
-    /// 导出引擎：执行器 + CSV/Xlsx 写出器 + 逐资源登记的 <see cref="IExportProvider"/>（首版 system.user / log.operation）；
+    /// 导出引擎：执行器 + CSV/Xlsx 写出器 + 逐资源登记的 <see cref="IExportProvider"/>（identity.user 与六类日志）；
     /// 后台 <see cref="ExportTaskHostedService"/> 轮询 Pending 任务异步执行。
     /// 导出任务仓储（<c>IExportTaskRepository</c>）随 <c>SaasRepository</c> 的 <c>IScopedDependency</c> 自动注册。
     /// </remarks>

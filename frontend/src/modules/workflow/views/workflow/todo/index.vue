@@ -44,7 +44,7 @@ const fields = computed<ListFieldSchema[]>(() => [
 ])
 
 const schema = computed<PageSchema>(() => ({
-  pageCode: 'workflow.todo',
+  pageCode: 'workflow_todo',
   pageName: t('workflow.todo.page_name'),
   rowKey: 'taskId',
   fields: fields.value,
@@ -63,8 +63,8 @@ const schema = computed<PageSchema>(() => ({
   actions: [
     { key: 'approve', title: t('workflow.todo.action_approve'), scope: 'row', type: 'success', icon: 'lucide:check' },
     { key: 'reject', title: t('workflow.todo.action_reject'), scope: 'row', type: 'error', icon: 'lucide:x' },
-    { key: 'transfer', title: t('workflow.todo.action_transfer'), scope: 'row' },
-    { key: 'addSign', title: t('workflow.todo.action_add_sign'), scope: 'row' },
+    { key: 'transfer', title: t('workflow.todo.action_transfer'), scope: 'row', icon: 'lucide:forward' },
+    { key: 'addSign', title: t('workflow.todo.action_add_sign'), scope: 'row', icon: 'lucide:user-plus' },
   ],
 }))
 
@@ -99,7 +99,7 @@ async function handleComplete() {
     reload()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('workflow.todo.err_complete'))
+    toast.danger((error as Error)?.message || t('workflow.todo.err_complete'))
   }
   finally {
     completeLoading.value = false
@@ -141,7 +141,7 @@ async function handleTransfer() {
     reload()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('workflow.todo.err_transfer'))
+    toast.danger((error as Error)?.message || t('workflow.todo.err_transfer'))
   }
   finally {
     transferLoading.value = false
@@ -183,7 +183,7 @@ async function handleAddSign() {
     reload()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('workflow.todo.err_add_sign'))
+    toast.danger((error as Error)?.message || t('workflow.todo.err_add_sign'))
   }
   finally {
     addSignLoading.value = false
@@ -229,7 +229,7 @@ function onAction(payload: SchemaActionPayload) {
         class="xh-edit-form-grid"
         @submit="handleComplete"
       >
-        <XhFormFieldGroup value="comment" class="xh-span-2">
+        <XhFormFieldGroup name="comment" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('workflow.todo.comment') }}</XhFieldLabel>
             <XhFieldControl>
@@ -261,7 +261,7 @@ function onAction(payload: SchemaActionPayload) {
         class="xh-edit-form-grid"
         @submit="handleTransfer"
       >
-        <XhFormFieldGroup value="targetAssigneeId" class="xh-span-2">
+        <XhFormFieldGroup name="targetAssigneeId" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('workflow.todo.transfer_target') }}</XhFieldLabel>
             <XhFieldControl>
@@ -270,7 +270,7 @@ function onAction(payload: SchemaActionPayload) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="comment" class="xh-span-2">
+        <XhFormFieldGroup name="comment" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('workflow.todo.comment') }}</XhFieldLabel>
             <XhFieldControl>
@@ -297,7 +297,7 @@ function onAction(payload: SchemaActionPayload) {
         class="xh-edit-form-grid"
         @submit="handleAddSign"
       >
-        <XhFormFieldGroup value="assigneeIds" class="xh-span-2">
+        <XhFormFieldGroup name="assigneeIds" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('workflow.todo.add_sign_users') }}</XhFieldLabel>
             <XhFieldControl>
@@ -306,7 +306,7 @@ function onAction(payload: SchemaActionPayload) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="comment" class="xh-span-2">
+        <XhFormFieldGroup name="comment" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('workflow.todo.comment') }}</XhFieldLabel>
             <XhFieldControl>

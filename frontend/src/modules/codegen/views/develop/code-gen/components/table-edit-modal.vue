@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type {
+  CodeGenParentMenuOptionDto,
   CodeGenTableUpdateDto,
   DatabaseType,
   EnableStatus,
@@ -14,9 +15,10 @@ import { XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFormFiel
 import { computed, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { STATUS_OPTIONS } from '@/constants'
-import { XEditModal, XInput, XSelect } from '~/components'
+import { XEditModal, XInput, XSelect, XTreeSelect } from '~/components'
 import { toast } from '~/composables'
 import { useEnumOptions } from '~/hooks'
+import { relationOptionsToTree } from '~/utils'
 import {
   codeGenTableApi,
   DATABASE_TYPE_OPTIONS,
@@ -66,7 +68,6 @@ interface TableFormModel {
   generationScope: GenerationScope
   // 包含操作以字符串数组建模（多选控件）；提交时 join 为逗号分隔串，空/全等价全开
   enabledActions: string[]
-  genPath?: string | null
   // 上级菜单：M1 仅随详情回传（不写死 null），M3 接入菜单树选择控件
   parentMenuId?: ApiId | null
   primaryKeyColumn?: string | null
@@ -81,11 +82,13 @@ interface TableFormModel {
 }
 
 /**
- * 全部可裁剪写操作（列表/详情为读取基线，不在此列）。
+ * 全部可裁剪操作（列表/详情为读取基线，不在此列），与后端 CodeGenActions.All 同集；
+ * 缺省集同 CodeGenActions.Defaults（状态切换与打印须显式勾选）。
  * 必须声明在 form 之前：form 的初值由 createDefaultForm() 求得，而它引用本常量，
  * 声明晚于调用点会落进暂时性死区，setup 直接抛 ReferenceError、整个弹窗渲染不出来。
  */
-const ALL_ACTIONS = ['create', 'update', 'delete']
+const ALL_ACTIONS = ['create', 'update', 'delete', 'export', 'import', 'status', 'print']
+const DEFAULT_ACTIONS = ['create', 'update', 'delete', 'export', 'import']
 
 const loading = ref(false)
 const submitLoading = ref(false)
@@ -96,17 +99,30 @@ const form = ref<TableFormModel>(createDefaultForm())
 const columnOptions = ref<{ label: string, value: string }[]>([])
 /** 其他表（供主子表的主表选择） */
 const tableOptions = ref<{ label: string, value: ApiId }[]>([])
+/** 父菜单候选（平台菜单树），弹窗首次打开时拉取；只有目录可选，菜单只表明位置 */
+const parentMenuOptions = ref<CodeGenParentMenuOptionDto[]>([])
+const parentMenuTree = computed(() => relationOptionsToTree(parentMenuOptions.value.map(option => ({
+  label: option.label,
+  value: option.value,
+  parentValue: option.parentValue,
+  disabled: !option.selectable,
+}))))
 
 const isTreeTemplate = computed(() => form.value.templateType === TemplateTypeEnum.Tree)
 const isMasterDetailTemplate = computed(() => form.value.templateType === TemplateTypeEnum.MasterDetail)
 
-/** 后端逗号分隔串 → 多选数组；null/空视为全开（全部勾选） */
+/** 后端逗号分隔串 → 多选数组；null/空视为缺省集 */
 function parseEnabledActions(raw?: string | null): string[] {
   if (!raw) {
-    return [...ALL_ACTIONS]
+    return [...DEFAULT_ACTIONS]
   }
   const selected = raw.split(',').map(item => item.trim()).filter(Boolean)
   return ALL_ACTIONS.filter(action => selected.includes(action))
+}
+
+/** 勾选恰为缺省集（或一个都没勾）：提交空串，与未配置同义 */
+function isDefaultActions(actions: string[]) {
+  return actions.length === 0 || (actions.length === DEFAULT_ACTIONS.length && DEFAULT_ACTIONS.every(action => actions.includes(action)))
 }
 
 function createDefaultForm(): TableFormModel {
@@ -124,7 +140,6 @@ function createDefaultForm(): TableFormModel {
     genType: GenTypeEnum.Zip,
     generationScope: GenerationScopeEnum.All,
     enabledActions: [...ALL_ACTIONS],
-    genPath: null,
     parentMenuId: null,
     primaryKeyColumn: null,
     treeParentColumn: null,
@@ -151,8 +166,22 @@ watch(
     if (props.tableId) {
       void loadDetail()
     }
+    void ensureParentMenuOptions()
   },
 )
+
+/** 拉取可选的父菜单；失败时提示，不用空列表冒充「没有可选目录」 */
+async function ensureParentMenuOptions() {
+  if (parentMenuOptions.value.length > 0) {
+    return
+  }
+  try {
+    parentMenuOptions.value = await codeGenTableApi.parentMenuOptions()
+  }
+  catch (error) {
+    toast.danger((error as Error)?.message || t('develop.code_gen.table_edit.load_parent_menu_failed'))
+  }
+}
 
 async function loadDetail() {
   if (!props.tableId) {
@@ -163,7 +192,7 @@ async function loadDetail() {
   try {
     const detail = await codeGenTableApi.detail(props.tableId)
     if (!detail) {
-      toast.error(t('develop.code_gen.table_edit.not_found'))
+      toast.danger(t('develop.code_gen.table_edit.not_found'))
       emit('update:show', false)
       return
     }
@@ -186,7 +215,6 @@ async function loadDetail() {
       genType: detail.genType,
       generationScope: detail.generationScope ?? GenerationScopeEnum.All,
       enabledActions: parseEnabledActions(detail.enabledActions),
-      genPath: detail.genPath ?? null,
       parentMenuId: detail.parentMenuId ?? null,
       primaryKeyColumn: detail.primaryKeyColumn ?? null,
       treeParentColumn: detail.treeParentColumn ?? null,
@@ -203,7 +231,7 @@ async function loadDetail() {
     }
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('develop.code_gen.table_edit.load_failed'))
+    toast.danger((error as Error)?.message || t('develop.code_gen.table_edit.load_failed'))
   }
   finally {
     loading.value = false
@@ -270,6 +298,12 @@ function validateForm() {
       return false
     }
   }
+  // 与后端同一条规则：导入逐行走新增接口，只勾导入会产出一个调不通的导入按钮
+  const actions = form.value.enabledActions
+  if (actions.includes('import') && !actions.includes('create')) {
+    toast.warning(t('develop.code_gen.table_edit.validate_import_requires_create'))
+    return false
+  }
   return true
 }
 
@@ -292,9 +326,8 @@ async function handleSubmit() {
       templateType: form.value.templateType,
       genType: form.value.genType,
       generationScope: form.value.generationScope,
-      // 全部/空数组都提交为空串，后端归一化为全开
-      enabledActions: form.value.enabledActions.length === ALL_ACTIONS.length ? '' : form.value.enabledActions.join(','),
-      genPath: form.value.genPath,
+      // 恰为缺省集（或全不选）时提交空串，后端归一化为缺省集；其余按勾选提交
+      enabledActions: isDefaultActions(form.value.enabledActions) ? '' : form.value.enabledActions.join(','),
       parentMenuId: form.value.parentMenuId,
       primaryKeyColumn: form.value.primaryKeyColumn,
       treeParentColumn: isTreeTemplate.value ? form.value.treeParentColumn : null,
@@ -320,7 +353,7 @@ async function handleSubmit() {
     emit('update:show', false)
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('common.messages.save_failed'))
+    toast.danger((error as Error)?.message || t('common.messages.save_failed'))
   }
   finally {
     submitLoading.value = false
@@ -348,7 +381,7 @@ async function handleSubmit() {
         class="xh-edit-form-grid"
         @submit="handleSubmit"
       >
-        <XhFormFieldGroup value="tableName">
+        <XhFormFieldGroup name="tableName">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.table_edit.form_table_name') }}</XhFieldLabel>
             <XhFieldControl>
@@ -357,7 +390,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="className">
+        <XhFormFieldGroup name="className">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.table_edit.form_class_name') }}</XhFieldLabel>
             <XhFieldControl>
@@ -366,16 +399,16 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="namespace">
+        <XhFormFieldGroup name="namespace">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.table_edit.form_namespace') }}</XhFieldLabel>
             <XhFieldControl>
-              <XInput v-model:value="form.namespace" clearable />
+              <XInput v-model:value="form.namespace" clearable :placeholder="t('develop.code_gen.table_edit.form_namespace_placeholder')" />
             </XhFieldControl>
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="moduleName">
+        <XhFormFieldGroup name="moduleName">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.table_edit.form_module_name') }}</XhFieldLabel>
             <XhFieldControl>
@@ -384,7 +417,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="businessName">
+        <XhFormFieldGroup name="businessName">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.table_edit.form_business_name') }}</XhFieldLabel>
             <XhFieldControl>
@@ -393,7 +426,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="functionName">
+        <XhFormFieldGroup name="functionName">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.table_edit.form_function_name') }}</XhFieldLabel>
             <XhFieldControl>
@@ -402,7 +435,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="author">
+        <XhFormFieldGroup name="author">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.table_edit.form_author') }}</XhFieldLabel>
             <XhFieldControl>
@@ -411,7 +444,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="templateType">
+        <XhFormFieldGroup name="templateType">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.table_edit.form_template_type') }}</XhFieldLabel>
             <XhFieldControl>
@@ -420,7 +453,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="genType">
+        <XhFormFieldGroup name="genType">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.table_edit.form_gen_type') }}</XhFieldLabel>
             <XhFieldControl>
@@ -429,7 +462,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="generationScope">
+        <XhFormFieldGroup name="generationScope">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.table_edit.form_generation_scope') }}</XhFieldLabel>
             <XhFieldControl>
@@ -438,7 +471,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="enabledActions">
+        <XhFormFieldGroup name="enabledActions">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.table_edit.form_enabled_actions') }}</XhFieldLabel>
             <XhFieldControl>
@@ -453,7 +486,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="databaseType">
+        <XhFormFieldGroup name="databaseType">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.table_edit.form_database_type') }}</XhFieldLabel>
             <XhFieldControl>
@@ -462,16 +495,21 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="genPath">
+        <XhFormFieldGroup name="parentMenuId">
           <XhFieldRoot>
-            <XhFieldLabel>{{ t('develop.code_gen.table_edit.form_gen_path') }}</XhFieldLabel>
+            <XhFieldLabel>{{ t('develop.code_gen.table_edit.form_parent_menu') }}</XhFieldLabel>
             <XhFieldControl>
-              <XInput v-model:value="form.genPath" clearable :placeholder="t('develop.code_gen.table_edit.form_gen_path_placeholder')" />
+              <XTreeSelect
+                v-model:value="form.parentMenuId"
+                clearable
+                :options="parentMenuTree"
+                :placeholder="t('develop.code_gen.table_edit.form_parent_menu_placeholder')"
+              />
             </XhFieldControl>
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="primaryKeyColumn">
+        <XhFormFieldGroup name="primaryKeyColumn">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.table_edit.form_primary_key_column') }}</XhFieldLabel>
             <XhFieldControl>
@@ -486,7 +524,7 @@ async function handleSubmit() {
           </XhFieldRoot>
         </XhFormFieldGroup>
         <template v-if="isTreeTemplate">
-          <XhFormFieldGroup value="treeParentColumn">
+          <XhFormFieldGroup name="treeParentColumn">
             <XhFieldRoot>
               <XhFieldLabel>{{ t('develop.code_gen.table_edit.form_tree_parent_column') }}</XhFieldLabel>
               <XhFieldControl>
@@ -500,7 +538,7 @@ async function handleSubmit() {
               <XhFieldErrorText />
             </XhFieldRoot>
           </XhFormFieldGroup>
-          <XhFormFieldGroup value="treeNameColumn">
+          <XhFormFieldGroup name="treeNameColumn">
             <XhFieldRoot>
               <XhFieldLabel>{{ t('develop.code_gen.table_edit.form_tree_name_column') }}</XhFieldLabel>
               <XhFieldControl>
@@ -516,7 +554,7 @@ async function handleSubmit() {
           </XhFormFieldGroup>
         </template>
         <template v-if="isMasterDetailTemplate">
-          <XhFormFieldGroup value="masterTableId">
+          <XhFormFieldGroup name="masterTableId">
             <XhFieldRoot>
               <XhFieldLabel>{{ t('develop.code_gen.table_edit.form_master_table') }}</XhFieldLabel>
               <XhFieldControl>
@@ -530,7 +568,7 @@ async function handleSubmit() {
               <XhFieldErrorText />
             </XhFieldRoot>
           </XhFormFieldGroup>
-          <XhFormFieldGroup value="masterForeignKey">
+          <XhFormFieldGroup name="masterForeignKey">
             <XhFieldRoot>
               <XhFieldLabel>{{ t('develop.code_gen.table_edit.form_master_foreign_key') }}</XhFieldLabel>
               <XhFieldControl>
@@ -545,7 +583,7 @@ async function handleSubmit() {
             </XhFieldRoot>
           </XhFormFieldGroup>
         </template>
-        <XhFormFieldGroup value="status">
+        <XhFormFieldGroup name="status">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('common.fields.status') }}</XhFieldLabel>
             <XhFieldControl>
@@ -554,7 +592,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="tableComment" class="xh-span-2">
+        <XhFormFieldGroup name="tableComment" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.code_gen.table_edit.form_table_comment') }}</XhFieldLabel>
             <XhFieldControl>

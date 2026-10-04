@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import type { ChatLocalMessage } from '../store'
-import { XhImageViewerCloseTrigger, XhImageViewerContent, XhImageViewerCounter, XhImageViewerImage, XhImageViewerNextTrigger, XhImageViewerPrevTrigger, XhImageViewerRoot, XhImageViewerToolbar, XhImageViewerViewport, XhImageViewerZoomInTrigger, XhImageViewerZoomOutTrigger } from '@xihan-ui/vue'
+import { XhImageViewerCloseTrigger, XhImageViewerContent, XhImageViewerCounter, XhImageViewerFlipHorizontalTrigger, XhImageViewerFlipVerticalTrigger, XhImageViewerImage, XhImageViewerNextTrigger, XhImageViewerPrevTrigger, XhImageViewerResetTrigger, XhImageViewerRoot, XhImageViewerRotateLeftTrigger, XhImageViewerRotateRightTrigger, XhImageViewerToolbar, XhImageViewerViewport, XhImageViewerZoomInTrigger, XhImageViewerZoomOutTrigger } from '@xihan-ui/vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import XUserAvatar from '~/components/common/UserAvatar.vue'
 import XTooltip from '~/components/common/XTooltip.vue'
-import { useAvatarUrl } from '~/composables'
+import { useAvatarUrl, useAvatarUrls } from '~/composables'
 import { Icon } from '~/iconify'
 import { useUserStore } from '~/stores'
 import { getChatApi } from '../api-contract'
@@ -99,6 +99,25 @@ const imageGridClass = computed(() => {
   }
   return count === 2 ? 'chat-image-grid chat-image-grid--2' : 'chat-image-grid chat-image-grid--3'
 })
+
+/** 相册各图的可显示地址，与 attachments 逐项对应；还在换取预签名地址的为空 */
+const imageUrls = useAvatarUrls(() => (isImage.value ? attachments.value.map(att => att.fileId) : []))
+
+/**
+ * 看片浮层的图片列表。XhImageViewerRoot 只认这里给的 collection，触发器不再自带图片，
+ * 地址还没换到的那张先不进列表（它的缩略图也还没出来，点不到）。
+ */
+const viewerItems = computed(() => attachments.value.flatMap((att, index) => {
+  const src = imageUrls.value[index]
+  return src ? [{ src, alt: att.fileName ?? undefined }] : []
+}))
+
+/** 浮层当前看的那张；点哪张缩略图就从哪张开始 */
+const viewerIndex = ref(0)
+
+function selectImage(src: string) {
+  viewerIndex.value = Math.max(0, viewerItems.value.findIndex(item => item.src === src))
+}
 
 // ── 语音气泡：单个音频附件，就地播放 ─────────────────────────────────
 const voiceAttachment = computed(() => (isVoice.value ? attachments.value[0] ?? null : null))
@@ -256,28 +275,43 @@ async function handleDownload(fileId: string) {
 
         <!-- 图片（相册：点击预览可左右切换） -->
         <template v-if="isImage">
-          <XhImageViewerRoot>
+          <!-- 相册各图是普通按钮，经插槽的 setOpen 打开同一个浮层：一个浮层只能有一个 XhImageViewerTrigger，
+               每张各挂一个会撞 id；受控下标先指到点的那张再打开 -->
+          <XhImageViewerRoot v-slot="{ setOpen }" v-model:index="viewerIndex" :collection="viewerItems">
             <div :class="imageGridClass">
               <ChatMessageImage
-                v-for="att in attachments"
+                v-for="(att, index) in attachments"
                 :key="att.fileId"
-                :file-id="att.fileId"
+                :url="imageUrls[index] ?? ''"
                 :alt="att.fileName"
                 :thumb="attachments.length > 1"
+                @select="selectImage(imageUrls[index] ?? ''); setOpen(true)"
               />
             </div>
+            <!-- 计数、翻页、工具条、关闭各自钉在浮层的一条边上，都是 content 的直接子件；
+                 工具条只放变换钮（留空即用组件库的图标；归零钮库里兜底是「1:1」文字，补一枚图标，
+                 可及名仍取组件库文案）。单图时不出计数与翻页 -->
             <XhImageViewerContent>
               <XhImageViewerViewport>
                 <XhImageViewerImage />
               </XhImageViewerViewport>
-              <XhImageViewerToolbar>
-                <XhImageViewerPrevTrigger />
+              <template v-if="viewerItems.length > 1">
                 <XhImageViewerCounter />
+                <XhImageViewerPrevTrigger />
                 <XhImageViewerNextTrigger />
-                <XhImageViewerZoomOutTrigger>−</XhImageViewerZoomOutTrigger>
-                <XhImageViewerZoomInTrigger>+</XhImageViewerZoomInTrigger>
-                <XhImageViewerCloseTrigger />
+              </template>
+              <XhImageViewerToolbar>
+                <XhImageViewerZoomOutTrigger />
+                <XhImageViewerZoomInTrigger />
+                <XhImageViewerRotateLeftTrigger />
+                <XhImageViewerRotateRightTrigger />
+                <XhImageViewerFlipHorizontalTrigger />
+                <XhImageViewerFlipVerticalTrigger />
+                <XhImageViewerResetTrigger>
+                  <Icon icon="lucide:undo-2" />
+                </XhImageViewerResetTrigger>
               </XhImageViewerToolbar>
+              <XhImageViewerCloseTrigger />
             </XhImageViewerContent>
           </XhImageViewerRoot>
           <div v-if="message.content" class="mt-1 text-[13px]">
@@ -504,7 +538,7 @@ async function handleDownload(fileId: string) {
   inset: 0 auto 0 0;
   border-radius: 999px;
   background: hsl(var(--primary));
-  transition: width var(--xh-motion-duration-micro) var(--xh-motion-ease-continuous);
+  transition: width var(--xh-motion-duration-nudge) var(--xh-motion-ease-continuous);
 }
 
 .chat-voice__time {

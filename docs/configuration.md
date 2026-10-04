@@ -266,7 +266,7 @@ backend/src/main/XiHan.BasicApp.WebHost/
 
 | 键 | 默认 | 说明 |
 | --- | --- | --- |
-| `Local.RootPath` | `wwwroot/uploads` | 文件落盘根目录；这是 BasicApp 的显式配置，不是 Framework 3.10.1 的 `LocalStorageOptions` 默认值 |
+| `Local.RootPath` | `wwwroot/uploads` | 文件落盘根目录；这是 BasicApp 的显式配置，不是 Framework `LocalStorageOptions` 的默认值（`wwwroot/Uploads`） |
 | `Local.UrlPrefix` | `/uploads` | 对外访问 URL 前缀（**根相对路径**，跨源时前端拼 API origin） |
 
 对象存储的其余后端（S3/OSS/COS/MinIO）**配置落库**在 `SysStorageConfig`，不写 `appsettings`。见 [文件与存储](./backend/file#存储配置-file-storage)。
@@ -287,18 +287,23 @@ backend/src/main/XiHan.BasicApp.WebHost/
 
 | 键 | 说明 |
 | --- | --- |
-| `EnableDemoData` | 演示种子开关，**缺省或非法值都视为启用**，显式 `false` 才整体跳过 |
-| `SuperAdminPassword` | 超管初始密码（环境变量 `Saas__Seed__SuperAdminPassword`）。**生产务必覆盖** |
+| `EnableDemoData` | 演示数据开关：`true` 才写演示租户与账号，**缺省或 `false` 都不写**，不是布尔值直接启动失败。开发环境配置开启，生产环境在 `appsettings.Production.json` 里设置 |
+
+超管初始密码写在种子里（`superadmin` / `SuperAdmin@123`），不走配置；账号标记为需要本人改密，生产首次登录后立即修改，并建议在参数「密码设置」里开启强制改密。演示账号与各阶段种子见 [框架简介：种子数据](./backend/introduction#种子数据)。
 
 ## `CodeGeneration`
 
-| 键 | 默认 | 说明 |
-| --- | --- | --- |
-| `EnableCustomPathDisk` | `false` | 是否允许生成到自定义磁盘路径 |
-| `AllowedRootPaths[]` | `[]` | 允许写入的根路径白名单 |
+只在 `appsettings.Development.json` 里配置，`appsettings.json` 与生产配置都不放：不配置即不能生成到项目，只能生成并下载。
 
-::: warning 生产不要开 `EnableCustomPathDisk`
-开启后代码生成器可以往服务器磁盘写文件，`AllowedRootPaths` 是唯一的边界。生产环境保持关闭，用 Zip 下载。
+| 键 | 默认 | 开发环境配置 | 说明 |
+| --- | --- | --- | --- |
+| `EnableGenerateToProject` | `false` | `true` | 是否允许「生成到项目」 |
+| `BackendRootPath` | — | `../..` | 后端源码根（相对 WebHost 项目目录），在其下分组目录里找与命名空间同名的项目 |
+| `FrontendRootPath` | — | `../../../../frontend` | 前端工程根（相对 WebHost 项目目录），须含 `package.json` |
+| `TablePrefixes` | `Sys_,Saas_` | `Sys_,Saas_` | 由表名推导类名时去掉的前缀 |
+
+::: warning 生产不要开 `EnableGenerateToProject`
+开启后代码生成器会往服务器上的源码目录写文件。位置虽由配置推导、不接受任意路径，生产环境也没有源码可写，保持关闭，用生成并下载。
 :::
 
 ## 数据库里的配置

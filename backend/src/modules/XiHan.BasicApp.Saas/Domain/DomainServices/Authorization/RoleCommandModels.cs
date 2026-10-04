@@ -14,7 +14,6 @@ public sealed record RoleCreateCommand(
     string RoleName,
     string? RoleDescription,
     RoleType RoleType,
-    DataPermissionScope DataScope,
     int MaxMembers,
     EnableStatus Status,
     int Sort,
@@ -28,7 +27,6 @@ public sealed record RoleUpdateCommand(
     string RoleName,
     string? RoleDescription,
     RoleType RoleType,
-    DataPermissionScope DataScope,
     int MaxMembers,
     int Sort,
     string? Remark);
@@ -37,18 +35,6 @@ public sealed record RoleUpdateCommand(
 /// 角色状态变更命令
 /// </summary>
 public sealed record RoleStatusChangeCommand(long BasicId, EnableStatus Status, string? Remark);
-
-/// <summary>
-/// 角色权限授权命令
-/// </summary>
-public sealed record RolePermissionGrantCommand(
-    long RoleId,
-    long PermissionId,
-    PermissionAction PermissionAction,
-    DateTimeOffset? EffectiveTime,
-    DateTimeOffset? ExpirationTime,
-    string? GrantReason,
-    string? Remark);
 
 /// <summary>
 /// 角色权限批量变更命令（一次性提交授予与撤销）
@@ -75,35 +61,32 @@ public sealed record RolePermissionUpdateCommand(
 public sealed record RolePermissionStatusChangeCommand(long BasicId, ValidityStatus Status, string? Remark);
 
 /// <summary>
-/// 角色数据范围授权命令
+/// 角色数据范围设置命令：档位与自定义部门一次落地
 /// </summary>
-public sealed record RoleDataScopeGrantCommand(
+/// <param name="RoleId">角色主键</param>
+/// <param name="DataScope">数据范围档位</param>
+/// <param name="Departments">自定义部门（仅档位为 Custom 时提交，且至少一个）</param>
+public sealed record RoleDataScopeSetCommand(
     long RoleId,
-    long DepartmentId,
-    bool IncludeChildren,
-    DateTimeOffset? EffectiveTime,
-    DateTimeOffset? ExpirationTime,
-    string? Remark);
+    DataPermissionScope DataScope,
+    IReadOnlyList<DataScopeDepartmentItem> Departments);
 
 /// <summary>
-/// 角色数据范围更新命令
+/// 角色直接上级批量变更命令（一次提交新增与解除）
 /// </summary>
-public sealed record RoleDataScopeUpdateCommand(
-    long BasicId,
-    bool IncludeChildren,
-    DateTimeOffset? EffectiveTime,
-    DateTimeOffset? ExpirationTime,
-    string? Remark);
+public sealed record RoleHierarchyBatchUpdateCommand(
+    long RoleId,
+    IReadOnlyList<long> AddParentRoleIds,
+    IReadOnlyList<long> RemoveParentRoleIds);
 
 /// <summary>
-/// 角色数据范围状态变更命令
+/// 角色直接上级批量变更结果（本次实际发生变化的直接上级）
 /// </summary>
-public sealed record RoleDataScopeStatusChangeCommand(long BasicId, ValidityStatus Status, string? Remark);
-
-/// <summary>
-/// 角色继承创建命令
-/// </summary>
-public sealed record RoleHierarchyCreateCommand(long AncestorId, long DescendantId, string? Remark);
+/// <param name="AddedParentRoleIds">实际新增的直接上级ID</param>
+/// <param name="RemovedParentRoleIds">实际解除的直接上级ID</param>
+public sealed record RoleHierarchyBatchUpdateResult(
+    IReadOnlyList<long> AddedParentRoleIds,
+    IReadOnlyList<long> RemovedParentRoleIds);
 
 /// <summary>
 /// 角色命令结果
@@ -123,13 +106,3 @@ public sealed record RolePermissionCommandResult(SysRolePermission RolePermissio
 public sealed record RolePermissionBatchUpdateResult(
     IReadOnlyList<long> GrantedPermissionIds,
     IReadOnlyList<long> RevokedPermissionIds);
-
-/// <summary>
-/// 角色数据范围命令结果
-/// </summary>
-public sealed record RoleDataScopeCommandResult(SysRoleDataScope DataScope, SysDepartment? Department);
-
-/// <summary>
-/// 角色继承命令结果
-/// </summary>
-public sealed record RoleHierarchyCommandResult(SysRoleHierarchy Hierarchy, SysRole Ancestor, SysRole Descendant);

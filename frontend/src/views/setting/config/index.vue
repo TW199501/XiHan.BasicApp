@@ -7,7 +7,7 @@ import type {
 } from '@/api'
 import type { ListFieldSchema, PageSchema, SchemaActionPayload } from '~/components'
 import type { SelectOption } from '~/types'
-import { XhButton, XhDescriptionsItem, XhDescriptionsLabel, XhDescriptionsRoot, XhDescriptionsValue, XhDialogCloseTrigger, XhDialogContent, XhDialogRoot, XhDialogTitle, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFlex, XhFormFieldGroup, XhFormRoot, XhSwitch, XhTabsContent, XhTabsList, XhTabsRoot, XhTabsTrigger, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
+import { XhButton, XhDescriptionsItem, XhDescriptionsLabel, XhDescriptionsRoot, XhDescriptionsValue, XhDialogCloseTrigger, XhDialogContent, XhDialogRoot, XhDialogTitle, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFlex, XhFormFieldGroup, XhFormRoot, XhSwitch, XhTabsContent, XhTabsIndicator, XhTabsList, XhTabsRoot, XhTabsTrigger, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
 import { computed, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
@@ -19,9 +19,10 @@ import {
   querySortsFromSchema,
 } from '@/api'
 import { CONFIG_DATA_TYPE_OPTIONS, CONFIG_TYPE_OPTIONS, STATUS_OPTIONS } from '@/constants'
-import { Icon, SchemaPage, XEditModal, XInput, XNumberInput, XSelect } from '~/components'
+import { deleteConfirmText, Icon, SchemaPage, statusConfirmText, XEditModal, XInput, XNumberInput, XSelect } from '~/components'
 import { toast } from '~/composables'
 import { useEnumOptions } from '~/hooks'
+import { useUserStore } from '~/stores'
 import { formatDate, getOptionLabel } from '~/utils'
 
 defineOptions({ name: 'PlatformConfigPage' })
@@ -38,7 +39,6 @@ interface ConfigFormModel {
   defaultValue?: string | null
   isBuiltIn: boolean
   isEncrypted: boolean
-  isGlobal: boolean
   remark?: string | null
   sort: number
   status: EnableStatus
@@ -65,8 +65,15 @@ function reloadConfig() {
 }
 
 /** 仅删除受内置限制：后端 DeleteConfigAsync 对内置配置直接抛错 */
+const userStore = useUserStore()
+
+/** 全局配置只在平台维护；租户看得见、改不了，需要不同的值就新建同键配置覆盖它 */
+function canMaintainConfig(row: ConfigListItemDto) {
+  return (userStore.userInfo?.isPlatform ?? false) || !row.isGlobal
+}
+
 function canDeleteConfig(row: ConfigListItemDto) {
-  return !row.isBuiltIn
+  return canMaintainConfig(row) && !row.isBuiltIn
 }
 
 // ── 字段单一事实源（列 + searchable/advancedSearch；仅搜索字段 visible:false；order 控顺序） ──
@@ -91,7 +98,7 @@ const fields = computed<ListFieldSchema[]>(() => [
 
 // ── 资源适配器：归一化查询参数 → 后端 API（仅放后端支持的搜索字段） ──
 const schema = computed<PageSchema>(() => ({
-  pageCode: 'platform.config',
+  pageCode: 'setting.config',
   exportPermission: 'setting.config.export',
   importPermission: 'setting.config.import',
   pageName: t('setting.config.page_name'),
@@ -127,7 +134,6 @@ const schema = computed<PageSchema>(() => ({
         dataType: (record.dataType as ConfigDataType | undefined) ?? ConfigDataType.String,
         defaultValue: null,
         isEncrypted: false,
-        isGlobal: Boolean(record.isGlobal ?? false),
         remark: null,
         sort: typeof record.sort === 'number' ? record.sort : 100,
         status: (record.status as EnableStatus | undefined) ?? EnableStatus.Enabled,
@@ -136,12 +142,12 @@ const schema = computed<PageSchema>(() => ({
     },
   },
   actions: [
-    { key: 'create', title: t('setting.config.add'), scope: 'page', type: 'primary', icon: 'lucide:plus' },
-    { key: 'view', title: t('setting.config.view'), scope: 'row' },
+    { key: 'create', title: t('setting.config.add'), scope: 'page', type: 'primary', icon: 'lucide:plus', permission: 'setting.config.create' },
+    { key: 'view', title: t('setting.config.view'), scope: 'row', icon: 'lucide:eye' },
     // 内置配置本就是给运维调值的：后端只禁止删除，不限制改值与启停
-    { key: 'edit', title: t('common.actions.edit'), scope: 'row' },
-    { key: 'toggle', title: t('setting.job.toggle'), scope: 'row' },
-    { key: 'delete', title: t('common.actions.delete'), scope: 'row', visible: row => canDeleteConfig(row as unknown as ConfigListItemDto) },
+    { key: 'edit', title: t('common.actions.edit'), scope: 'row', icon: 'lucide:pencil', visible: row => canMaintainConfig(row as unknown as ConfigListItemDto), permission: 'setting.config.update' },
+    { key: 'toggle', title: t('setting.job.toggle'), scope: 'row', icon: 'lucide:power', confirm: true, confirmText: row => statusConfirmText(t, (row as unknown as ConfigListItemDto).status === EnableStatus.Enabled, (row as unknown as ConfigListItemDto).configName), visible: row => canMaintainConfig(row as unknown as ConfigListItemDto), permission: 'setting.config.status' },
+    { key: 'delete', title: t('common.actions.delete'), scope: 'row', icon: 'lucide:trash-2', type: 'error', confirm: true, confirmText: row => deleteConfirmText(t, (row as unknown as ConfigListItemDto).configName), visible: row => canDeleteConfig(row as unknown as ConfigListItemDto), permission: 'setting.config.delete' },
   ],
 }))
 
@@ -198,7 +204,6 @@ function createDefaultConfigForm(): ConfigFormModel {
     defaultValue: null,
     isBuiltIn: false,
     isEncrypted: false,
-    isGlobal: false,
     remark: null,
     sort: 100,
     status: EnableStatus.Enabled,
@@ -235,7 +240,7 @@ async function handleEdit(row: ConfigListItemDto) {
     detail = await configManagementApi.detail(row.basicId)
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('setting.config.load_detail_failed'))
+    toast.danger((error as Error)?.message || t('setting.config.load_detail_failed'))
     return
   }
   configForm.value = {
@@ -250,7 +255,6 @@ async function handleEdit(row: ConfigListItemDto) {
     defaultValue: detail?.defaultValue ?? null,
     isBuiltIn: row.isBuiltIn,
     isEncrypted: row.isEncrypted,
-    isGlobal: row.isGlobal,
     remark: detail?.remark ?? null,
     sort: row.sort,
     status: row.status,
@@ -289,7 +293,7 @@ async function handleView(row: ConfigListItemDto) {
     }
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('setting.config.load_detail_failed'))
+    toast.danger((error as Error)?.message || t('setting.config.load_detail_failed'))
   }
   finally {
     detailLoading.value = false
@@ -329,7 +333,6 @@ async function handleSubmit() {
         dataType: configForm.value.dataType,
         defaultValue: configForm.value.defaultValue,
         isEncrypted: configForm.value.isEncrypted,
-        isGlobal: configForm.value.isGlobal,
         remark: configForm.value.remark,
         sort: configForm.value.sort,
       }
@@ -354,7 +357,6 @@ async function handleSubmit() {
         dataType: configForm.value.dataType,
         defaultValue: configForm.value.defaultValue,
         isEncrypted: configForm.value.isEncrypted,
-        isGlobal: configForm.value.isGlobal,
         remark: configForm.value.remark,
         sort: configForm.value.sort,
         status: configForm.value.status,
@@ -368,7 +370,7 @@ async function handleSubmit() {
     reloadConfig()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('common.messages.save_failed'))
+    toast.danger((error as Error)?.message || t('common.messages.save_failed'))
   }
   finally {
     submitLoading.value = false
@@ -400,10 +402,14 @@ async function handleToggleStatus(row: ConfigListItemDto) {
   >
     <XhDialogRoot v-model:open="detailVisible">
       <XhDialogContent class="xh-mgmt-detail-modal" style="--xh-dialog-max-w: 720px">
-        <XhDialogTitle v-if="currentDetail">
-          <div class="det-hd-entity">
+        <!-- 标题须在弹窗打开期间一直在：详情未到时先念「加载中」 -->
+        <XhDialogTitle>
+          <template v-if="!currentDetail">
+            {{ t('common.loading') }}
+          </template>
+          <div v-else class="det-hd-entity">
             <div class="det-hd-ico">
-              <Icon icon="tabler:settings" :size="22" />
+              <Icon icon="tabler:settings" width="22" height="22" />
             </div>
             <div class="min-w-0">
               <div class="det-hd-name">
@@ -429,9 +435,10 @@ async function handleToggleStatus(row: ConfigListItemDto) {
             <XhTabsTrigger value="values">
               {{ t('setting.config.values') }}
             </XhTabsTrigger>
+            <XhTabsIndicator />
           </XhTabsList>
           <XhTabsContent value="overview">
-            <XhDescriptionsRoot :columns="2" bordered size="sm">
+            <XhDescriptionsRoot :columns="2" variant="outline" size="sm">
               <XhDescriptionsItem>
                 <XhDescriptionsLabel>{{ t('setting.config.config_group') }}</XhDescriptionsLabel>
                 <XhDescriptionsValue>
@@ -518,7 +525,7 @@ async function handleToggleStatus(row: ConfigListItemDto) {
             </XhDescriptionsRoot>
           </XhTabsContent>
           <XhTabsContent value="values">
-            <XhDescriptionsRoot :columns="1" bordered size="sm">
+            <XhDescriptionsRoot :columns="1" variant="outline" size="sm">
               <XhDescriptionsItem>
                 <XhDescriptionsLabel>{{ t('setting.config.current_value') }}</XhDescriptionsLabel>
                 <XhDescriptionsValue>
@@ -555,7 +562,7 @@ async function handleToggleStatus(row: ConfigListItemDto) {
 
         <div class="xh-dialog-footer">
           <XhFlex justify="end" gap="md">
-            <XhButton size="sm" @click="detailVisible = false">
+            <XhButton variant="subtle" size="sm" @click="detailVisible = false">
               {{ t('common.actions.close') }}
             </XhButton>
           </XhFlex>
@@ -576,7 +583,7 @@ async function handleToggleStatus(row: ConfigListItemDto) {
         class="xh-edit-form-grid"
         @submit="handleSubmit"
       >
-        <XhFormFieldGroup value="configName">
+        <XhFormFieldGroup name="configName">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.config.config_name') }}</XhFieldLabel>
             <XhFieldControl>
@@ -585,7 +592,7 @@ async function handleToggleStatus(row: ConfigListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="configKey">
+        <XhFormFieldGroup name="configKey">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.config.config_key') }}</XhFieldLabel>
             <XhFieldControl>
@@ -599,7 +606,7 @@ async function handleToggleStatus(row: ConfigListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="configGroup">
+        <XhFormFieldGroup name="configGroup">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.config.config_group') }}</XhFieldLabel>
             <XhFieldControl>
@@ -608,7 +615,7 @@ async function handleToggleStatus(row: ConfigListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="configType">
+        <XhFormFieldGroup name="configType">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.config.config_type') }}</XhFieldLabel>
             <XhFieldControl>
@@ -617,7 +624,7 @@ async function handleToggleStatus(row: ConfigListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="dataType">
+        <XhFormFieldGroup name="dataType">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.config.data_type') }}</XhFieldLabel>
             <XhFieldControl>
@@ -626,7 +633,7 @@ async function handleToggleStatus(row: ConfigListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="configValue" class="xh-span-2">
+        <XhFormFieldGroup name="configValue" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.config.config_value') }}</XhFieldLabel>
             <XhFieldControl>
@@ -641,7 +648,7 @@ async function handleToggleStatus(row: ConfigListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="defaultValue" class="xh-span-2">
+        <XhFormFieldGroup name="defaultValue" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.config.default_value') }}</XhFieldLabel>
             <XhFieldControl>
@@ -656,16 +663,7 @@ async function handleToggleStatus(row: ConfigListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="isGlobal">
-          <XhFieldRoot>
-            <XhFieldLabel>{{ t('setting.config.is_global_field') }}</XhFieldLabel>
-            <XhFieldControl>
-              <XhSwitch v-model:checked="configForm.isGlobal" />
-            </XhFieldControl>
-            <XhFieldErrorText />
-          </XhFieldRoot>
-        </XhFormFieldGroup>
-        <XhFormFieldGroup value="isBuiltIn">
+        <XhFormFieldGroup name="isBuiltIn">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.config.is_builtin_field') }}</XhFieldLabel>
             <XhFieldControl>
@@ -674,7 +672,7 @@ async function handleToggleStatus(row: ConfigListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="isEncrypted">
+        <XhFormFieldGroup name="isEncrypted">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.config.is_encrypted_field') }}</XhFieldLabel>
             <XhFieldControl>
@@ -683,7 +681,7 @@ async function handleToggleStatus(row: ConfigListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="sort">
+        <XhFormFieldGroup name="sort">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.config.sort') }}</XhFieldLabel>
             <XhFieldControl>
@@ -692,7 +690,7 @@ async function handleToggleStatus(row: ConfigListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="remark">
+        <XhFormFieldGroup name="remark">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.config.remark') }}</XhFieldLabel>
             <XhFieldControl>
@@ -701,7 +699,7 @@ async function handleToggleStatus(row: ConfigListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup v-if="!configForm.basicId" value="status">
+        <XhFormFieldGroup v-if="!configForm.basicId" name="status">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.config.status') }}</XhFieldLabel>
             <XhFieldControl>

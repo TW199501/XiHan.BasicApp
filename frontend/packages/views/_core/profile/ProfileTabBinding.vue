@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import type { ExternalLoginItem, OAuthProviderItem } from '~/types'
-import { XhButton, XhEmptyStateDescription, XhEmptyStateIcon, XhEmptyStateRoot, XhEmptyStateTitle, XhPopconfirmCancelTrigger, XhPopconfirmConfirmTrigger, XhPopconfirmContent, XhPopconfirmPositioner, XhPopconfirmRoot, XhPopconfirmTitle, XhPopconfirmTrigger, XhSpinner } from '@xihan-ui/vue'
+import { XhButton, XhEmptyStateDescription, XhEmptyStateIndicator, XhEmptyStateRoot, XhEmptyStateTitle, XhPopconfirmCancelTrigger, XhPopconfirmConfirmTrigger, XhPopconfirmContent, XhPopconfirmPositioner, XhPopconfirmRoot, XhPopconfirmTitle, XhPopconfirmTrigger, XhSpinner } from '@xihan-ui/vue'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { toast } from '~/composables'
@@ -50,7 +50,7 @@ async function loadData() {
     loaded.value = true
   }
   catch (e: unknown) {
-    toast.error((e as Error)?.message || t('component.profile.binding.err_load_failed'))
+    toast.danger((e as Error)?.message || t('component.profile.binding.err_load_failed'))
   }
   finally {
     loading.value = false
@@ -64,7 +64,7 @@ async function handleUnlinkAccount(provider: string) {
     await loadData()
   }
   catch (e: unknown) {
-    toast.error((e as Error)?.message || t('component.profile.binding.err_operation_failed'))
+    toast.danger((e as Error)?.message || t('component.profile.binding.err_operation_failed'))
   }
 }
 
@@ -101,7 +101,7 @@ async function handleStartBind(provider: string) {
     window.location.href = `${baseUrl}${apiPrefix}/OAuth/ExternalLogin?provider=${encodeURIComponent(provider)}&bindTicket=${encodeURIComponent(ticket)}`
   }
   catch (e: unknown) {
-    toast.error((e as Error)?.message || t('component.profile.binding.err_bind_start_failed'))
+    toast.danger((e as Error)?.message || t('component.profile.binding.err_bind_start_failed'))
   }
 }
 
@@ -124,7 +124,7 @@ onMounted(() => {
           </div>
         </div>
         <div class="pf-section__extra">
-          <XhButton size="sm" variant="ghost" @click="loadData">
+          <XhButton size="sm" variant="ghost" icon-only :aria-label="t('common.actions.refresh')" @click="loadData">
             <Icon icon="lucide:refresh-cw" />
           </XhButton>
         </div>
@@ -135,9 +135,9 @@ onMounted(() => {
             <XhSpinner />
           </div>
           <XhEmptyStateRoot v-if="providers.length === 0 && loaded">
-            <XhEmptyStateIcon>
+            <XhEmptyStateIndicator>
               <Icon icon="lucide:inbox" width="28" height="28" />
-            </XhEmptyStateIcon>
+            </XhEmptyStateIndicator>
             <XhEmptyStateTitle>{{ t('common.no_data') }}</XhEmptyStateTitle>
             <XhEmptyStateDescription>{{ t('component.profile.binding.empty') }}</XhEmptyStateDescription>
           </XhEmptyStateRoot>
@@ -185,7 +185,7 @@ onMounted(() => {
                   </XhPopconfirmContent>
                 </XhPopconfirmPositioner>
               </XhPopconfirmRoot>
-              <XhButton v-else size="sm" tone="brand" text @click="handleStartBind(provider.name)">
+              <XhButton v-else variant="subtle" size="sm" tone="brand" @click="handleStartBind(provider.name)">
                 {{ t('component.profile.binding.btn_bind') }}
               </XhButton>
             </div>

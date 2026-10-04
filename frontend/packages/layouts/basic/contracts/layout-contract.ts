@@ -36,7 +36,13 @@ export interface HeaderToolbarPropsContract {
   isDark: boolean
   isFullscreen: boolean
   showPreferencesInHeader?: boolean
+  /** 命令面板收成图标钮：顶栏横向菜单一行排不下时由顶栏下发，先保菜单显示 */
+  searchCompact?: boolean
   userOptions: AppDropdownOption[]
+  /** 当前上下文：平台或租户名；为空时不展示（应用没有租户切换概念） */
+  contextLabel?: null | string
+  /** 当前是否在平台 */
+  contextIsPlatform?: boolean
 }
 
 export interface AppSidebarPropsContract {
@@ -109,10 +115,12 @@ export const LAYOUT_CONTRACT_SNAPSHOT = {
     'tabbarStyle',
     'widgetSidebarToggle',
     'widgetRefresh',
-    'widgetThemeToggle',
-    'widgetLanguageToggle',
-    'widgetTimezone',
-    'widgetFullscreen',
+    'widgetSearchPlacement',
+    'widgetThemePlacement',
+    'widgetLanguagePlacement',
+    'widgetTimezonePlacement',
+    'widgetFullscreenPlacement',
+    'widgetPreferencePosition',
     'widgetNotification',
     'widgetLockScreen',
   ],

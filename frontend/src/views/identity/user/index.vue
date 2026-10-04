@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import type { Tone } from '@xihan-ui/core'
+import type { DataScopeDraft } from '../components/data-scope'
+import type { UserFormSecurity } from './user-form-access'
 import type {
   ApiId,
   PageResult,
@@ -13,8 +16,8 @@ import type { UserPermissionListItemDto } from '@/api/modules/authorization/user
 import type { UserRoleListItemDto } from '@/api/modules/authorization/user-role.types'
 import type { DepartmentTreeNodeDto } from '@/api/modules/organization/department.types'
 import type { UserDepartmentListItemDto } from '@/api/modules/organization/user-department.types'
-import type { ListFieldSchema, PageSchema, SchemaActionPayload, SchemaQueryParams } from '~/components'
-import { XhButton, XhCheckbox, XhClipboardControl, XhClipboardIndicator, XhClipboardInput, XhClipboardLabel, XhClipboardRoot, XhClipboardTrigger, XhDialogCloseTrigger, XhDialogContent, XhDialogRoot, XhDialogTitle, XhDrawerCloseTrigger, XhDrawerContent, XhDrawerRoot, XhDrawerTitle, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFlex, XhFormRoot, XhSpinner, XhSwitch, XhTabsContent, XhTabsList, XhTabsRoot, XhTabsTrigger, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
+import type { GrantTransferGroup, ListFieldSchema, PageSchema, PermissionGrantItem, SchemaActionPayload, SchemaQueryParams } from '~/components'
+import { XhAlertContent, XhAlertDescription, XhAlertIndicator, XhAlertRoot, XhButton, XhButtonIndicator, XhButtonLabel, XhClipboardControl, XhClipboardCopyTrigger, XhClipboardIndicator, XhClipboardInput, XhClipboardLabel, XhClipboardRoot, XhDialogCloseTrigger, XhDialogContent, XhDialogRoot, XhDialogTitle, XhDrawerCloseTrigger, XhDrawerContent, XhDrawerRoot, XhDrawerTitle, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFlex, XhFormRoot, XhSpinner, XhSwitch, XhTabsContent, XhTabsIndicator, XhTabsList, XhTabsRoot, XhTabsTrigger, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
 import { computed, h, onMounted, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
@@ -24,30 +27,44 @@ import {
   permissionApi,
   querySortsFromSchema,
   roleApi,
+  RoleType,
   SessionStatus,
   StatisticsPeriod,
   TenantMemberInviteStatus,
   TenantMemberType,
   TwoFactorMethod,
+  userDataScopeApi,
   UserGender,
   userManagementApi,
+  ValidityStatus,
 } from '@/api'
-import { GENDER_OPTIONS, STATUS_OPTIONS } from '@/constants'
-import { Icon, PhoneInput, SchemaPage, XDatePicker, XEditModal, XInput, XNumberInput, XPermissionGrantPanel, XSelect } from '~/components'
+import { GENDER_OPTIONS, ROLE_TYPE_OPTIONS, STATUS_OPTIONS } from '@/constants'
+import { Icon, PhoneInput, SchemaPage, XDatePicker, XEditModal, XGrantTransfer, XInput, XNumberInput, XPermissionTransfer, XSelect } from '~/components'
 import { dialog, toast } from '~/composables'
-import { useEnumOptions } from '~/hooks'
+import { useEnumOptions, usePermission } from '~/hooks'
 import { useAuthStore, useUserStore } from '~/stores'
 import { formatDate, getOptionLabel } from '~/utils'
+import { isDataScopeComplete, isDataScopeDirty, toDataScopePayload } from '../components/data-scope'
+import DataScopeEditor from '../components/DataScopeEditor.vue'
+import { applyPermissionTransfer, diffPermissionGrants, diffRoleGrants } from './direct-grant'
+import { canTogglePick, diffUserFormSecurity } from './user-form-access'
 import UserAvatarCell from './UserAvatarCell.vue'
 
 defineOptions({ name: 'SystemUserPage' })
 
 const { t } = useI18n()
+const { hasPermission } = usePermission()
 const authStore = useAuthStore()
 const userStore = useUserStore()
+/** 数据范围是租户侧设置：平台没有成员关系 */
+const isPlatformContext = computed(() => userStore.userInfo?.isPlatform ?? false)
 
 /** 编辑弹窗的保存钮靠这个 id 关联到表单，点它才会走整表校验 */
 const editFormId = useId()
+// 安全页签的控件与文字分列排布，控件的读屏名经 aria-labelledby 指回旁边那行文字
+const lockLabelId = useId()
+const multiLoginLabelId = useId()
+const maxDevicesLabelId = useId()
 
 const GENDER_TAG_TYPE: Record<UserGender, 'neutral' | 'info' | 'warning'> = {
   [UserGender.Unknown]: 'neutral',
@@ -72,6 +89,8 @@ interface UserFormState {
   isLocked: boolean
   multiLogin: boolean
   maxDev: number
+  /** 外部成员：身份类字段只读，保存只提交本租户的角色与部门 */
+  isExternal: boolean
 }
 
 /** 头像色板：跟随语义色，明暗主题均可用 */
@@ -112,6 +131,30 @@ const phoneValid = ref(true)
  */
 const phoneInputKey = ref(0)
 
+/** 打开表单时的状态与安全设置，保存时据此只提交改过的项 */
+const originalSecurity = ref<UserFormSecurity>(pickSecurity(createDefaultForm()))
+
+function pickSecurity(form: UserFormState): UserFormSecurity {
+  return { status: form.status, isLocked: form.isLocked, multiLogin: form.multiLogin, maxDev: form.maxDev }
+}
+
+/** 外部成员的账号由其注册地维护：资料、状态与安全设置只读 */
+const identityReadonly = computed(() => userForm.value.isExternal)
+
+/**
+ * 表单各块分别走各自受门控的接口，按按钮码放开：没有那个按钮就不让改那一块，
+ * 否则资料先存进去、后面的接口再被拒，留下存了一半的用户。新建时状态随创建一起提交
+ */
+const formAccess = computed(() => ({
+  status: !userForm.value.basicId || hasPermission('identity.user.status'),
+  lock: hasPermission('identity.user.lock'),
+  loginPolicy: hasPermission('identity.user.login-policy'),
+  role: { grant: hasPermission('identity.user.grant-role'), revoke: hasPermission('identity.user.revoke-role') },
+  department: { grant: hasPermission('identity.user.assign-department'), revoke: hasPermission('identity.user.revoke-department') },
+}))
+const effectiveRoleIds = computed(() => new Set(existingRoles.value.map(role => role.roleId)))
+const effectiveDeptIds = computed(() => new Set(existingDepts.value.map(dept => dept.departmentId)))
+
 const formTitle = computed(() =>
   userForm.value.basicId ? t('identity.user.form_edit_title', { name: userForm.value.userName }) : t('identity.user.form_create_title'),
 )
@@ -130,38 +173,40 @@ const detUser = computed(() => {
   const sec = d.security
   const todayStat = d.statistics.find(s => s.period === StatisticsPeriod.Today) ?? d.statistics[0]
   const onlineSession = d.sessions.find(s => s.status === SessionStatus.Active)
-  const badges: { label: string, cls: string, icon: string }[] = []
+  const badges: { label: string, tone: Tone, icon: string }[] = []
   if (sec) {
     badges.push(
       sec.emailVerified
-        ? { label: t('identity.user.badge.email_verified'), cls: 'bdg-ok', icon: 'tabler:mail' }
-        : { label: t('identity.user.badge.email_unverified'), cls: 'bdg-gray', icon: 'tabler:mail' },
+        ? { label: t('identity.user.badge.email_verified'), tone: 'success', icon: 'tabler:mail' }
+        : { label: t('identity.user.badge.email_unverified'), tone: 'neutral', icon: 'tabler:mail' },
     )
     badges.push(
       sec.phoneVerified
-        ? { label: t('identity.user.badge.phone_verified'), cls: 'bdg-ok', icon: 'tabler:phone' }
-        : { label: t('identity.user.badge.phone_unverified'), cls: 'bdg-gray', icon: 'tabler:phone' },
+        ? { label: t('identity.user.badge.phone_verified'), tone: 'success', icon: 'tabler:phone' }
+        : { label: t('identity.user.badge.phone_unverified'), tone: 'neutral', icon: 'tabler:phone' },
     )
     if (sec.twoFactorEnabled) {
       badges.push({
         label: `2FA: ${formatTwoFa(sec.twoFactorMethod)}`,
-        cls: 'bdg-info',
+        tone: 'info',
         icon: 'tabler:shield-check',
       })
     }
     if (sec.isLocked)
-      badges.push({ label: t('identity.user.badge.account_locked'), cls: 'bdg-no', icon: 'tabler:lock' })
+      badges.push({ label: t('identity.user.badge.account_locked'), tone: 'danger', icon: 'tabler:lock' })
     if (sec.failedLoginAttempts > 0) {
       badges.push({
         label: t('identity.user.badge.failed_login', { count: sec.failedLoginAttempts }),
-        cls: 'bdg-warn',
+        tone: 'warning',
         icon: 'tabler:alert-triangle',
       })
     }
   }
+  if (u.isExternalMember)
+    badges.push({ label: t('identity.user.badge.external_member'), tone: 'info', icon: 'tabler:building-community' })
   const inviteAccepted = d.tenantMembership?.inviteStatus === TenantMemberInviteStatus.Accepted
   if (d.tenantMembership && !inviteAccepted) {
-    badges.push({ label: t('identity.user.badge.inactive'), cls: 'bdg-warn', icon: 'tabler:clock-pause' })
+    badges.push({ label: t('identity.user.badge.inactive'), tone: 'warning', icon: 'tabler:clock-pause' })
   }
   return {
     userName: u.userName,
@@ -228,6 +273,7 @@ function createDefaultForm(): UserFormState {
     isLocked: false,
     multiLogin: true,
     maxDev: 0,
+    isExternal: false,
   }
 }
 
@@ -339,7 +385,13 @@ const fields = computed<ListFieldSchema[]>(() => [
       return h('div', { class: 'tbl-cell-2l' }, [
         h('div', { class: 'tbl-cell-2l__primary tbl-cell-2l__primary--strong' }, [
           display,
-          r.isSystemAccount ? h('span', { class: 'sys-tag' }, t('identity.user.tag_system')) : null,
+          // 名字旁的身份标记用空心，与右侧各列的实底状态标签分开层级
+          r.isSystemAccount
+            ? h(XhTagRoot, { variant: 'outline', size: 'sm', tone: 'warning', class: 'ml-1' }, () => h(XhTagLabel, () => t('identity.user.tag_system')))
+            : null,
+          r.isExternalMember
+            ? h(XhTagRoot, { variant: 'outline', size: 'sm', tone: 'info', class: 'ml-1' }, () => h(XhTagLabel, () => t('identity.user.tag_external')))
+            : null,
         ]),
         h('div', { class: 'tbl-cell-2l__secondary' }, subLine),
       ])
@@ -359,7 +411,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     render: (row) => {
       const r = row as unknown as UserListItemDto
       const label = getOptionLabel(genderEnumOptions.value, r.gender)
-      return h(XhTagRoot, { variant: 'outline', tone: GENDER_TAG_TYPE[r.gender] ?? 'neutral', style: { fontWeight: 500 } }, () => h(XhTagLabel, () => label))
+      return h(XhTagRoot, { variant: 'subtle', tone: GENDER_TAG_TYPE[r.gender] ?? 'neutral' }, () => h(XhTagLabel, () => label))
     },
   },
   // 地区/语言（仅列）
@@ -390,7 +442,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 5,
     render: (row) => {
       const r = row as unknown as UserListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: r.status === EnableStatus.Enabled ? 'success' : 'danger', style: { fontWeight: 500 } }, () => h(XhTagLabel, () => (r.status === EnableStatus.Enabled ? t('identity.user.status_enabled') : t('identity.user.status_disabled'))))
+      return h(XhTagRoot, { variant: 'subtle', tone: r.status === EnableStatus.Enabled ? 'success' : 'danger' }, () => h(XhTagLabel, () => (r.status === EnableStatus.Enabled ? t('identity.user.status_enabled') : t('identity.user.status_disabled'))))
     },
   },
   // 角色（仅列，来自后端批量聚合 roleNames）
@@ -407,7 +459,7 @@ const fields = computed<ListFieldSchema[]>(() => [
         return h('span', { class: 'text-foreground/40' }, '—')
       }
       return h('div', { class: 'flex flex-wrap gap-1' }, names.map(name =>
-        h(XhTagRoot, { variant: 'outline', tone: 'info' }, () => h(XhTagLabel, () => name))))
+        h(XhTagRoot, { variant: 'subtle', tone: 'info' }, () => h(XhTagLabel, () => name))))
     },
   },
   // 部门（仅列，主部门名称）
@@ -421,7 +473,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     render: (row) => {
       const r = row as unknown as UserListItemDto
       return r.departmentName
-        ? h(XhTagRoot, { variant: 'outline', tone: 'neutral' }, () => h(XhTagLabel, () => r.departmentName))
+        ? h(XhTagRoot, { variant: 'subtle', tone: 'neutral' }, () => h(XhTagLabel, () => r.departmentName))
         : h('span', { class: 'text-foreground/40' }, '—')
     },
   },
@@ -436,10 +488,10 @@ const fields = computed<ListFieldSchema[]>(() => [
       const r = row as unknown as UserListItemDto
       const tags = []
       if (r.isLocked) {
-        tags.push(h(XhTagRoot, { variant: 'outline', tone: 'danger' }, () => h(XhTagLabel, () => t('identity.user.security_locked'))))
+        tags.push(h(XhTagRoot, { variant: 'subtle', tone: 'danger' }, () => h(XhTagLabel, () => t('identity.user.security_locked'))))
       }
       if (r.twoFactorEnabled) {
-        tags.push(h(XhTagRoot, { variant: 'outline', tone: 'success' }, () => h(XhTagLabel, () => '2FA')))
+        tags.push(h(XhTagRoot, { variant: 'subtle', tone: 'success' }, () => h(XhTagLabel, () => '2FA')))
       }
       if (tags.length === 0) {
         return h('span', { class: 'text-foreground/40' }, t('identity.user.security_normal'))
@@ -476,7 +528,7 @@ const fields = computed<ListFieldSchema[]>(() => [
 ])
 
 const schema = computed<PageSchema>(() => ({
-  pageCode: 'system.user',
+  pageCode: 'identity.user',
   exportPermission: 'identity.user.export',
   pageName: t('identity.user.page_name'),
   batchRemovable: true,
@@ -488,21 +540,25 @@ const schema = computed<PageSchema>(() => ({
     page: params => userManagementApi.page(buildUserQuery(params)) as unknown as Promise<PageResult<Record<string, unknown>>>,
     remove: id => userManagementApi.delete(id),
     updateStatus: (id, enabled) => userManagementApi.updateStatus({ basicId: id, status: enabled ? EnableStatus.Enabled : EnableStatus.Disabled }),
-    export: { businessType: 'system.user', buildQuery: buildUserQuery },
+    export: { businessType: 'identity.user', buildQuery: buildUserQuery },
   },
   actions: [
-    { key: 'create', title: t('identity.user.action_create'), scope: 'page', type: 'primary', icon: 'tabler:plus' },
+    { key: 'create', title: t('identity.user.action_create'), scope: 'page', type: 'primary', icon: 'tabler:plus', permission: 'identity.user.create' },
     { key: 'view', title: t('identity.user.action_view'), scope: 'row', icon: 'lucide:eye' },
-    { key: 'edit', title: t('identity.user.action_edit'), scope: 'row', icon: 'lucide:pencil' },
-    { key: 'grant', title: t('identity.user.action_grant'), scope: 'row', icon: 'lucide:key-round' },
-    { key: 'lock', title: t('identity.user.action_lock'), scope: 'row', icon: 'lucide:lock' },
-    { key: 'resetPassword', title: t('identity.user.action_reset_password'), scope: 'row', icon: 'lucide:key-square' },
+    { key: 'edit', title: t('identity.user.action_edit'), scope: 'row', icon: 'lucide:pencil', permission: 'identity.user.update' },
+    { key: 'grantRole', title: t('identity.user.action_grant_role'), scope: 'row', icon: 'lucide:users-round', permission: 'identity.user.grant-role' },
+    { key: 'grantPermission', title: t('identity.user.action_grant_perm'), scope: 'row', icon: 'lucide:key-round', permission: 'identity.user.grant-permission' },
+    { key: 'dataScope', title: t('identity.user.action_data_scope'), scope: 'row', icon: 'lucide:building-2', visible: () => !isPlatformContext.value, permission: 'identity.user.data-scope' },
+    { key: 'lock', title: t('identity.user.action_lock'), scope: 'row', type: 'warning', icon: 'lucide:lock', visible: isHomeAccountRow, permission: 'identity.user.lock' },
+    { key: 'resetPassword', title: t('identity.user.action_reset_password'), scope: 'row', type: 'error', icon: 'lucide:key-square', visible: isHomeAccountRow, permission: 'identity.user.reset-password' },
     {
       key: 'resetOtp',
       title: t('identity.user.action_reset_otp'),
       scope: 'row',
+      type: 'error',
       icon: 'lucide:shield-off',
-      visible: row => (row as unknown as UserListItemDto).twoFactorEnabled,
+      visible: row => isHomeAccountRow(row) && (row as unknown as UserListItemDto).twoFactorEnabled,
+      permission: 'identity.user.reset-two-factor',
     },
     {
       key: 'impersonate',
@@ -510,17 +566,25 @@ const schema = computed<PageSchema>(() => ({
       scope: 'row',
       icon: 'lucide:user-round-cog',
       visible: row => canImpersonate((row as unknown as UserListItemDto)),
+      permission: 'identity.user.impersonate',
     },
-    { key: 'logout', title: t('identity.user.action_logout'), scope: 'row', icon: 'lucide:log-out' },
+    { key: 'logout', title: t('identity.user.action_logout'), scope: 'row', type: 'error', icon: 'lucide:log-out', visible: isHomeAccountRow, permission: 'identity.user.revoke-sessions' },
     {
       key: 'delete',
       title: t('identity.user.action_delete'),
       scope: 'row',
+      type: 'error',
       icon: 'lucide:trash-2',
-      visible: row => !(row as unknown as UserListItemDto).isSystemAccount,
+      visible: row => isHomeAccountRow(row) && !(row as unknown as UserListItemDto).isSystemAccount,
+      permission: 'identity.user.delete',
     },
   ],
 }))
+
+/** 账号级操作（锁定、重置、下线、删除）只对本上下文注册的账号；外部成员由其注册地维护 */
+function isHomeAccountRow(row: Record<string, unknown>) {
+  return !(row as unknown as UserListItemDto).isExternalMember
+}
 
 function onAction(payload: SchemaActionPayload) {
   const row = payload.row as unknown as UserListItemDto | undefined
@@ -536,9 +600,17 @@ function onAction(payload: SchemaActionPayload) {
       if (row)
         void openEdit(row.basicId)
       break
-    case 'grant':
+    case 'grantRole':
       if (row)
-        void openGrantDrawer(row)
+        void openRoleGrantDrawer(row)
+      break
+    case 'grantPermission':
+      if (row)
+        void openPermGrantDrawer(row)
+      break
+    case 'dataScope':
+      if (row)
+        void openScopeDrawer(row)
       break
     case 'lock':
       if (row)
@@ -580,6 +652,7 @@ function openCreate() {
   phoneValid.value = true
   // 强制重新挂载 PhoneInput，避免上次残留的已输入数字（同上，props 没变不会自己清）
   phoneInputKey.value++
+  originalSecurity.value = pickSecurity(userForm.value)
   selRoleIds.value = []
   selDeptIds.value = []
   existingRoles.value = []
@@ -630,11 +703,15 @@ async function fillFormFromDetail(detail: UserManagementDetailDto) {
     isLocked: sec?.isLocked ?? false,
     multiLogin: sec?.allowMultiLogin ?? true,
     maxDev: sec?.maxLoginDevices ?? 0,
+    isExternal: u.isExternalMember,
   }
-  existingRoles.value = detail.roles
-  existingDepts.value = detail.departments
-  selRoleIds.value = detail.roles.map(r => r.roleId)
-  selDeptIds.value = detail.departments.map(d => d.departmentId)
+  originalSecurity.value = pickSecurity(userForm.value)
+  // 详情里的 roles 连撤销过、已过期的历史行一并返回；比对基准要的是当前生效的那份
+  existingRoles.value = await userManagementApi.roles.list(u.basicId, true)
+  // 部门归属同理：撤销过的行仍在详情里，只拿有效的做勾选与比对
+  existingDepts.value = detail.departments.filter(d => d.status === ValidityStatus.Valid)
+  selRoleIds.value = existingRoles.value.map(r => r.roleId)
+  selDeptIds.value = existingDepts.value.map(d => d.departmentId)
 }
 
 async function openEdit(id: ApiId) {
@@ -649,7 +726,7 @@ async function openEdit(id: ApiId) {
     showFormModal.value = true
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('identity.user.msg_load_user_failed'))
+    toast.danger((error as Error)?.message || t('identity.user.msg_load_user_failed'))
   }
 }
 
@@ -661,7 +738,7 @@ async function openDetail(id: ApiId) {
     currentDetail.value = await userManagementApi.detailView(id)
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('identity.user.msg_load_detail_failed'))
+    toast.danger((error as Error)?.message || t('identity.user.msg_load_detail_failed'))
   }
   finally {
     detailLoading.value = false
@@ -682,38 +759,40 @@ function togglePick(arr: ApiId[], id: ApiId) {
   else arr.push(id)
 }
 
+/**
+ * 表单里的角色勾选一次提交：与当前生效的角色比出差量，交后端单事务落地。
+ * 只在可选角色范围内比对——不在列表里的（如已停用）勾选区看不到，也就不该被顺手撤掉
+ */
 async function syncRoles(userId: ApiId) {
-  const current = existingRoles.value
-  const selected = new Set(selRoleIds.value)
-  for (const role of roleOptions.value) {
-    const bound = current.find(c => c.roleId === role.basicId)
-    const want = selected.has(role.basicId)
-    if (want && !bound) {
-      await userManagementApi.roles.grant({ userId, roleId: role.basicId })
-    }
-    else if (!want && bound) {
-      await userManagementApi.roles.revoke(bound.basicId)
-    }
+  const optionIds = new Set(roleOptions.value.map(role => role.basicId))
+  const { grantRoleIds, revokeUserRoleIds } = diffRoleGrants(
+    selRoleIds.value,
+    existingRoles.value.filter(item => optionIds.has(item.roleId)),
+  )
+  if (grantRoleIds.length === 0 && revokeUserRoleIds.length === 0) {
+    return
   }
+  await userManagementApi.roles.batchUpdate({ userId, grantRoleIds, revokeUserRoleIds })
 }
 
+/**
+ * 表单里的部门勾选一次提交：与现有归属比出差量，交后端单事务落地。
+ * 主部门由后端保持唯一——首个部门自动为主，撤掉主部门时由最早的归属接任。
+ * 只在可选部门范围内比对，不在列表里的归属勾选区看不到，也就不该被顺手撤掉
+ */
 async function syncDepartments(userId: ApiId) {
-  const current = existingDepts.value
+  const optionIds = new Set(deptFlatOptions.value.map(d => d.value))
+  const current = existingDepts.value.filter(d => optionIds.has(d.departmentId))
   const selected = new Set(selDeptIds.value)
-  for (const depId of deptFlatOptions.value.map(d => d.value)) {
-    const bound = current.find(c => c.departmentId === depId)
-    const want = selected.has(depId)
-    if (want && !bound) {
-      await userManagementApi.userDepartments.assign({
-        userId,
-        departmentId: depId,
-        isMain: selected.size === 1 || !current.some(c => c.isMain),
-      })
-    }
-    else if (!want && bound) {
-      await userManagementApi.userDepartments.revoke(bound.basicId)
-    }
+  const boundIds = new Set(current.map(d => d.departmentId))
+  const assigns = selDeptIds.value
+    .filter(id => optionIds.has(id) && !boundIds.has(id))
+    .map(departmentId => ({ departmentId, isMain: false }))
+  const revokeUserDepartmentIds = current.filter(d => !selected.has(d.departmentId)).map(d => d.basicId)
+  if (assigns.length === 0 && revokeUserDepartmentIds.length === 0) {
+    return
   }
+  await userManagementApi.userDepartments.batchUpdate({ userId, assigns, revokeUserDepartmentIds })
 }
 
 async function saveUser() {
@@ -736,6 +815,18 @@ async function saveUser() {
   }
   submitLoading.value = true
   try {
+    // 外部成员：账号资料、状态与安全设置由注册地维护，这里只提交本租户的角色与部门
+    if (form.isExternal && form.basicId) {
+      await syncRoles(form.basicId)
+      await syncDepartments(form.basicId)
+      toast.success(t('common.messages.save_success'))
+      closeModals()
+      reloadList()
+      return
+    }
+
+    // 状态、锁定、登录策略各走一个受门控的接口，只提交改过的
+    const changed = diffUserFormSecurity(pickSecurity(form), originalSecurity.value)
     let userId = form.basicId
     if (userId) {
       const updateInput: UserUpdateDto = {
@@ -751,7 +842,7 @@ async function saveUser() {
         remark: normalizeStr(form.remark),
       }
       await userManagementApi.update(updateInput)
-      if (form.status !== undefined) {
+      if (changed.status) {
         await userManagementApi.updateStatus({ basicId: userId, status: form.status })
       }
     }
@@ -780,16 +871,20 @@ async function saveUser() {
     }
 
     if (userId) {
-      await userManagementApi.security.updateLock({
-        userId,
-        isLocked: form.isLocked,
-        lockoutEndTime: null,
-      })
-      await userManagementApi.security.updateLoginPolicy({
-        userId,
-        allowMultiLogin: form.multiLogin,
-        maxLoginDevices: form.maxDev || 0,
-      })
+      if (changed.lock) {
+        await userManagementApi.security.updateLock({
+          userId,
+          isLocked: form.isLocked,
+          lockoutEndTime: null,
+        })
+      }
+      if (changed.loginPolicy) {
+        await userManagementApi.security.updateLoginPolicy({
+          userId,
+          allowMultiLogin: form.multiLogin,
+          maxLoginDevices: form.maxDev || 0,
+        })
+      }
       await syncRoles(userId)
       await syncDepartments(userId)
     }
@@ -799,28 +894,46 @@ async function saveUser() {
     reloadList()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('common.messages.save_failed'))
+    toast.danger((error as Error)?.message || t('common.messages.save_failed'))
   }
   finally {
     submitLoading.value = false
   }
 }
 
+/** 列表行不带锁定状态：先取详情，确认框才能说清这次是锁定还是解锁 */
 async function toggleLock(row: UserListItemDto) {
+  let locked: boolean
   try {
     const detail = await userManagementApi.detailView(row.basicId)
-    const locked = detail?.security?.isLocked ?? false
-    await userManagementApi.security.updateLock({
-      userId: row.basicId,
-      isLocked: !locked,
-      lockoutEndTime: null,
-    })
-    toast.success(locked ? t('identity.user.msg_account_unlocked') : t('identity.user.msg_account_locked'))
-    reloadList()
+    locked = detail?.security?.isLocked ?? false
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('common.messages.operation_failed'))
+    toast.danger((error as Error)?.message || t('common.messages.operation_failed'))
+    return
   }
+  void dialog.confirm({
+    badge: 'warning',
+    tone: locked ? undefined : 'danger',
+    title: t('identity.user.action_lock'),
+    content: t(locked ? 'identity.user.confirm_unlock' : 'identity.user.confirm_lock', { name: displayName(row) }),
+    okText: t('common.actions.confirm'),
+    cancelText: t('common.actions.cancel'),
+    onOk: async () => {
+      try {
+        await userManagementApi.security.updateLock({
+          userId: row.basicId,
+          isLocked: !locked,
+          lockoutEndTime: null,
+        })
+        toast.success(locked ? t('identity.user.msg_account_unlocked') : t('identity.user.msg_account_locked'))
+        reloadList()
+      }
+      catch (error) {
+        toast.danger((error as Error)?.message || t('common.messages.operation_failed'))
+      }
+    },
+  })
 }
 
 function displayName(row: UserListItemDto): string {
@@ -847,7 +960,7 @@ function impersonate(row: UserListItemDto) {
         await authStore.startImpersonation({ targetUserId: String(row.basicId) })
       }
       catch (error) {
-        toast.error((error as Error)?.message || t('identity.user.impersonate_failed'))
+        toast.danger((error as Error)?.message || t('identity.user.impersonate_failed'))
       }
     },
   })
@@ -870,7 +983,7 @@ function forceLogout(row: UserListItemDto) {
         reloadList()
       }
       catch (error) {
-        toast.error((error as Error)?.message || t('identity.user.logout_failed'))
+        toast.danger((error as Error)?.message || t('identity.user.logout_failed'))
       }
     },
   })
@@ -922,7 +1035,7 @@ function resetPassword(row: UserListItemDto) {
               h(XhClipboardLabel, () => t('identity.user.reset_password_done_content', { name: displayName(row) })),
               h(XhClipboardControl, null, () => [
                 h(XhClipboardInput),
-                h(XhClipboardTrigger, { 'aria-label': t('identity.user.reset_password_copy') }, () => [
+                h(XhClipboardCopyTrigger, { 'aria-label': t('identity.user.reset_password_copy') }, () => [
                   h(XhClipboardIndicator),
                   h(XhClipboardIndicator, { copied: true }),
                 ]),
@@ -932,7 +1045,7 @@ function resetPassword(row: UserListItemDto) {
         })
       }
       catch (error) {
-        toast.error((error as Error)?.message || t('identity.user.reset_password_failed'))
+        toast.danger((error as Error)?.message || t('identity.user.reset_password_failed'))
       }
     },
   })
@@ -955,33 +1068,210 @@ function resetOtp(row: UserListItemDto) {
         reloadList()
       }
       catch (error) {
-        toast.error((error as Error)?.message || t('identity.user.reset_otp_failed'))
+        toast.danger((error as Error)?.message || t('identity.user.reset_otp_failed'))
       }
     },
   })
 }
 
-// ── 权限直授抽屉（角色直授 + 权限直授 Grant/Deny） ──────────────
-const grantVisible = ref(false)
-const grantUser = ref<UserListItemDto | null>(null)
-const grantTab = ref('role')
-const grantLoading = ref(false)
-const grantRoleList = ref<UserRoleListItemDto[]>([])
-const grantPermList = ref<UserPermissionListItemDto[]>([])
+// ── 成员数据范围抽屉（覆盖档位与自定义部门一次保存） ──────────────
+const scopeVisible = ref(false)
+const scopeUser = ref<UserListItemDto | null>(null)
+const scopeTree = ref<DepartmentTreeNodeDto[]>([])
+const scopeDraft = ref<DataScopeDraft>({ dataScope: null, departments: [] })
+/** 打开时的现状，保存钮只在有改动时可用 */
+const scopeOriginal = ref<DataScopeDraft>({ dataScope: null, departments: [] })
+const scopeLoading = ref(false)
+const scopeSubmitting = ref(false)
+const scopeDirty = computed(() => isDataScopeDirty(scopeDraft.value, scopeOriginal.value))
+
+function resetScopeDraft(draft: DataScopeDraft) {
+  scopeDraft.value = draft
+  scopeOriginal.value = draft
+}
+
+async function openScopeDrawer(row: UserListItemDto) {
+  scopeUser.value = row
+  scopeVisible.value = true
+  scopeTree.value = []
+  resetScopeDraft({ dataScope: null, departments: [] })
+  scopeLoading.value = true
+  try {
+    const [tree, setting] = await Promise.all([
+      userManagementApi.departments.tree({ limit: 1000, onlyEnabled: true }),
+      userDataScopeApi.setting(row.basicId),
+    ])
+    scopeTree.value = tree
+    resetScopeDraft({
+      dataScope: setting.dataScope,
+      departments: setting.departments.map(({ departmentId, includeChildren }) => ({ departmentId, includeChildren })),
+    })
+  }
+  catch (error) {
+    toast.danger((error as Error)?.message || t('identity.data_scope.load_failed'))
+  }
+  finally {
+    scopeLoading.value = false
+  }
+}
+
+async function saveScopes() {
+  const user = scopeUser.value
+  if (!user || !scopeDirty.value || scopeSubmitting.value)
+    return
+  if (!isDataScopeComplete(scopeDraft.value)) {
+    toast.warning(t('identity.data_scope.custom_required'))
+    return
+  }
+
+  scopeSubmitting.value = true
+  try {
+    await userDataScopeApi.set({ userId: user.basicId, ...toDataScopePayload(scopeDraft.value) })
+    toast.success(t('identity.data_scope.saved'))
+    scopeVisible.value = false
+  }
+  catch (error) {
+    toast.danger((error as Error)?.message || t('common.messages.save_failed'))
+  }
+  finally {
+    scopeSubmitting.value = false
+  }
+}
+
+// ── 角色直授抽屉（穿梭框，挪好后一次提交） ──────────────
+const roleGrantVisible = ref(false)
+const roleGrantUser = ref<UserListItemDto | null>(null)
+const roleGrantLoading = ref(false)
+/** 当前生效的角色直授（后端 onlyValid 口径，撤销过、已过期的不在其中） */
+const roleGrants = ref<UserRoleListItemDto[]>([])
+/** 右栏草稿：保存时与 roleGrants 比出授予与撤销的差量 */
+const roleDraft = ref<ApiId[]>([])
+const roleDirty = ref(false)
+
+const roleTypeOptions = useEnumOptions('RoleType', ROLE_TYPE_OPTIONS)
+
+/**
+ * 条目为可选角色全集，再补上已授予却不在可选列表里的（例如授予后角色被停用）：
+ * 否则右栏「已授角色」会漏掉它们，审阅时看不全
+ */
+const roleGrantItems = computed<RoleSelectItemDto[]>(() => {
+  const known = new Set(roleOptions.value.map(role => role.basicId))
+  const extra = roleGrants.value
+    .filter(grant => !known.has(grant.roleId))
+    .map(grant => ({
+      basicId: grant.roleId,
+      roleName: grant.roleName ?? String(grant.roleId),
+      roleCode: grant.roleCode ?? '',
+      roleType: grant.roleType ?? RoleType.Custom,
+      isGlobal: grant.isGlobalRole ?? false,
+    }))
+  return [...roleOptions.value, ...extra]
+})
+
+/** 按角色类型分段，段序跟随角色列表里各类型首次出现的顺序 */
+const roleGrantGroups = computed<GrantTransferGroup<RoleSelectItemDto>[]>(() => {
+  const byType = new Map<string, RoleSelectItemDto[]>()
+  for (const role of roleGrantItems.value) {
+    const items = byType.get(role.roleType) ?? []
+    items.push(role)
+    byType.set(role.roleType, items)
+  }
+  return [...byType].map(([type, items]) => ({
+    key: type,
+    name: getOptionLabel(roleTypeOptions.value, type, type),
+    items,
+  }))
+})
+
+async function openRoleGrantDrawer(row: UserListItemDto) {
+  roleGrantUser.value = row
+  roleGrantVisible.value = true
+  roleGrants.value = []
+  roleDraft.value = []
+  roleDirty.value = false
+  roleGrantLoading.value = true
+  try {
+    roleGrants.value = await userManagementApi.roles.list(row.basicId, true)
+    roleDraft.value = roleGrants.value.map(grant => grant.roleId)
+  }
+  catch (error) {
+    toast.danger((error as Error)?.message || t('identity.user.grant_load_failed'))
+  }
+  finally {
+    roleGrantLoading.value = false
+  }
+}
+
+function onRoleTransfer(next: ApiId[]) {
+  if (roleGrantLoading.value) {
+    return
+  }
+  roleDraft.value = next
+  roleDirty.value = true
+}
+
+async function saveRoleGrants() {
+  const user = roleGrantUser.value
+  if (!user || roleGrantLoading.value) {
+    return
+  }
+  const { grantRoleIds, revokeUserRoleIds } = diffRoleGrants(roleDraft.value, roleGrants.value)
+  if (grantRoleIds.length === 0 && revokeUserRoleIds.length === 0) {
+    toast.info(t('identity.user.grant_no_change'))
+    roleDirty.value = false
+    return
+  }
+  roleGrantLoading.value = true
+  try {
+    await userManagementApi.roles.batchUpdate({ userId: user.basicId, grantRoleIds, revokeUserRoleIds })
+    roleGrants.value = await userManagementApi.roles.list(user.basicId, true)
+    roleDraft.value = roleGrants.value.map(grant => grant.roleId)
+    roleDirty.value = false
+    toast.success(t('identity.user.grant_saved', { grant: grantRoleIds.length, revoke: revokeUserRoleIds.length }))
+  }
+  catch (error) {
+    toast.danger((error as Error)?.message || t('common.messages.save_failed'))
+  }
+  finally {
+    roleGrantLoading.value = false
+  }
+}
+
+// ── 权限直授抽屉（授予 / 拒绝各一个穿梭框，两页签一次提交） ──────────────
+const permGrantVisible = ref(false)
+const permGrantUser = ref<UserListItemDto | null>(null)
+const permGrantTab = ref<'grant' | 'deny'>('grant')
+const permGrantLoading = ref(false)
+/** 当前生效的权限直授（后端 onlyValid 口径） */
+const permGrants = ref<UserPermissionListItemDto[]>([])
 const permCatalog = ref<PermissionListItemDto[]>([])
-const permPanelRef = ref<{ reset: () => void } | null>(null)
-const grantBusyId = ref<ApiId | null>(null)
+/** 草稿：权限主键 → 直授动作；不在表里即未设置。授予与拒绝互斥，一个权限只落在一边 */
 const permActions = ref<Map<ApiId, PermissionAction>>(new Map())
 const permDirty = ref(false)
 
-/** roleId → 用户角色授权记录 */
-const grantRoleByRoleId = computed(() => {
-  const map = new Map<ApiId, UserRoleListItemDto>()
-  for (const item of grantRoleList.value) {
-    map.set(item.roleId, item)
-  }
-  return map
+/**
+ * 条目为权限目录，再补上已直授却不在目录里的（例如授予后权限被停用）：
+ * 否则右栏会漏掉它们，保存时却仍原样保留，界面与实际对不上
+ */
+const permGrantItems = computed<Array<PermissionGrantItem & { basicId: ApiId }>>(() => {
+  const known = new Set(permCatalog.value.map(permission => permission.basicId))
+  const extra = permGrants.value
+    .filter(grant => !known.has(grant.permissionId))
+    .map(grant => ({
+      basicId: grant.permissionId,
+      permissionCode: grant.permissionCode ?? '',
+      permissionName: grant.permissionName ?? String(grant.permissionId),
+      moduleCode: grant.moduleCode,
+    }))
+  return [...permCatalog.value, ...extra]
 })
+
+function permKeysOf(action: PermissionAction): ApiId[] {
+  return [...permActions.value].filter(([, value]) => value === action).map(([key]) => key)
+}
+
+const permGrantIds = computed(() => permKeysOf(PermissionAction.Grant))
+const permDenyIds = computed(() => permKeysOf(PermissionAction.Deny))
 
 async function loadPermCatalog() {
   if (permCatalog.value.length) {
@@ -990,115 +1280,67 @@ async function loadPermCatalog() {
   permCatalog.value = await permissionApi.catalog()
 }
 
-async function openGrantDrawer(row: UserListItemDto) {
-  grantUser.value = row
-  grantVisible.value = true
-  grantTab.value = 'role'
-  permPanelRef.value?.reset()
-  grantLoading.value = true
-  try {
-    const [roles, perms] = await Promise.all([
-      userManagementApi.roles.list(row.basicId),
-      // 撤销直授是把行置为失效而非删行，只取有效行，否则撤销后按钮仍显示为已授予
-      userManagementApi.permissions.list(row.basicId, true),
-    ])
-    grantRoleList.value = roles
-    grantPermList.value = perms
-    derivePermActions()
-    await loadPermCatalog()
-  }
-  catch (error) {
-    toast.error((error as Error)?.message || t('identity.user.grant_load_failed'))
-  }
-  finally {
-    grantLoading.value = false
-  }
-}
-
-async function toggleGrantRole(role: RoleSelectItemDto, checked: boolean) {
-  if (!grantUser.value || grantBusyId.value != null) {
-    return
-  }
-  grantBusyId.value = role.basicId
-  try {
-    if (checked) {
-      await userManagementApi.roles.grant({ userId: grantUser.value.basicId, roleId: role.basicId })
-      toast.success(t('identity.user.grant_role_granted', { name: role.roleName }))
-    }
-    else {
-      const bound = grantRoleByRoleId.value.get(role.basicId)
-      if (bound) {
-        await userManagementApi.roles.revoke(bound.basicId)
-        toast.success(t('identity.user.grant_role_revoked', { name: role.roleName }))
-      }
-    }
-    grantRoleList.value = await userManagementApi.roles.list(grantUser.value.basicId)
-  }
-  catch (error) {
-    toast.error((error as Error)?.message || t('common.messages.operation_failed'))
-  }
-  finally {
-    grantBusyId.value = null
-  }
-}
-
-/** 本地三态：打开抽屉时由有效直授推导，之后只改本地，保存时一次性提交 */
 function derivePermActions() {
-  const map = new Map<ApiId, PermissionAction>()
-  for (const item of grantPermList.value) {
-    map.set(item.permissionId, item.permissionAction)
-  }
-  permActions.value = map
+  permActions.value = new Map(permGrants.value.map(item => [item.permissionId, item.permissionAction] as const))
   permDirty.value = false
 }
 
-function setPermGrant(permission: PermissionListItemDto, action: PermissionAction) {
-  const next = new Map(permActions.value)
-  if (next.get(permission.basicId) === action) {
-    // 再次点击当前态 → 取消直授（回到未设置）
-    next.delete(permission.basicId)
+async function openPermGrantDrawer(row: UserListItemDto) {
+  permGrantUser.value = row
+  permGrantVisible.value = true
+  permGrantTab.value = 'grant'
+  permGrants.value = []
+  derivePermActions()
+  permGrantLoading.value = true
+  try {
+    const [grants] = await Promise.all([
+      // 撤销直授是把行置为失效而非删行，只取有效行，否则撤销后仍显示为已直授
+      userManagementApi.permissions.list(row.basicId, true),
+      loadPermCatalog(),
+    ])
+    permGrants.value = grants
+    derivePermActions()
   }
-  else {
-    next.set(permission.basicId, action)
+  catch (error) {
+    toast.danger((error as Error)?.message || t('identity.user.grant_load_failed'))
   }
-  permActions.value = next
+  finally {
+    permGrantLoading.value = false
+  }
+}
+
+function onPermTransfer(action: PermissionAction, next: ApiId[]) {
+  if (permGrantLoading.value) {
+    return
+  }
+  permActions.value = applyPermissionTransfer(permActions.value, action, next)
   permDirty.value = true
 }
 
 async function savePermGrants() {
-  const user = grantUser.value
-  if (!user || grantLoading.value) {
+  const user = permGrantUser.value
+  if (!user || permGrantLoading.value) {
     return
   }
-  const current = new Map(grantPermList.value.map(item => [item.permissionId, item] as const))
-  // 新增或改了动作的才下发；动作没变的不必重复提交
-  const grants = [...permActions.value.entries()]
-    .filter(([permissionId, action]) => current.get(permissionId)?.permissionAction !== action)
-    .map(([permissionId, permissionAction]) => ({ permissionId, permissionAction }))
-  const revokeIds = [...current.entries()]
-    .filter(([permissionId]) => !permActions.value.has(permissionId))
-    .map(([, item]) => item.basicId)
-  if (grants.length === 0 && revokeIds.length === 0) {
-    toast.info(t('identity.user.grant_perm_no_change'))
+  const { grants, revokeUserPermissionIds } = diffPermissionGrants(permActions.value, permGrants.value)
+  if (grants.length === 0 && revokeUserPermissionIds.length === 0) {
+    toast.info(t('identity.user.grant_no_change'))
     permDirty.value = false
     return
   }
-  grantLoading.value = true
+  permGrantLoading.value = true
   try {
-    await userManagementApi.permissions.batchUpdate({
-      userId: user.basicId,
-      grants,
-      revokeUserPermissionIds: revokeIds,
-    })
-    grantPermList.value = await userManagementApi.permissions.list(user.basicId, true)
+    await userManagementApi.permissions.batchUpdate({ userId: user.basicId, grants, revokeUserPermissionIds })
+    permGrants.value = await userManagementApi.permissions.list(user.basicId, true)
     derivePermActions()
-    toast.success(t('identity.user.grant_perm_saved', { grant: grants.length, revoke: revokeIds.length }))
+    const denied = grants.filter(item => item.permissionAction === PermissionAction.Deny).length
+    toast.success(t('identity.user.grant_perm_saved', { grant: grants.length - denied, deny: denied, revoke: revokeUserPermissionIds.length }))
   }
-  catch (e: unknown) {
-    toast.error((e as Error)?.message || t('common.messages.save_failed'))
+  catch (error) {
+    toast.danger((error as Error)?.message || t('common.messages.save_failed'))
   }
   finally {
-    grantLoading.value = false
+    permGrantLoading.value = false
   }
 }
 
@@ -1112,7 +1354,7 @@ async function confirmDelete() {
     reloadList()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('common.messages.delete_failed'))
+    toast.danger((error as Error)?.message || t('common.messages.delete_failed'))
   }
 }
 </script>
@@ -1127,6 +1369,16 @@ async function confirmDelete() {
       :form-id="editFormId"
       @cancel="closeModals"
     >
+      <XhAlertRoot v-if="identityReadonly" tone="info" class="mb-3">
+        <XhAlertIndicator>
+          <Icon icon="tabler:building-community" width="16" height="16" />
+        </XhAlertIndicator>
+        <XhAlertContent>
+          <XhAlertDescription>
+            {{ t('identity.user.form_external_hint') }}
+          </XhAlertDescription>
+        </XhAlertContent>
+      </XhAlertRoot>
       <!-- 面板内容各不相同，标签与面板手摆而不喂 collection -->
       <XhTabsRoot v-model:value="formTab" variant="line">
         <XhTabsList>
@@ -1142,6 +1394,7 @@ async function confirmDelete() {
           <XhTabsTrigger value="3">
             {{ t('identity.user.tab_departments') }}
           </XhTabsTrigger>
+          <XhTabsIndicator />
         </XhTabsList>
         <XhTabsContent value="0">
           <!-- NForm 渲染真实 form 元素：密码输入必须在 form 内，否则浏览器告警 -->
@@ -1152,6 +1405,7 @@ async function confirmDelete() {
             @submit="saveUser"
           >
             <XhFieldRoot>
+              <XhFieldLabel>{{ t('identity.user.label_username') }}</XhFieldLabel>
               <XhFieldControl>
                 <XInput
                   v-model:value="userForm.userName"
@@ -1163,54 +1417,63 @@ async function confirmDelete() {
               <XhFieldErrorText />
             </XhFieldRoot>
             <XhFieldRoot>
+              <XhFieldLabel>{{ t('identity.user.label_real_name') }}</XhFieldLabel>
               <XhFieldControl>
-                <XInput v-model:value="userForm.realName" :placeholder="t('identity.user.ph_real_name')" />
+                <XInput v-model:value="userForm.realName" :placeholder="t('identity.user.ph_real_name')" :disabled="identityReadonly" />
               </XhFieldControl>
               <XhFieldErrorText />
             </XhFieldRoot>
             <XhFieldRoot>
+              <XhFieldLabel>{{ t('identity.user.label_nickname') }}</XhFieldLabel>
               <XhFieldControl>
-                <XInput v-model:value="userForm.nickName" :placeholder="t('identity.user.ph_nickname')" />
+                <XInput v-model:value="userForm.nickName" :placeholder="t('identity.user.ph_nickname')" :disabled="identityReadonly" />
               </XhFieldControl>
               <XhFieldErrorText />
             </XhFieldRoot>
             <XhFieldRoot>
+              <XhFieldLabel>{{ t('identity.user.label_email') }}</XhFieldLabel>
               <XhFieldControl>
-                <XInput v-model:value="userForm.email" :placeholder="t('identity.user.ph_email')" autocomplete="off" />
+                <XInput v-model:value="userForm.email" :placeholder="t('identity.user.ph_email')" autocomplete="off" :disabled="identityReadonly" />
               </XhFieldControl>
               <XhFieldErrorText />
             </XhFieldRoot>
             <XhFieldRoot>
+              <XhFieldLabel>{{ t('identity.user.label_phone') }}</XhFieldLabel>
               <XhFieldControl>
-                <PhoneInput :key="phoneInputKey" v-model:value="userForm.phone" @valid="(v: boolean) => phoneValid = v" />
+                <PhoneInput :key="phoneInputKey" v-model:value="userForm.phone" :disabled="identityReadonly" @valid="(v: boolean) => phoneValid = v" />
               </XhFieldControl>
               <XhFieldErrorText />
             </XhFieldRoot>
             <XhFieldRoot>
+              <XhFieldLabel>{{ t('identity.user.label_gender') }}</XhFieldLabel>
               <XhFieldControl>
-                <XSelect v-model:value="userForm.gender" :options="genderEnumOptions" />
+                <XSelect v-model:value="userForm.gender" :options="genderEnumOptions" :disabled="identityReadonly" />
               </XhFieldControl>
               <XhFieldErrorText />
             </XhFieldRoot>
             <XhFieldRoot>
+              <XhFieldLabel>{{ t('identity.user.label_birthday') }}</XhFieldLabel>
               <XhFieldControl>
-                <XDatePicker v-model:value="userForm.birthday" type="date" />
+                <XDatePicker v-model:value="userForm.birthday" :max="Date.now()" :disabled="identityReadonly" />
               </XhFieldControl>
               <XhFieldErrorText />
             </XhFieldRoot>
             <XhFieldRoot>
+              <XhFieldLabel>{{ t('identity.user.label_country') }}</XhFieldLabel>
               <XhFieldControl>
-                <XInput v-model:value="userForm.country" :placeholder="t('identity.user.ph_country')" />
+                <XInput v-model:value="userForm.country" :placeholder="t('identity.user.ph_country')" :disabled="identityReadonly" />
               </XhFieldControl>
               <XhFieldErrorText />
             </XhFieldRoot>
             <XhFieldRoot>
+              <XhFieldLabel>{{ t('identity.user.label_status') }}</XhFieldLabel>
               <XhFieldControl>
-                <XSelect v-model:value="userForm.status" :options="statusEnumOptions" />
+                <XSelect v-model:value="userForm.status" :options="statusEnumOptions" :disabled="identityReadonly || !formAccess.status" />
               </XhFieldControl>
               <XhFieldErrorText />
             </XhFieldRoot>
             <XhFieldRoot v-if="!userForm.basicId">
+              <XhFieldLabel>{{ t('identity.user.label_initial_password') }}</XhFieldLabel>
               <XhFieldControl>
                 <XInput
                   v-model:value="userForm.initialPassword"
@@ -1229,6 +1492,7 @@ async function confirmDelete() {
                   type="textarea"
                   :rows="2"
                   :placeholder="t('identity.user.ph_remark')"
+                  :disabled="identityReadonly"
                 />
               </XhFieldControl>
               <XhFieldErrorText />
@@ -1239,14 +1503,14 @@ async function confirmDelete() {
           <div class="sec-panel">
             <div class="sec-block">
               <div class="sec-block-hd">
-                <Icon icon="tabler:shield-lock" :size="14" />
+                <Icon icon="tabler:shield-lock" width="14" height="14" />
                 <span>{{ t('identity.user.sec_account_security') }}</span>
               </div>
               <div class="form-row">
                 <div class="form-row-main">
-                  <Icon icon="tabler:lock" :size="15" class="form-row-ico warn" />
+                  <Icon icon="tabler:lock" width="15" height="15" class="form-row-ico warn" />
                   <div>
-                    <div class="lbl">
+                    <div :id="lockLabelId" class="lbl">
                       {{ t('identity.user.sec_account_lock') }}
                     </div>
                     <div class="sub">
@@ -1254,19 +1518,19 @@ async function confirmDelete() {
                     </div>
                   </div>
                 </div>
-                <XhSwitch v-model:checked="userForm.isLocked" />
+                <XhSwitch v-model:checked="userForm.isLocked" :aria-labelledby="lockLabelId" :disabled="identityReadonly || !formAccess.lock" />
               </div>
             </div>
             <div class="sec-block">
               <div class="sec-block-hd">
-                <Icon icon="tabler:devices" :size="14" />
+                <Icon icon="tabler:devices" width="14" height="14" />
                 <span>{{ t('identity.user.sec_login_session') }}</span>
               </div>
               <div class="form-row">
                 <div class="form-row-main">
-                  <Icon icon="tabler:login" :size="15" class="form-row-ico ok" />
+                  <Icon icon="tabler:login" width="15" height="15" class="form-row-ico ok" />
                   <div>
-                    <div class="lbl">
+                    <div :id="multiLoginLabelId" class="lbl">
                       {{ t('identity.user.sec_allow_multi_login') }}
                     </div>
                     <div class="sub">
@@ -1274,13 +1538,13 @@ async function confirmDelete() {
                     </div>
                   </div>
                 </div>
-                <XhSwitch v-model:checked="userForm.multiLogin" />
+                <XhSwitch v-model:checked="userForm.multiLogin" :aria-labelledby="multiLoginLabelId" :disabled="identityReadonly || !formAccess.loginPolicy" />
               </div>
               <div class="form-row">
                 <div class="form-row-main">
-                  <Icon icon="tabler:device-mobile" :size="15" class="form-row-ico" />
+                  <Icon icon="tabler:device-mobile" width="15" height="15" class="form-row-ico" />
                   <div>
-                    <div class="lbl">
+                    <div :id="maxDevicesLabelId" class="lbl">
                       {{ t('identity.user.sec_max_devices') }}
                     </div>
                     <div class="sub">
@@ -1292,9 +1556,11 @@ async function confirmDelete() {
                   v-model:value="userForm.maxDev"
                   :min="0"
                   :max="99"
+                  :aria-labelledby="maxDevicesLabelId"
                   class="max-dev-input"
                   size="sm"
                   :show-button="false"
+                  :disabled="identityReadonly || !formAccess.loginPolicy"
                 />
               </div>
             </div>
@@ -1316,9 +1582,10 @@ async function confirmDelete() {
                 :key="r.basicId"
                 type="button"
                 class="pick-chip" :class="[selRoleIds.includes(r.basicId) ? 'on' : '']"
+                :disabled="!canTogglePick(r.basicId, selRoleIds, effectiveRoleIds, formAccess.role)"
                 @click="togglePick(selRoleIds, r.basicId)"
               >
-                <Icon icon="tabler:user-check" :size="13" />
+                <Icon icon="tabler:user-check" width="13" height="13" />
                 {{ r.roleName }}
               </button>
             </div>
@@ -1340,9 +1607,10 @@ async function confirmDelete() {
                 :key="d.value"
                 type="button"
                 class="pick-chip" :class="[selDeptIds.includes(d.value) ? 'on' : '']"
+                :disabled="!canTogglePick(d.value, selDeptIds, effectiveDeptIds, formAccess.department)"
                 @click="togglePick(selDeptIds, d.value)"
               >
-                <Icon icon="tabler:building" :size="13" />
+                <Icon icon="tabler:building" width="13" height="13" />
                 {{ d.label.trim() }}
               </button>
             </div>
@@ -1354,8 +1622,12 @@ async function confirmDelete() {
     <!-- 详情 -->
     <XhDialogRoot v-model:open="showDetModal" :close-on-interact-outside="false">
       <XhDialogContent style="--xh-dialog-max-w: 640px">
-        <XhDialogTitle v-if="detUser">
-          <div class="det-hd-user">
+        <!-- 标题须在弹窗打开期间一直在：详情未到时先念「加载中」 -->
+        <XhDialogTitle>
+          <template v-if="!detUser">
+            {{ t('common.loading') }}
+          </template>
+          <div v-else class="det-hd-user">
             <div class="av-lg" :style="{ background: detUser.avatar.bg, color: detUser.avatar.fg }">
               {{ detUser.initials }}
             </div>
@@ -1398,22 +1670,22 @@ async function confirmDelete() {
             </div>
           </div>
           <div class="det-badges">
-            <span v-for="badge in detUser.badges" :key="badge.label" class="bdg" :class="[badge.cls]">
-              <Icon :icon="badge.icon" :size="12" />
-              {{ badge.label }}
-            </span>
+            <XhTagRoot v-for="badge in detUser.badges" :key="badge.label" variant="subtle" size="sm" :tone="badge.tone">
+              <Icon :icon="badge.icon" width="12" height="12" />
+              <XhTagLabel>{{ badge.label }}</XhTagLabel>
+            </XhTagRoot>
           </div>
           <div class="det-divider" />
           <div class="det-sec">
             <div class="det-sec-hd">
-              <Icon icon="tabler:chart-bar" :size="14" />
+              <Icon icon="tabler:chart-bar" width="14" height="14" />
               <span>{{ t('identity.user.detail.stats_today') }}</span>
             </div>
             <div class="det-stat-grid">
               <div v-for="m in detUser.metrics" :key="m.label" class="det-stat-card" :class="[m.cls]">
                 <div class="det-stat-top">
                   <span class="det-stat-lbl">{{ m.label }}</span>
-                  <Icon :icon="m.icon" :size="13" />
+                  <Icon :icon="m.icon" width="13" height="13" />
                 </div>
                 <div class="det-stat-val">
                   {{ m.value }}
@@ -1422,11 +1694,11 @@ async function confirmDelete() {
             </div>
           </div>
           <div class="det-sec-hd">
-            <Icon icon="tabler:device-desktop" :size="14" />
+            <Icon icon="tabler:device-desktop" width="14" height="14" />
             <span>{{ t('identity.user.detail.login_session') }}</span>
           </div>
           <div v-if="detUser.online" class="s-row">
-            <Icon icon="tabler:device-desktop" :size="18" class="session-ico" />
+            <Icon icon="tabler:device-desktop" width="18" height="18" class="session-ico" />
             <div class="flex-1 min-w-0">
               <div class="session-title">
                 {{ detUser.sessionLabel }}
@@ -1435,7 +1707,9 @@ async function confirmDelete() {
                 {{ detUser.lastLoginIp }} · {{ detUser.lastLoginTime }}
               </div>
             </div>
-            <span class="bdg bdg-ok">{{ t('identity.user.detail.online') }}</span>
+            <XhTagRoot variant="subtle" size="sm" tone="success">
+              <XhTagLabel>{{ t('identity.user.detail.online') }}</XhTagLabel>
+            </XhTagRoot>
           </div>
           <div v-else class="session-empty">
             {{ t('identity.user.detail.no_active_session') }}
@@ -1444,7 +1718,7 @@ async function confirmDelete() {
 
         <div class="xh-dialog-footer">
           <XhFlex justify="end">
-            <XhButton size="sm" @click="closeModals">
+            <XhButton variant="subtle" size="sm" @click="closeModals">
               {{ t('common.actions.close') }}
             </XhButton>
           </XhFlex>
@@ -1458,7 +1732,7 @@ async function confirmDelete() {
         <XhDialogTitle>{{ t('identity.user.del_title') }}</XhDialogTitle>
         <XhDialogCloseTrigger />
         <div class="del-body">
-          <Icon icon="tabler:alert-triangle" :size="26" class="del-icon" />
+          <Icon icon="tabler:alert-triangle" width="26" height="26" class="del-icon" />
           <div>
             <p class="del-title">
               {{ t('identity.user.del_confirm_prefix') }}
@@ -1473,10 +1747,10 @@ async function confirmDelete() {
 
         <div class="xh-dialog-footer">
           <XhFlex justify="end">
-            <XhButton size="sm" @click="closeModals">
+            <XhButton variant="subtle" size="sm" @click="closeModals">
               {{ t('common.actions.cancel') }}
             </XhButton>
-            <XhButton size="sm" tone="danger" @click="confirmDelete">
+            <XhButton variant="subtle" size="sm" tone="danger" @click="confirmDelete">
               {{ t('identity.user.del_confirm_btn') }}
             </XhButton>
           </XhFlex>
@@ -1484,82 +1758,137 @@ async function confirmDelete() {
       </XhDialogContent>
     </XhDialogRoot>
 
-    <!-- 权限直授抽屉 -->
-    <XhDrawerRoot v-model:open="grantVisible" side="right">
-      <XhDrawerContent style="--xh-drawer-size: 720px">
-        <XhDrawerTitle>{{ t('identity.user.grant_title', { name: grantUser?.userName ?? '' }) }}</XhDrawerTitle>
+    <!-- 成员数据范围抽屉 -->
+    <XhDrawerRoot v-model:open="scopeVisible" side="right">
+      <XhDrawerContent style="--xh-drawer-size: 640px">
+        <XhDrawerTitle>{{ t('identity.data_scope.drawer_title', { name: scopeUser ? displayName(scopeUser) : '' }) }}</XhDrawerTitle>
         <XhDrawerCloseTrigger />
-        <div class="xh-loading-stage" :class="{ 'is-loading': grantLoading }">
+        <div class="xh-loading-stage scope-stage" :class="{ 'is-loading': scopeLoading }">
           <div class="xh-loading-stage__veil">
             <XhSpinner />
           </div>
-          <!-- 面板内容各不相同，标签与面板手摆而不喂 collection -->
-          <XhTabsRoot v-model:value="grantTab" variant="line">
-            <XhTabsList>
-              <XhTabsTrigger value="role">
-                {{ t('identity.user.grant_tab_role') }}
-              </XhTabsTrigger>
-              <XhTabsTrigger value="perm">
-                {{ t('identity.user.grant_tab_perm') }}
-              </XhTabsTrigger>
-            </XhTabsList>
-            <XhTabsContent value="role">
-              <p class="grant-desc">
-                {{ t('identity.user.grant_role_desc') }}
-              </p>
-              <div class="grant-role-grid">
-                <label
-                  v-for="r in roleOptions"
-                  :key="r.basicId"
-                  class="grant-role-chip"
-                >
-                  <XhCheckbox
-                    :checked="grantRoleByRoleId.has(r.basicId)"
-                    :disabled="grantBusyId === r.basicId"
-                    @update:checked="(checked: boolean) => toggleGrantRole(r, checked)"
-                  />
-                  <span>{{ r.roleName }}</span>
-                </label>
-              </div>
-            </XhTabsContent>
-            <XhTabsContent value="perm">
-              <XPermissionGrantPanel
-                ref="permPanelRef"
-                :items="permCatalog"
-                :search-placeholder="t('identity.user.grant_perm_search')"
-                :granted-count-label="t('identity.user.grant_perm_granted_count', { count: permActions.size })"
-                :empty-description="t('identity.user.grant_perm_empty')"
-                :other-group-label="t('identity.user.grant_perm_group_other')"
-              >
-                <template #action="{ item }">
-                  <XhButton
-                    :disabled="grantLoading"
-                    size="sm"
-                    :tone="permActions.get(item.basicId) === PermissionAction.Grant ? 'success' : 'neutral'"
-                    @click="setPermGrant(item as PermissionListItemDto, PermissionAction.Grant)"
-                  >
-                    {{ t('identity.user.grant_perm_allow') }}
-                  </XhButton>
-                  <XhButton
-                    :disabled="grantLoading"
-                    size="sm"
-                    :tone="permActions.get(item.basicId) === PermissionAction.Deny ? 'danger' : 'neutral'"
-                    @click="setPermGrant(item as PermissionListItemDto, PermissionAction.Deny)"
-                  >
-                    {{ t('identity.user.grant_perm_deny') }}
-                  </XhButton>
-                </template>
-              </XPermissionGrantPanel>
-            </XhTabsContent>
-          </XhTabsRoot>
+          <XhAlertRoot tone="info" class="mb-3">
+            <XhAlertIndicator>
+              <Icon icon="tabler:info-circle" width="16" height="16" />
+            </XhAlertIndicator>
+            <XhAlertContent>
+              <XhAlertDescription>
+                {{ t('identity.data_scope.member_hint') }}
+              </XhAlertDescription>
+            </XhAlertContent>
+          </XhAlertRoot>
+          <DataScopeEditor v-model="scopeDraft" :department-tree="scopeTree" allow-inherit />
         </div>
-        <!-- 角色页签逐项即时生效，仅权限直授需要提交 -->
-        <div v-if="grantTab === 'perm'" class="xh-dialog-footer">
-          <XhButton @click="grantVisible = false">
+        <div class="xh-dialog-footer">
+          <XhButton variant="subtle" @click="scopeVisible = false">
             {{ t('common.actions.cancel') }}
           </XhButton>
-          <XhButton tone="brand" :loading="grantLoading" :disabled="!permDirty" style="margin-left: 8px" @click="savePermGrants">
-            {{ t('identity.user.grant_perm_save') }}
+          <XhButton variant="subtle" tone="brand" class="ml-2" :loading="scopeSubmitting" :disabled="!scopeDirty || scopeLoading" @click="saveScopes">
+            <XhButtonIndicator />
+            <XhButtonLabel>{{ t('identity.data_scope.save') }}</XhButtonLabel>
+          </XhButton>
+        </div>
+      </XhDrawerContent>
+    </XhDrawerRoot>
+
+    <!-- 角色直授抽屉 -->
+    <XhDrawerRoot v-model:open="roleGrantVisible" side="right">
+      <XhDrawerContent style="--xh-drawer-size: 720px">
+        <XhDrawerTitle>{{ t('identity.user.grant_role_title', { name: roleGrantUser?.userName ?? '' }) }}</XhDrawerTitle>
+        <XhDrawerCloseTrigger />
+        <p class="grant-tip">
+          {{ t('identity.user.grant_role_tip') }}
+        </p>
+        <XGrantTransfer
+          :items="roleGrantItems"
+          :value="roleDraft"
+          :groups="roleGrantGroups"
+          :get-label="role => role.roleName"
+          :get-description="role => role.roleCode"
+          :loading="roleGrantLoading"
+          :disabled="roleGrantLoading"
+          :source-title="t('identity.user.grant_role_source')"
+          :target-title="t('identity.user.grant_role_target')"
+          :search-placeholder="t('identity.user.grant_role_search')"
+          @update:value="onRoleTransfer"
+        />
+        <div class="xh-dialog-footer">
+          <XhButton variant="subtle" @click="roleGrantVisible = false">
+            {{ t('common.actions.cancel') }}
+          </XhButton>
+          <XhButton variant="subtle" tone="brand" :loading="roleGrantLoading" :disabled="!roleDirty" style="margin-left: 8px" @click="saveRoleGrants">
+            <XhButtonIndicator />
+            <XhButtonLabel>{{ t('identity.user.grant_save') }}</XhButtonLabel>
+          </XhButton>
+        </div>
+      </XhDrawerContent>
+    </XhDrawerRoot>
+
+    <!-- 权限直授抽屉：授予与拒绝各一个穿梭框，两者互斥 -->
+    <XhDrawerRoot v-model:open="permGrantVisible" side="right">
+      <XhDrawerContent style="--xh-drawer-size: 980px">
+        <XhDrawerTitle>{{ t('identity.user.grant_perm_title', { name: permGrantUser?.userName ?? '' }) }}</XhDrawerTitle>
+        <XhDrawerCloseTrigger />
+        <p class="grant-tip">
+          {{ t('identity.user.grant_perm_tip') }}
+        </p>
+        <XhTabsRoot v-model:value="permGrantTab" class="grant-tabs" variant="line">
+          <XhTabsList>
+            <XhTabsTrigger value="grant">
+              {{ t('identity.user.grant_perm_allow') }}
+            </XhTabsTrigger>
+            <XhTabsTrigger value="deny">
+              {{ t('identity.user.grant_perm_deny') }}
+            </XhTabsTrigger>
+            <XhTabsIndicator />
+          </XhTabsList>
+          <XhTabsContent value="grant">
+            <XPermissionTransfer
+              :items="permGrantItems"
+              :value="permGrantIds"
+              :loading="permGrantLoading"
+              :disabled="permGrantLoading"
+              :source-title="t('identity.user.grant_perm_allow_source')"
+              :target-title="t('identity.user.grant_perm_allow_target')"
+              :search-placeholder="t('identity.user.grant_perm_search')"
+              :other-group-label="t('identity.user.grant_perm_group_other')"
+              @update:value="next => onPermTransfer(PermissionAction.Grant, next)"
+            >
+              <!-- 左栏标出已在另一页签里的：挪过来会把它从拒绝改成授予 -->
+              <template #suffix="{ item, side }">
+                <XhTagRoot v-if="side === 'source' && permActions.get(item.basicId) === PermissionAction.Deny" variant="subtle" size="sm" tone="danger">
+                  <XhTagLabel>{{ t('identity.user.grant_perm_deny_target') }}</XhTagLabel>
+                </XhTagRoot>
+              </template>
+            </XPermissionTransfer>
+          </XhTabsContent>
+          <XhTabsContent value="deny">
+            <XPermissionTransfer
+              :items="permGrantItems"
+              :value="permDenyIds"
+              :loading="permGrantLoading"
+              :disabled="permGrantLoading"
+              :source-title="t('identity.user.grant_perm_deny_source')"
+              :target-title="t('identity.user.grant_perm_deny_target')"
+              :search-placeholder="t('identity.user.grant_perm_search')"
+              :other-group-label="t('identity.user.grant_perm_group_other')"
+              @update:value="next => onPermTransfer(PermissionAction.Deny, next)"
+            >
+              <template #suffix="{ item, side }">
+                <XhTagRoot v-if="side === 'source' && permActions.get(item.basicId) === PermissionAction.Grant" variant="subtle" size="sm" tone="success">
+                  <XhTagLabel>{{ t('identity.user.grant_perm_allow_target') }}</XhTagLabel>
+                </XhTagRoot>
+              </template>
+            </XPermissionTransfer>
+          </XhTabsContent>
+        </XhTabsRoot>
+        <div class="xh-dialog-footer">
+          <XhButton variant="subtle" @click="permGrantVisible = false">
+            {{ t('common.actions.cancel') }}
+          </XhButton>
+          <XhButton variant="subtle" tone="brand" :loading="permGrantLoading" :disabled="!permDirty" style="margin-left: 8px" @click="savePermGrants">
+            <XhButtonIndicator />
+            <XhButtonLabel>{{ t('identity.user.grant_save') }}</XhButtonLabel>
           </XhButton>
         </div>
       </XhDrawerContent>
@@ -1568,51 +1897,38 @@ async function confirmDelete() {
 </template>
 
 <style scoped>
-.tbl-cell-2l {
+/* 成员数据范围抽屉：编辑区撑满剩余高度，保存/取消落在底部；部门多时在这里滚动 */
+.scope-stage {
+  flex: 1;
+  min-block-size: 0;
+  overflow-y: auto;
+}
+
+:deep(.tbl-cell-2l) {
   min-width: 0;
   line-height: 1.4;
 }
 
-.tbl-cell-2l__primary,
-.tbl-cell-2l__secondary {
+:deep(.tbl-cell-2l__primary),
+:deep(.tbl-cell-2l__secondary) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.tbl-cell-2l__primary {
+:deep(.tbl-cell-2l__primary) {
   font-size: 12px;
   color: hsl(var(--foreground));
 }
 
-.tbl-cell-2l__primary--strong {
+:deep(.tbl-cell-2l__primary--strong) {
   font-size: 13px;
   font-weight: 600;
 }
 
-.tbl-cell-2l__secondary {
+:deep(.tbl-cell-2l__secondary) {
   font-size: 11px;
   color: hsl(var(--muted-foreground));
-}
-
-.tbl-av {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.sys-tag {
-  font-size: 9px;
-  padding: 1px 4px;
-  margin-left: 4px;
-  border-radius: 3px;
-  background: var(--xh-color-warning-600);
-  color: var(--xh-color-warning-500);
 }
 
 /* 图标语义色：勿加页面前缀，弹窗 Teleport 到 body 后不在该子树内 */
@@ -1651,10 +1967,6 @@ async function confirmDelete() {
 
 .del-icon {
   color: var(--xh-color-warning-500);
-}
-
-.bdg :deep(svg) {
-  color: currentColor;
 }
 
 /* 弹窗内容卡 */
@@ -1765,6 +2077,12 @@ async function confirmDelete() {
   color: hsl(var(--primary-foreground));
 }
 
+/* 没有授予/撤销按钮的那一侧锁住：勾选保持可见，只是不能再切 */
+.pick-chip:disabled {
+  cursor: not-allowed;
+  opacity: var(--xh-state-disabled-opacity);
+}
+
 /* 数字框的控件自带 12rem 最小宽，只收外层会被它顶破、把弹窗撑出横向滚动条，
    要连同组件库给的钩子一起收 */
 .max-dev-input {
@@ -1834,42 +2152,6 @@ async function confirmDelete() {
   flex-wrap: wrap;
   gap: 5px;
   margin-bottom: 14px;
-}
-
-.bdg {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 2px 7px;
-  border-radius: var(--xh-shape-control);
-  font-size: 11px;
-  font-weight: 500;
-}
-
-.bdg-ok {
-  color: var(--xh-color-success-500);
-  background: var(--xh-color-success-600);
-}
-
-.bdg-no {
-  color: var(--xh-color-danger-500);
-  background: var(--xh-color-danger-600);
-}
-
-.bdg-warn {
-  color: var(--xh-color-warning-500);
-  background: var(--xh-color-warning-600);
-}
-
-.bdg-info {
-  color: var(--xh-color-info-500);
-  background: var(--xh-color-info-600);
-}
-
-.bdg-gray {
-  color: hsl(var(--muted-foreground));
-  background: hsl(var(--muted));
-  border: 1px solid hsl(var(--border));
 }
 
 .det-divider {
@@ -2000,30 +2282,25 @@ async function confirmDelete() {
   color: var(--xh-color-danger-500);
 }
 
-/* 权限直授抽屉 */
-.grant-desc {
-  margin: 0 0 12px;
-  font-size: 12px;
-  color: hsl(var(--muted-foreground));
+/* 直授抽屉：说明一行，穿梭框吃满剩余高度 */
+.grant-tip {
+  margin: 0;
+  color: var(--xh-fg-muted);
+  font-size: var(--xh-text-caption-size);
 }
 
-.grant-role-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 4px 12px;
-}
-
-.grant-role-chip {
+.grant-tabs {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
+  flex: 1;
+  flex-direction: column;
+  min-block-size: 0;
 }
 
-.grant-role-chip:hover {
-  background: rgb(0 0 0 / 0.03);
+/* 当前页签的面板接着往下撑，穿梭框才拿得到剩余高度 */
+.grant-tabs > [data-scope='tabs'][data-part='content'][data-state='active'] {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-block-size: 0;
 }
 </style>

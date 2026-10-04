@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { useAppStore } from '~/stores'
-import { XhHotkeys, XhSwitch } from '@xihan-ui/vue'
+import { XhKbd, XhSwitch } from '@xihan-ui/vue'
 import { useI18n } from 'vue-i18n'
 import { GLOBAL_HOTKEYS } from '~/composables/useGlobalShortcuts'
 import PrefTip from './PrefTip.vue'
@@ -24,39 +24,39 @@ const keys = GLOBAL_HOTKEYS
         <span>{{ t('preference.shortcut.enabled') }}</span>
         <PrefTip :content="t('preference.shortcut.enabled_tip')" />
       </div>
-      <XhSwitch v-model:checked="appStore.shortcutEnable" />
+      <XhSwitch v-model:checked="appStore.shortcutEnable" :aria-label="t('preference.shortcut.enabled')" />
     </div>
     <div class="pref-row" :class="{ 'opacity-50': !appStore.shortcutEnable }">
       <div class="flex items-center gap-1.5">
         <span>{{ t('preference.shortcut.search') }}</span>
-        <XhHotkeys :keys="[...keys.search]" :enabled="appStore.shortcutEnable && appStore.shortcutSearch" :prevent-default="false" />
+        <XhKbd :keys="[...keys.search]" />
         <PrefTip :content="t('preference.shortcut.search_tip')" />
       </div>
-      <XhSwitch v-model:checked="appStore.shortcutSearch" :disabled="!appStore.shortcutEnable" />
+      <XhSwitch v-model:checked="appStore.shortcutSearch" :disabled="!appStore.shortcutEnable" :aria-label="t('preference.shortcut.search')" />
     </div>
     <div class="pref-row" :class="{ 'opacity-50': !appStore.shortcutEnable }">
       <div class="flex items-center gap-1.5">
         <span>{{ t('preference.shortcut.tab_overview') }}</span>
-        <XhHotkeys :keys="[...keys.tabOverview]" :enabled="appStore.shortcutEnable && appStore.shortcutTabOverview" :prevent-default="false" />
+        <XhKbd :keys="[...keys.tabOverview]" />
         <PrefTip :content="t('preference.shortcut.tab_overview_tip')" />
       </div>
-      <XhSwitch v-model:checked="appStore.shortcutTabOverview" :disabled="!appStore.shortcutEnable" />
+      <XhSwitch v-model:checked="appStore.shortcutTabOverview" :disabled="!appStore.shortcutEnable" :aria-label="t('preference.shortcut.tab_overview')" />
     </div>
     <div class="pref-row" :class="{ 'opacity-50': !appStore.shortcutEnable }">
       <div class="flex items-center gap-1.5">
         <span>{{ t('preference.shortcut.lock') }}</span>
-        <XhHotkeys :keys="[...keys.lock]" :enabled="appStore.shortcutEnable && appStore.shortcutLock" :prevent-default="false" />
+        <XhKbd :keys="[...keys.lock]" />
         <PrefTip :content="t('preference.shortcut.lock_tip')" />
       </div>
-      <XhSwitch v-model:checked="appStore.shortcutLock" :disabled="!appStore.shortcutEnable" />
+      <XhSwitch v-model:checked="appStore.shortcutLock" :disabled="!appStore.shortcutEnable" :aria-label="t('preference.shortcut.lock')" />
     </div>
     <div class="pref-row" :class="{ 'opacity-50': !appStore.shortcutEnable }">
       <div class="flex items-center gap-1.5">
         <span>{{ t('preference.shortcut.logout') }}</span>
-        <XhHotkeys :keys="[...keys.logout]" :enabled="appStore.shortcutEnable && appStore.shortcutLogout" :prevent-default="false" />
+        <XhKbd :keys="[...keys.logout]" />
         <PrefTip :content="t('preference.shortcut.logout_tip')" />
       </div>
-      <XhSwitch v-model:checked="appStore.shortcutLogout" :disabled="!appStore.shortcutEnable" />
+      <XhSwitch v-model:checked="appStore.shortcutLogout" :disabled="!appStore.shortcutEnable" :aria-label="t('preference.shortcut.logout')" />
     </div>
   </section>
 </template>

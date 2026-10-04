@@ -8,7 +8,7 @@ import type {
   PageResult,
 } from '@/api'
 import type { ListFieldSchema, PageSchema, SchemaActionPayload } from '~/components'
-import { XhButton, XhDescriptionsItem, XhDescriptionsLabel, XhDescriptionsRoot, XhDescriptionsValue, XhDrawerCloseTrigger, XhDrawerContent, XhDrawerRoot, XhDrawerTitle, XhEmptyStateDescription, XhEmptyStateIcon, XhEmptyStateRoot, XhEmptyStateTitle, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFormFieldGroup, XhFormRoot, XhSpinner, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
+import { XhButton, XhDescriptionsItem, XhDescriptionsLabel, XhDescriptionsRoot, XhDescriptionsValue, XhDrawerCloseTrigger, XhDrawerContent, XhDrawerRoot, XhDrawerTitle, XhEmptyStateDescription, XhEmptyStateIndicator, XhEmptyStateRoot, XhEmptyStateTitle, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFormFieldGroup, XhFormRoot, XhSpinner, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
 import { computed, h, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
@@ -26,7 +26,7 @@ import {
 import { CONSTRAINT_TYPE_OPTIONS, STATUS_OPTIONS, VIOLATION_ACTION_OPTIONS } from '@/constants'
 import { Icon, SchemaPage, XDatePicker, XEditModal, XInput, XJsonBlock, XNumberInput, XSelect } from '~/components'
 import { dialog, toast } from '~/composables'
-import { useEnumOptions } from '~/hooks'
+import { useEnumOptions, usePermission } from '~/hooks'
 import { formatDate, getOptionLabel } from '~/utils'
 
 defineOptions({ name: 'ApprovalConstraintPage' })
@@ -61,6 +61,7 @@ interface ConstraintRuleFormModel {
 }
 
 const { t } = useI18n()
+const { hasPermission } = usePermission()
 
 /** 编辑弹窗的保存钮靠这个 id 关联到表单，点它才会走整表校验 */
 const editFormId = useId()
@@ -131,7 +132,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     searchPlaceholder: t('approval.constraint.constraint_type_placeholder'),
     minWidth: 130,
     order: 3,
-    render: row => h(XhTagRoot, { variant: 'outline', tone: 'info' }, () => h(XhTagLabel, () => getOptionLabel(constraintTypeOptions.value, (row as unknown as ConstraintRuleListItemDto).constraintType))),
+    render: row => h(XhTagRoot, { variant: 'subtle', tone: 'info' }, () => h(XhTagLabel, () => getOptionLabel(constraintTypeOptions.value, (row as unknown as ConstraintRuleListItemDto).constraintType))),
   },
   {
     key: 'targetType',
@@ -152,7 +153,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 5,
     render: (row) => {
       const r = row as unknown as ConstraintRuleListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: VIOLATION_TAG_TYPE[r.violationAction] ?? 'neutral' }, () => h(XhTagLabel, () => getOptionLabel(violationActionOptions.value, r.violationAction)))
+      return h(XhTagRoot, { variant: 'subtle', tone: VIOLATION_TAG_TYPE[r.violationAction] ?? 'neutral' }, () => h(XhTagLabel, () => getOptionLabel(violationActionOptions.value, r.violationAction)))
     },
   },
   { key: 'itemCount', title: t('approval.constraint.item_count'), dataType: 'number', width: 92, order: 6 },
@@ -169,7 +170,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     searchPlaceholder: t('approval.constraint.status_placeholder'),
     width: 82,
     order: 8,
-    render: row => h(XhTagRoot, { variant: 'outline', tone: (row as unknown as ConstraintRuleListItemDto).status === EnableStatus.Enabled ? 'success' : 'danger' }, () => h(XhTagLabel, () => (row as unknown as ConstraintRuleListItemDto).status === EnableStatus.Enabled ? t('approval.constraint.status_enabled') : t('approval.constraint.status_disabled'))),
+    render: row => h(XhTagRoot, { variant: 'subtle', tone: (row as unknown as ConstraintRuleListItemDto).status === EnableStatus.Enabled ? 'success' : 'danger' }, () => h(XhTagLabel, () => (row as unknown as ConstraintRuleListItemDto).status === EnableStatus.Enabled ? t('approval.constraint.status_enabled') : t('approval.constraint.status_disabled'))),
   },
   {
     key: 'isActive',
@@ -177,7 +178,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     dataType: 'boolean',
     width: 92,
     order: 9,
-    render: row => h(XhTagRoot, { variant: 'outline', tone: (row as unknown as ConstraintRuleListItemDto).isActive ? 'success' : 'neutral' }, () => h(XhTagLabel, () => (row as unknown as ConstraintRuleListItemDto).isActive ? t('approval.constraint.active_yes') : t('approval.constraint.active_no'))),
+    render: row => h(XhTagRoot, { variant: 'subtle', tone: (row as unknown as ConstraintRuleListItemDto).isActive ? 'success' : 'neutral' }, () => h(XhTagLabel, () => (row as unknown as ConstraintRuleListItemDto).isActive ? t('approval.constraint.active_yes') : t('approval.constraint.active_no'))),
   },
   { key: 'description', title: t('approval.constraint.description'), dataType: 'string', minWidth: 200, order: 10 },
   {
@@ -216,10 +217,10 @@ const schema = computed<PageSchema>(() => ({
   },
   actions: [
     { key: 'create', title: t('approval.constraint.action_create'), scope: 'page', type: 'primary', icon: 'lucide:plus', permission: 'approval.constraint.create' },
-    { key: 'view', title: t('approval.constraint.action_view'), scope: 'row', permission: 'approval.constraint.read' },
-    { key: 'edit', title: t('approval.constraint.action_edit'), scope: 'row', permission: 'approval.constraint.update' },
-    { key: 'toggle', title: t('approval.constraint.action_toggle'), scope: 'row', permission: 'approval.constraint.status' },
-    { key: 'delete', title: t('approval.constraint.action_delete'), scope: 'row', type: 'error', permission: 'approval.constraint.delete' },
+    { key: 'view', title: t('approval.constraint.action_view'), scope: 'row', icon: 'lucide:eye', permission: 'approval.constraint.read' },
+    { key: 'edit', title: t('approval.constraint.action_edit'), scope: 'row', icon: 'lucide:pencil', permission: 'approval.constraint.update' },
+    { key: 'toggle', title: t('approval.constraint.action_toggle'), scope: 'row', icon: 'lucide:power', permission: 'approval.constraint.status' },
+    { key: 'delete', title: t('approval.constraint.action_delete'), scope: 'row', icon: 'lucide:trash-2', type: 'error', permission: 'approval.constraint.delete' },
   ],
 }))
 
@@ -305,7 +306,7 @@ async function loadTargetOptions(type: ConstraintTargetType, keyword = '') {
     targetOptions.value[type] = mergeOptions(targetOptions.value[type], next)
   }
   catch (e) {
-    toast.error((e as Error).message || t('approval.constraint.err_load_targets'))
+    toast.danger((e as Error).message || t('approval.constraint.err_load_targets'))
   }
   finally {
     targetLoading.value[type] = false
@@ -352,7 +353,7 @@ async function handleView(row: ConstraintRuleListItemDto) {
     }
   }
   catch (e) {
-    toast.error((e as Error).message || t('approval.constraint.err_load_detail'))
+    toast.danger((e as Error).message || t('approval.constraint.err_load_detail'))
   }
   finally {
     detailLoading.value = false
@@ -434,7 +435,7 @@ async function handleEdit(row: ConstraintRuleListItemDto) {
     void loadTargetOptions(detail.targetType)
   }
   catch (e) {
-    toast.error((e as Error).message || t('approval.constraint.err_load_detail'))
+    toast.danger((e as Error).message || t('approval.constraint.err_load_detail'))
   }
 }
 
@@ -580,7 +581,7 @@ async function handleSubmit() {
     reload()
   }
   catch (e) {
-    toast.error((e as Error).message || t('approval.constraint.msg_save_failed'))
+    toast.danger((e as Error).message || t('approval.constraint.msg_save_failed'))
   }
   finally {
     submitLoading.value = false
@@ -607,7 +608,7 @@ function confirmToggleStatus(row: ConstraintRuleListItemDto) {
         reload()
       }
       catch (e) {
-        toast.error((e as Error).message || t('approval.constraint.msg_status_update_failed'))
+        toast.danger((e as Error).message || t('approval.constraint.msg_status_update_failed'))
       }
     },
   })
@@ -628,7 +629,7 @@ function confirmDelete(row: ConstraintRuleListItemDto) {
         reload()
       }
       catch (e) {
-        toast.error((e as Error).message || t('approval.constraint.msg_delete_failed'))
+        toast.danger((e as Error).message || t('approval.constraint.msg_delete_failed'))
       }
     },
   })
@@ -651,14 +652,14 @@ function confirmDelete(row: ConstraintRuleListItemDto) {
             <XhSpinner />
           </div>
           <XhEmptyStateRoot v-if="!detailLoading && !currentDetail" class="rule-detail-empty">
-            <XhEmptyStateIcon>
+            <XhEmptyStateIndicator>
               <Icon icon="lucide:inbox" width="28" />
-            </XhEmptyStateIcon>
+            </XhEmptyStateIndicator>
             <XhEmptyStateTitle>{{ t('common.no_data') }}</XhEmptyStateTitle>
             <XhEmptyStateDescription>{{ t('approval.constraint.empty_detail') }}</XhEmptyStateDescription>
           </XhEmptyStateRoot>
           <div v-else-if="currentDetail" class="xh-scroll-area" style="max-height: calc(100vh - 120px)">
-            <XhDescriptionsRoot :columns="2" bordered size="sm">
+            <XhDescriptionsRoot :columns="2" variant="outline" size="sm">
               <XhDescriptionsItem>
                 <XhDescriptionsLabel>{{ t('approval.constraint.rule_code') }}</XhDescriptionsLabel>
                 <XhDescriptionsValue>
@@ -778,9 +779,9 @@ function confirmDelete(row: ConstraintRuleListItemDto) {
               </tbody>
             </table>
             <XhEmptyStateRoot v-else size="sm" style="padding: 24px 0">
-              <XhEmptyStateIcon>
+              <XhEmptyStateIndicator>
                 <Icon icon="lucide:inbox" width="24" />
-              </XhEmptyStateIcon>
+              </XhEmptyStateIndicator>
               <XhEmptyStateTitle>{{ t('common.no_data') }}</XhEmptyStateTitle>
               <XhEmptyStateDescription>{{ t('approval.constraint.empty_items') }}</XhEmptyStateDescription>
             </XhEmptyStateRoot>
@@ -803,7 +804,7 @@ function confirmDelete(row: ConstraintRuleListItemDto) {
         class="xh-edit-form-grid"
         @submit="handleSubmit"
       >
-        <XhFormFieldGroup value="ruleCode">
+        <XhFormFieldGroup name="ruleCode">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('approval.constraint.label_rule_code') }}</XhFieldLabel>
             <XhFieldControl>
@@ -817,7 +818,7 @@ function confirmDelete(row: ConstraintRuleListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="ruleName">
+        <XhFormFieldGroup name="ruleName">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('approval.constraint.label_rule_name') }}</XhFieldLabel>
             <XhFieldControl>
@@ -826,7 +827,7 @@ function confirmDelete(row: ConstraintRuleListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="constraintType">
+        <XhFormFieldGroup name="constraintType">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('approval.constraint.label_constraint_type') }}</XhFieldLabel>
             <XhFieldControl>
@@ -839,7 +840,7 @@ function confirmDelete(row: ConstraintRuleListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="targetType">
+        <XhFormFieldGroup name="targetType">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('approval.constraint.label_target_type') }}</XhFieldLabel>
             <XhFieldControl>
@@ -852,7 +853,7 @@ function confirmDelete(row: ConstraintRuleListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="violationAction">
+        <XhFormFieldGroup name="violationAction">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('approval.constraint.label_violation_action') }}</XhFieldLabel>
             <XhFieldControl>
@@ -861,7 +862,7 @@ function confirmDelete(row: ConstraintRuleListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="priority">
+        <XhFormFieldGroup name="priority">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('approval.constraint.label_priority') }}</XhFieldLabel>
             <XhFieldControl>
@@ -870,16 +871,17 @@ function confirmDelete(row: ConstraintRuleListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="status">
+        <XhFormFieldGroup name="status">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('approval.constraint.label_status') }}</XhFieldLabel>
             <XhFieldControl>
-              <XSelect v-model:value="ruleForm.status" :options="statusOptions" />
+              <!-- 新建时状态随创建提交；编辑时改状态走启停接口，没有启停按钮就不让改，免得规则存了一半再被拒 -->
+              <XSelect v-model:value="ruleForm.status" :options="statusOptions" :disabled="!!ruleForm.basicId && !hasPermission('approval.constraint.status')" />
             </XhFieldControl>
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="remark">
+        <XhFormFieldGroup name="remark">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('approval.constraint.label_remark') }}</XhFieldLabel>
             <XhFieldControl>
@@ -888,25 +890,25 @@ function confirmDelete(row: ConstraintRuleListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="effectiveTime">
+        <XhFormFieldGroup name="effectiveTime">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('approval.constraint.label_effective_time') }}</XhFieldLabel>
             <XhFieldControl>
-              <XDatePicker v-model:value="ruleForm.effectiveTime" clearable type="datetime" />
+              <XDatePicker v-model:value="ruleForm.effectiveTime" clearable show-time />
             </XhFieldControl>
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="expirationTime">
+        <XhFormFieldGroup name="expirationTime">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('approval.constraint.label_expiration_time') }}</XhFieldLabel>
             <XhFieldControl>
-              <XDatePicker v-model:value="ruleForm.expirationTime" clearable type="datetime" />
+              <XDatePicker v-model:value="ruleForm.expirationTime" clearable show-time />
             </XhFieldControl>
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="parameters" class="xh-span-2">
+        <XhFormFieldGroup name="parameters" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('approval.constraint.label_parameters') }}</XhFieldLabel>
             <XhFieldControl>
@@ -921,7 +923,7 @@ function confirmDelete(row: ConstraintRuleListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="description" class="xh-span-2">
+        <XhFormFieldGroup name="description" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('approval.constraint.label_description') }}</XhFieldLabel>
             <XhFieldControl>
@@ -942,48 +944,54 @@ function confirmDelete(row: ConstraintRuleListItemDto) {
         <div class="rule-items__head">
           <span class="rule-items__title">{{ t('approval.constraint.items_title', { count: ruleForm.items.length }) }}</span>
           <span class="rule-items__hint">{{ itemHint }}</span>
-          <XhButton dashed size="sm" @click="addItem">
+          <XhButton variant="subtle" size="sm" @click="addItem">
             {{ t('approval.constraint.add_item') }}
           </XhButton>
         </div>
         <XhEmptyStateRoot v-if="ruleForm.items.length === 0" size="sm" style="padding: 20px 0">
-          <XhEmptyStateIcon>
+          <XhEmptyStateIndicator>
             <Icon icon="lucide:inbox" width="24" />
-          </XhEmptyStateIcon>
+          </XhEmptyStateIndicator>
           <XhEmptyStateTitle>{{ t('common.no_data') }}</XhEmptyStateTitle>
           <XhEmptyStateDescription>{{ t('approval.constraint.empty_no_items') }}</XhEmptyStateDescription>
         </XhEmptyStateRoot>
-        <div v-for="(item, index) in ruleForm.items" :key="index" class="rule-item-row">
-          <XNumberInput
-            v-model:value="item.constraintGroup"
-            :min="0"
-            :placeholder="t('approval.constraint.placeholder_group')"
-            style="width: 100px"
-          />
-          <XSelect
-            v-model:value="item.targetType"
-            :disabled="!isPrerequisite"
-            :options="targetTypeOptions"
-            style="width: 110px"
-            @update:value="() => onItemTargetTypeChange(item)"
-          />
-          <XSelect
-            v-model:value="item.targetId"
-            clearable
-            :options="targetOptions[item.targetType]"
-            :placeholder="t('approval.constraint.placeholder_target')"
-            style="flex: 1; min-width: 0"
-            @focus="() => loadTargetOptions(item.targetType)"
-          />
-          <XInput
-            v-model:value="item.remark"
-            clearable
-            :placeholder="t('approval.constraint.placeholder_item_remark')"
-            style="width: 160px"
-          />
-          <XhButton variant="ghost" size="sm" tone="danger" @click="removeItem(index)">
-            {{ t('approval.constraint.item_delete') }}
-          </XhButton>
+        <!-- 列名与各行同处一张网格（行本身不成盒），列宽由网格统一给，列名始终对得上控件 -->
+        <div v-else class="rule-items__scroll">
+          <div class="rule-items__grid">
+            <span class="rule-items__col">{{ t('approval.constraint.col_group') }}</span>
+            <span class="rule-items__col">{{ t('approval.constraint.col_target_type') }}</span>
+            <span class="rule-items__col">{{ t('approval.constraint.col_target_name') }}</span>
+            <span class="rule-items__col">{{ t('approval.constraint.col_remark') }}</span>
+            <span aria-hidden="true" />
+            <div v-for="(item, index) in ruleForm.items" :key="index" class="rule-item-row">
+              <XNumberInput
+                v-model:value="item.constraintGroup"
+                :min="0"
+                :placeholder="t('approval.constraint.placeholder_group')"
+              />
+              <XSelect
+                v-model:value="item.targetType"
+                :disabled="!isPrerequisite"
+                :options="targetTypeOptions"
+                @update:value="() => onItemTargetTypeChange(item)"
+              />
+              <XSelect
+                v-model:value="item.targetId"
+                clearable
+                :options="targetOptions[item.targetType]"
+                :placeholder="t('approval.constraint.placeholder_target')"
+                @focus="() => loadTargetOptions(item.targetType)"
+              />
+              <XInput
+                v-model:value="item.remark"
+                clearable
+                :placeholder="t('approval.constraint.placeholder_item_remark')"
+              />
+              <XhButton variant="ghost" size="sm" tone="danger" @click="removeItem(index)">
+                {{ t('approval.constraint.item_delete') }}
+              </XhButton>
+            </div>
+          </div>
         </div>
       </div>
     </XEditModal>
@@ -1033,10 +1041,11 @@ function confirmDelete(row: ConstraintRuleListItemDto) {
   font-weight: 500;
 }
 
-/* 规则项动态行编辑 */
+/* 规则项动态行编辑：底部内衬交给下面的表格滚动口 */
 .rule-items {
   margin-top: 4px;
   padding: 12px;
+  padding-block-end: 0;
   border: 1px solid hsl(var(--border));
   border-radius: 8px;
 }
@@ -1062,13 +1071,34 @@ function confirmDelete(row: ConstraintRuleListItemDto) {
   white-space: nowrap;
 }
 
-.rule-item-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+/* 规则项表格：窄屏放不下各列的下限时，整张表在自己的框里横向滚，不把弹窗撑宽。
+   块轴末端的内衬放在滚动口里：粗指针下末行控件往外扩的 44px 命中区落在这段内衬里，
+   不会把滚动口撑出一条竖向滚动条 */
+.rule-items__scroll {
+  overflow-x: auto;
+  padding-block-end: var(--xh-space-3);
 }
 
-.rule-item-row + .rule-item-row {
-  margin-top: 8px;
+/* 列名与各行共用一张网格：各列先保住能用的下限，余量按比例分，目标列拿得最多 */
+.rule-items__grid {
+  display: grid;
+  grid-template-columns: minmax(9em, 1fr) minmax(7em, 1fr) minmax(10em, 2fr) minmax(8em, 1.5fr) auto;
+  gap: var(--xh-space-2);
+  align-items: center;
+}
+
+.rule-items__col {
+  color: var(--xh-fg-muted);
+  font-size: var(--xh-text-secondary-size);
+}
+
+/* 行不成盒，行内控件直接落进网格的各列 */
+.rule-item-row {
+  display: contents;
+}
+
+.rule-items__grid :is([data-scope='number-field'], [data-scope='select'], [data-scope='text-field'])[data-part='root'] {
+  inline-size: 100%;
+  min-inline-size: 0;
 }
 </style>

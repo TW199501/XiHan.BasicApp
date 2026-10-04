@@ -4,6 +4,7 @@ import { XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
 import { h } from 'vue'
 import { i18n } from '~/locales'
 import { formatDate, getOptionLabel } from '~/utils'
+import SchemaFileRefCell from './SchemaFileRefCell.vue'
 import { resolveStatusTagTone } from './status-tag'
 
 /** 安全读取行字段值（兼容具名 DTO 接口，无索引签名） */
@@ -95,7 +96,15 @@ export function renderFieldCell<TRow extends object>(
     const label = getOptionLabel(toMutableOptions(field.options), raw as string | number)
     // 登记过语气的状态字典按语气着色，其余枚举走中性
     const tone = resolveStatusTagTone(field.dictionaryCode, raw) ?? 'neutral'
-    return h(XhTagRoot, { variant: 'outline', tone }, () => h(XhTagLabel, () => label))
+    return h(XhTagRoot, { variant: 'subtle', tone }, () => h(XhTagLabel, () => label))
+  }
+
+  // 文件引用（文件主键或直链）：图片出缩略图，文件出打开入口
+  if (field.dataType === 'image' || field.dataType === 'file') {
+    if (raw == null || raw === '') {
+      return '-'
+    }
+    return h(SchemaFileRefCell, { value: String(raw), kind: field.dataType })
   }
 
   if (field.dataType === 'boolean') {
@@ -103,7 +112,7 @@ export function renderFieldCell<TRow extends object>(
       return '-'
     }
     // 是 / 否是状态，不是身份
-    return h(XhTagRoot, { variant: 'outline', tone: raw ? 'success' : 'neutral' }, () => h(XhTagLabel, () => (raw ? i18n.global.t('common.statuses.yes') : i18n.global.t('common.statuses.no'))))
+    return h(XhTagRoot, { variant: 'subtle', tone: raw ? 'success' : 'neutral' }, () => h(XhTagLabel, () => (raw ? i18n.global.t('common.statuses.yes') : i18n.global.t('common.statuses.no'))))
   }
 
   return formatFieldText(field, row)

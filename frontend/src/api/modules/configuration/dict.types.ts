@@ -19,6 +19,8 @@ export interface DictListItemDto extends BasicDto {
   dictType: string
   hasNote: boolean
   isBuiltIn: boolean
+  /** 全局字典：平台维护，租户只读 */
+  isGlobal: boolean
   modifiedTime?: DateTimeString | null
   sort: number
   status: EnableStatus
@@ -70,6 +72,15 @@ export interface DictItemTreeQueryDto {
   dictId: ApiId
   limit: number
   onlyEnabled: boolean
+}
+
+/** 字典选项（业务表单下拉；值为字典项编码，树形字典按深度优先展平） */
+export interface DictOptionDto {
+  disabled: boolean
+  isDefault: boolean
+  label: string
+  parentValue?: string | null
+  value: string
 }
 
 export interface DictItemTreeNodeDto extends BasicDto {

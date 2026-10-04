@@ -5,7 +5,7 @@
 <script setup lang="ts">
 import type { PrintTemplateDetailDto, PrintTemplateScope } from '../../../../api/print-template.types'
 import type { PrintTemplateFormModel } from './models'
-import { XhButton, XhDialogCloseTrigger, XhDialogContent, XhDialogRoot, XhDialogTitle, XhDrawerCloseTrigger, XhDrawerContent, XhDrawerRoot, XhFlex, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
+import { XhButton, XhButtonIndicator, XhButtonLabel, XhDialogCloseTrigger, XhDialogContent, XhDialogRoot, XhDialogTitle, XhDrawerBody, XhDrawerCloseTrigger, XhDrawerContent, XhDrawerDescription, XhDrawerFooter, XhDrawerHeader, XhDrawerRoot, XhDrawerTitle, XhFlex, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { XSelect } from '~/components'
@@ -157,7 +157,6 @@ defineExpose({ confirmDiscard })
       <XhDialogTitle>
         <div class="template-settings-header">
           <strong>{{ title }}</strong>
-          <span>{{ t('setting.print_template.template_settings_subtitle') }}</span>
           <XhTagRoot variant="subtle" :tone="dirty ? 'warning' : 'success'" size="sm">
             <XhTagLabel>
               {{ dirty ? t('setting.print_template.unsaved') : t('setting.print_template.saved') }}
@@ -179,17 +178,20 @@ defineExpose({ confirmDiscard })
         >
           <template #template-actions>
             <div class="toolbar-primary-actions">
-              <XhButton data-testid="print-template-save" tone="brand" :loading="saveLoading" :disabled="!designerReady" @click="handleSave">
+              <XhButton variant="subtle" data-testid="print-template-save" tone="brand" :loading="saveLoading" :disabled="!designerReady" @click="handleSave">
+                <XhButtonIndicator />
                 <span><Icon icon="tabler:device-floppy" /></span>
-                {{ t('common.actions.save') }}
+                <XhButtonLabel>{{ t('common.actions.save') }}</XhButtonLabel>
               </XhButton>
-              <XhButton :loading="previewLoading" :disabled="!designerReady" @click="openSamplePreview">
+              <XhButton variant="subtle" :loading="previewLoading" :disabled="!designerReady" @click="openSamplePreview">
+                <XhButtonIndicator />
                 <span><Icon icon="tabler:eye" /></span>
-                {{ t('setting.print_template.sample_preview') }}
+                <XhButtonLabel>{{ t('setting.print_template.sample_preview') }}</XhButtonLabel>
               </XhButton>
-              <XhButton tone="success" :loading="directLoading" :disabled="!designerReady || (currentDetail !== null && !canDirectPrint)" @click="directPrint">
+              <XhButton variant="subtle" tone="success" :loading="directLoading" :disabled="!designerReady || (currentDetail !== null && !canDirectPrint)" @click="directPrint">
+                <XhButtonIndicator />
                 <span><Icon icon="tabler:printer" /></span>
-                {{ t('setting.print_template.direct_print') }}
+                <XhButtonLabel>{{ t('setting.print_template.direct_print') }}</XhButtonLabel>
               </XhButton>
 
               <span class="action-divider" aria-hidden="true" />
@@ -223,7 +225,16 @@ defineExpose({ confirmDiscard })
                 class="printer-select"
                 @update:value="(value: string | number | (string | number)[] | null) => updatePrinterPreference(value as string | null)"
               />
-              <XhButton class="xh-icon-btn" variant="ghost" :loading="printerLoading" :title="t('setting.print_template.refresh_printers')" @click="loadPrinters(true)">
+              <XhButton
+                class="xh-icon-btn"
+                variant="ghost"
+                icon-only
+                :loading="printerLoading"
+                :title="t('setting.print_template.refresh_printers')"
+                :aria-label="t('setting.print_template.refresh_printers')"
+                @click="loadPrinters(true)"
+              >
+                <XhButtonIndicator />
                 <span><Icon icon="tabler:refresh" /></span>
               </XhButton>
             </XhFlex>
@@ -247,34 +258,41 @@ defineExpose({ confirmDiscard })
         :close-on-interact-outside="!saveLoading"
         @update:open="handleMetadataVisible"
       >
-        <XhDrawerContent style="--xh-drawer-size: min(444px, 100vw); --xh-drawer-px: 0">
+        <!-- 取消与保存必须在抽屉面板里：抽屉是模态，面板外的按钮被遮罩与焦点陷阱挡住，新建模板永远存不上 -->
+        <XhDrawerContent class="print-template-settings-drawer" style="--xh-drawer-size: min(444px, 100vw); --xh-drawer-px: 0">
+          <XhDrawerHeader>
+            <XhDrawerTitle>{{ t('setting.print_template.template_settings') }}</XhDrawerTitle>
+            <XhDrawerDescription>{{ t('setting.print_template.template_settings_subtitle') }}</XhDrawerDescription>
+          </XhDrawerHeader>
+          <XhDrawerBody>
+            <MetadataForm
+              :key="metadataSessionKey"
+              v-model="metadataDraft"
+              :editing="Boolean(currentDetail)"
+              :global-mode="globalMode"
+              :template="draftTemplate"
+            />
+          </XhDrawerBody>
+          <XhDrawerFooter class="template-settings-footer">
+            <XhButton variant="subtle" :disabled="saveLoading" @click="cancelMetadata">
+              {{ t('common.actions.cancel') }}
+            </XhButton>
+            <XhButton
+              variant="subtle"
+              tone="brand"
+              :loading="saveLoading"
+              :disabled="metadataDraftIncomplete"
+              class="template-settings-submit"
+              @click="saveMetadata"
+            >
+              <XhButtonIndicator />
+              <XhButtonLabel>{{ t('setting.print_template.save_and_return') }}</XhButtonLabel>
+              <span v-if="metadataDraftDirty && !saveLoading" class="metadata-dirty-dot" aria-hidden="true" />
+            </XhButton>
+          </XhDrawerFooter>
           <XhDrawerCloseTrigger />
-          <MetadataForm
-            :key="metadataSessionKey"
-            v-model="metadataDraft"
-            :editing="Boolean(currentDetail)"
-            :global-mode="globalMode"
-            :template="draftTemplate"
-          />
         </XhDrawerContent>
       </XhDrawerRoot>
-      <div class="xh-dialog-footer">
-        <div class="template-settings-footer">
-          <XhButton :disabled="saveLoading" @click="cancelMetadata">
-            {{ t('common.actions.cancel') }}
-          </XhButton>
-          <XhButton
-            tone="brand"
-            :loading="saveLoading"
-            :disabled="metadataDraftIncomplete"
-            class="template-settings-submit"
-            @click="saveMetadata"
-          >
-            {{ t('setting.print_template.save_and_return') }}
-            <span v-if="metadataDraftDirty && !saveLoading" class="metadata-dirty-dot" aria-hidden="true" />
-          </XhButton>
-        </div>
-      </div>
     </XhDialogContent>
   </XhDialogRoot>
 </template>
@@ -292,6 +310,11 @@ defineExpose({ confirmDiscard })
   margin: 0;
   overflow: hidden;
   border-radius: 0;
+}
+
+/* 满屏编辑器贴满视口：定位层缺省留一圈 --xh-space-4 的视口间距，它不收作者属性，只能从面板反查 */
+[data-scope='dialog'][data-part='positioner']:has(> .print-template-editor-modal) {
+  --xh-dialog-positioner-padding: var(--xh-space-0);
 }
 
 .print-template-editor-modal > .editor-layout {
@@ -352,8 +375,8 @@ defineExpose({ confirmDiscard })
 
 .template-settings-header {
   display: flex;
-  flex-direction: column;
-  gap: 3px;
+  align-items: center;
+  gap: var(--xh-space-2);
 }
 
 .template-settings-header strong {
@@ -362,18 +385,10 @@ defineExpose({ confirmDiscard })
   font-weight: 600;
 }
 
-.template-settings-header span {
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 400;
-}
-
-.template-settings-footer {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
+/* 面板横向内衬已归零交给表单自管，头尾两段自己补回内衬 */
+.print-template-settings-drawer > [data-scope='drawer'][data-part='header'],
+.print-template-settings-drawer > [data-scope='drawer'][data-part='footer'] {
+  padding-inline: var(--xh-surface-px-md);
 }
 
 .template-settings-footer > [data-scope='button'][data-part='root']:first-child {
@@ -403,10 +418,6 @@ defineExpose({ confirmDiscard })
 
 .dark .template-settings-header strong {
   color: #f1f5f9;
-}
-
-.dark .template-settings-header span {
-  color: #94a3b8;
 }
 
 @media (max-width: 1200px) {

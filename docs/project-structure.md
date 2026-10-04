@@ -6,7 +6,7 @@
 
 ```text
 XiHan.BasicApp/
-├── backend/                          # 后端（.NET 10）
+├── backend/                          # 后端（.NET）
 │   ├── src/
 │   │   ├── framework/                #   基座层
 │   │   │   ├── XiHan.BasicApp.Core/          实体/DTO 基类、查询服务标记、聚合框架模块
@@ -22,20 +22,21 @@ XiHan.BasicApp/
 │   ├── props/                        #   共享 MSBuild 属性（framework.props 源码/NuGet 切换）
 │   ├── test/                         #   测试项目
 │   └── XiHan.BasicApp.slnx           #   解决方案（始终走 NuGet 引用框架）
-├── frontend/                         # 前端（Vue 3 + Vite）
+├── frontend/                         # 前端（Vue + Vite）
 │   ├── src/                          #   应用装配与业务视图
 │   ├── packages/                     #   可复用内核
 │   ├── .env / .env.development / .env.production
 │   └── nginx.conf                    #   生产静态托管与 /api 反代示例
 ├── docker-compose.yml
-└── assets/
+└── assets/                           # 品牌与文档资源
+    └── preview/                      # 功能预览截图与索引
 ```
 
 `backend/src/business` 下的 OA、CMS、CRM、HRM、ERP 等 15 个项目目前是解决方案内脚手架，模块注册基本为空，且 `XiHanBasicAppWebHostModule` 未依赖它们。它们代表预留边界，不应当作已交付业务功能。
 
 ## 后端：一个业务模块内部
 
-以 `XiHan.BasicApp.Saas` 为例，四个模块结构一致：
+以 `XiHan.BasicApp.Saas` 为例，各模块结构一致：
 
 ```text
 XiHan.BasicApp.Saas/
@@ -83,7 +84,7 @@ frontend/
 │   │   ├── helpers.ts                #   分页/过滤/排序构造
 │   │   └── modules/**                #   ★ 按域的 API 与 DTO 类型
 │   ├── router/                       #   路由入口（守卫、静态路由）
-│   ├── styles/index.css              #   Tailwind v4 入口（CSS-first @theme）
+│   ├── styles/index.css              #   Tailwind 入口（CSS-first @theme）
 │   ├── locales/                      #   应用级语言包
 │   └── views/**                      #   ★ 业务视图
 └── packages/                         # 内核侧（别名 ~）

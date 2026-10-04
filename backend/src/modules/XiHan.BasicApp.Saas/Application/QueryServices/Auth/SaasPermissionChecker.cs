@@ -19,6 +19,7 @@ namespace XiHan.BasicApp.Saas.Application.QueryServices;
 /// 导致请求期 <c>IsGrantedAsync</c> 失效、鉴权只能依赖登录时写入 JWT 的权限声明 —— 授权变更须重新登录才生效。
 /// 本实现改为读取按用户缓存、且在授权写路径失效的 <see cref="AuthorizationSnapshot"/>，使授权变更无需重新登录即可生效；
 /// 并在鉴权前校验「当前请求所属会话」是否仍有效（登出/强制下线/禁用→吊销会话 后即时拒绝）。
+/// 作用侧不含当前上下文的权限码（随快照下发）与模仿态禁用清单先于通配判定拒绝：平台超管的 * 也放不出租户侧权限。
 /// </remarks>
 public sealed class SaasPermissionChecker : IPermissionChecker
 {
@@ -62,18 +63,13 @@ public sealed class SaasPermissionChecker : IPermissionChecker
             return false;
         }
 
-        if (IsDeniedWhileImpersonating(permissionName))
-        {
-            return false;
-        }
-
         if (!await IsCurrentSessionValidAsync(cancellationToken))
         {
             return false;
         }
 
         var snapshot = await BuildSnapshotAsync(id, cancellationToken);
-        return HasPermission(snapshot, permissionName);
+        return !IsDeniedInCurrentContext(snapshot, permissionName) && HasPermission(snapshot, permissionName);
     }
 
     /// <summary>
@@ -90,20 +86,14 @@ public sealed class SaasPermissionChecker : IPermissionChecker
             return false;
         }
 
-        // 逐条过滤而不是整体拒绝：任一未被禁用的权限码仍应按快照判定
-        permissionNames = [.. permissionNames.Where(name => !IsDeniedWhileImpersonating(name))];
-        if (permissionNames.Count == 0)
-        {
-            return false;
-        }
-
         if (!await IsCurrentSessionValidAsync(cancellationToken))
         {
             return false;
         }
 
+        // 逐条过滤而不是整体拒绝：任一未被禁用的权限码仍应按快照判定
         var snapshot = await BuildSnapshotAsync(id, cancellationToken);
-        return permissionNames.Any(name => HasPermission(snapshot, name));
+        return permissionNames.Any(name => !IsDeniedInCurrentContext(snapshot, name) && HasPermission(snapshot, name));
     }
 
     /// <summary>
@@ -120,18 +110,13 @@ public sealed class SaasPermissionChecker : IPermissionChecker
             return false;
         }
 
-        if (permissionNames.Exists(IsDeniedWhileImpersonating))
-        {
-            return false;
-        }
-
         if (!await IsCurrentSessionValidAsync(cancellationToken))
         {
             return false;
         }
 
         var snapshot = await BuildSnapshotAsync(id, cancellationToken);
-        return permissionNames.All(name => HasPermission(snapshot, name));
+        return permissionNames.All(name => !IsDeniedInCurrentContext(snapshot, name) && HasPermission(snapshot, name));
     }
 
     /// <summary>
@@ -148,9 +133,7 @@ public sealed class SaasPermissionChecker : IPermissionChecker
         }
 
         var snapshot = await BuildSnapshotAsync(id, cancellationToken);
-        return _currentUser.IsImpersonating()
-            ? [.. snapshot.Permissions.Where(permission => !IsDeniedWhileImpersonating(permission))]
-            : [.. snapshot.Permissions];
+        return [.. snapshot.Permissions.Where(permission => !IsDeniedInCurrentContext(snapshot, permission))];
     }
 
     /// <summary>
@@ -165,13 +148,19 @@ public sealed class SaasPermissionChecker : IPermissionChecker
     }
 
     /// <summary>
-    /// 模仿态下是否拒绝该权限码（清单见 <see cref="ImpersonationDefaults.DeniedPermissionCodes"/>）。
+    /// 当前上下文里被禁用的权限码：作用侧不含当前上下文的权限（随快照下发），以及模仿态禁用清单
+    /// （见 <see cref="ImpersonationDefaults.DeniedPermissionCodes"/>）。先于通配判定。
     /// </summary>
-    private bool IsDeniedWhileImpersonating(string permissionName)
+    private bool IsDeniedInCurrentContext(AuthorizationSnapshot snapshot, string permissionName)
     {
-        return !string.IsNullOrWhiteSpace(permissionName)
-            && _currentUser.IsImpersonating()
-            && ImpersonationDefaults.DeniedPermissionCodes.Contains(permissionName.Trim());
+        if (string.IsNullOrWhiteSpace(permissionName))
+        {
+            return false;
+        }
+
+        var code = permissionName.Trim();
+        return snapshot.ContextDeniedCodes.Contains(code)
+            || (_currentUser.IsImpersonating() && ImpersonationDefaults.DeniedPermissionCodes.Contains(code));
     }
 
     private static bool HasPermission(AuthorizationSnapshot snapshot, string permissionName)

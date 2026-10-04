@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { BoardItem } from './components'
-import { XhButton, XhDrawerCloseTrigger, XhDrawerContent, XhDrawerRoot, XhDrawerTitle, XhEmptyStateAction, XhEmptyStateDescription, XhEmptyStateIcon, XhEmptyStateRoot, XhEmptyStateTitle, XhPopoverContent, XhPopoverPositioner, XhPopoverRoot, XhPopoverTrigger, XhSortableItem, XhSortableItemHandle, XhSortableLiveRegion, XhSortableRoot } from '@xihan-ui/vue'
+import { XhButton, XhDrawerCloseTrigger, XhDrawerContent, XhDrawerRoot, XhDrawerTitle, XhEmptyStateAction, XhEmptyStateDescription, XhEmptyStateIndicator, XhEmptyStateRoot, XhEmptyStateTitle, XhPopoverContent, XhPopoverPositioner, XhPopoverRoot, XhPopoverTrigger, XhSortableItem, XhSortableItemDragTrigger, XhSortableLiveRegion, XhSortableRoot } from '@xihan-ui/vue'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import SyncStatusBadge from '~/components/common/SyncStatusBadge.vue'
@@ -228,7 +228,7 @@ onUnmounted(() => window.removeEventListener('pointermove', onResizeMove))
     <div class="pointer-events-none sticky top-2 z-40 -mb-4 -mr-4 flex h-0 items-start justify-end overflow-x-clip sm:-mb-5 sm:-mr-5">
       <div
         class="flex justify-end"
-        :style="{ transform: `translateY(${toolbarOffsetY}px)`, transition: draggingToolbar ? 'none' : 'transform var(--xh-motion-duration-micro) var(--xh-motion-ease-enter)' }"
+        :style="{ transform: `translateY(${toolbarOffsetY}px)`, transition: draggingToolbar ? 'none' : 'transform var(--xh-motion-duration-nudge) var(--xh-motion-ease-enter)' }"
       >
         <!-- 折叠态：右侧半隐藏按钮，悬停滑出 -->
         <Transition
@@ -241,19 +241,19 @@ onUnmounted(() => window.removeEventListener('pointermove', onResizeMove))
             v-if="!panelOpen"
             type="button"
             :title="t('workbench.widgets.customize')"
-            class="group pointer-events-auto mt-2 flex h-9 translate-x-[40%] items-center gap-1.5 rounded-l-xl border border-r-0 border-border/60 bg-background/55 pl-3 pr-2 text-muted-foreground shadow-sm backdrop-blur-md transition-all duration-[var(--xh-motion-duration-enter)] hover:translate-x-0 hover:bg-background/90 hover:text-foreground"
+            class="board-fab group pointer-events-auto mt-2 flex h-9 translate-x-[40%] items-center gap-1.5 rounded-l-xl border border-r-0 border-border/60 bg-background/55 pl-3 pr-2 text-muted-foreground shadow-sm backdrop-blur-md hover:translate-x-0 hover:bg-background/90 hover:text-foreground"
             @click="panelOpen = true"
           >
             <Icon icon="lucide:settings-2" width="16" />
             <Icon icon="lucide:chevron-left" width="14" class="opacity-50 transition-opacity group-hover:opacity-90" />
           </button>
         </Transition>
-        <!-- 展开态：半透明毛玻璃悬浮操作栏 -->
+        <!-- 展开态：半透明毛玻璃悬浮操作栏。进出场的位移量取幅度令牌：减弱动效下归零，只剩淡变 -->
         <Transition
           enter-active-class="transition duration-[var(--xh-motion-duration-enter)] ease-[var(--xh-motion-ease-enter)]"
-          enter-from-class="translate-x-4 opacity-0"
+          enter-from-class="translate-x-[var(--xh-motion-distance-lg)] opacity-0"
           leave-active-class="transition duration-[var(--xh-motion-duration-exit)] ease-[var(--xh-motion-ease-exit)]"
-          leave-to-class="translate-x-4 opacity-0"
+          leave-to-class="translate-x-[var(--xh-motion-distance-lg)] opacity-0"
         >
           <div
             v-if="panelOpen"
@@ -272,15 +272,15 @@ onUnmounted(() => window.removeEventListener('pointermove', onResizeMove))
             </div>
             <div class="mx-0.5 h-5 w-px bg-border/70" />
             <template v-if="customizing">
-              <XhButton size="sm" @click="showAdd = true">
+              <XhButton variant="subtle" size="sm" @click="showAdd = true">
                 <Icon icon="lucide:plus" />
                 {{ t('workbench.widgets.add') }}
               </XhButton>
-              <XhButton size="sm" @click="resetBoard">
+              <XhButton variant="subtle" size="sm" @click="resetBoard">
                 <Icon icon="lucide:rotate-ccw" />
                 {{ t('workbench.widgets.reset') }}
               </XhButton>
-              <XhButton size="sm" tone="brand" @click="finishCustomize">
+              <XhButton variant="subtle" size="sm" tone="brand" @click="finishCustomize">
                 <Icon icon="lucide:check" />
                 {{ t('workbench.widgets.done') }}
               </XhButton>
@@ -306,13 +306,13 @@ onUnmounted(() => window.removeEventListener('pointermove', onResizeMove))
 
     <div v-if="!board.length" class="py-20">
       <XhEmptyStateRoot>
-        <XhEmptyStateIcon>
+        <XhEmptyStateIndicator>
           <Icon icon="lucide:inbox" width="28" />
-        </XhEmptyStateIcon>
+        </XhEmptyStateIndicator>
         <XhEmptyStateTitle>{{ t('workbench.widgets.empty_title') }}</XhEmptyStateTitle>
         <XhEmptyStateDescription>{{ t('workbench.widgets.empty') }}</XhEmptyStateDescription>
         <XhEmptyStateAction>
-          <XhButton size="sm" @click="customizing = true; showAdd = true">
+          <XhButton variant="subtle" size="sm" @click="customizing = true; showAdd = true">
             {{ t('workbench.widgets.add') }}
           </XhButton>
         </XhEmptyStateAction>
@@ -360,19 +360,19 @@ onUnmounted(() => window.removeEventListener('pointermove', onResizeMove))
             v-show="customizing"
             class="absolute right-2 top-2 z-20 flex items-center gap-0.5 rounded-lg border border-border bg-card/95 px-1 py-0.5 shadow-sm backdrop-blur"
           >
-            <XhSortableItemHandle
+            <XhSortableItemDragTrigger
               :item-id="item.key"
               class="widget-drag-handle flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-muted"
               :title="t('workbench.widgets.drag')"
             >
               <Icon icon="lucide:grip-vertical" width="15" />
-            </XhSortableItemHandle>
+            </XhSortableItemDragTrigger>
             <XhPopoverRoot placement="bottom-end">
               <XhPopoverTrigger class="xh-linklike-trigger">
                 {{ spanLabel(item.span) }}
               </XhPopoverTrigger>
               <XhPopoverPositioner>
-                <XhPopoverContent>
+                <XhPopoverContent :aria-label="t('workbench.widgets.span')">
                   <div class="grid grid-cols-6 gap-1">
                     <button
                       v-for="s in SIZE_OPTIONS"
@@ -388,7 +388,12 @@ onUnmounted(() => window.removeEventListener('pointermove', onResizeMove))
                 </XhPopoverContent>
               </XhPopoverPositioner>
             </XhPopoverRoot>
-            <button type="button" class="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-[hsl(var(--destructive))]" @click="removeWidget(item.key)">
+            <button
+              type="button"
+              class="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-[hsl(var(--destructive))]"
+              :aria-label="t('workbench.widgets.remove')"
+              @click="removeWidget(item.key)"
+            >
               <Icon icon="lucide:x" width="15" />
             </button>
           </div>
@@ -403,9 +408,9 @@ onUnmounted(() => window.removeEventListener('pointermove', onResizeMove))
         <XhDrawerCloseTrigger />
         <div v-if="!available.length" class="py-10">
           <XhEmptyStateRoot size="sm">
-            <XhEmptyStateIcon>
+            <XhEmptyStateIndicator>
               <Icon icon="lucide:inbox" width="24" />
-            </XhEmptyStateIcon>
+            </XhEmptyStateIndicator>
             <XhEmptyStateTitle>{{ t('workbench.widgets.all_added_title') }}</XhEmptyStateTitle>
             <XhEmptyStateDescription>{{ t('workbench.widgets.all_added') }}</XhEmptyStateDescription>
           </XhEmptyStateRoot>
@@ -423,7 +428,7 @@ onUnmounted(() => window.removeEventListener('pointermove', onResizeMove))
                 {{ t(widget.descKey) }}
               </div>
             </div>
-            <XhButton size="sm" tone="brand" variant="subtle" @click="addWidget(widget.key)">
+            <XhButton icon-only size="sm" tone="brand" variant="subtle" :aria-label="t('workbench.widgets.add')" @click="addWidget(widget.key)">
               <Icon icon="lucide:plus" />
             </XhButton>
           </div>
@@ -434,6 +439,15 @@ onUnmounted(() => window.removeEventListener('pointermove', onResizeMove))
 </template>
 
 <style scoped>
+/* 折叠态的半隐藏按钮：悬停滑出是几何变化，位移走 move（减弱动效下 1ms，直接到位）；
+   换面换字是状态变化，仍按 enter 淡变。enter 在减弱动效下不降档，不能拿来驱动位移 */
+.board-fab {
+  transition:
+    translate var(--xh-motion-duration-move) var(--xh-motion-ease-enter),
+    background-color var(--xh-motion-duration-enter) var(--xh-motion-ease-enter),
+    color var(--xh-motion-duration-enter) var(--xh-motion-ease-enter);
+}
+
 /* 小屏（<md）忽略用户设定的小组件宽度，一律整行铺满；md 及以上按 12 栅格自定义宽度 */
 .widget-cell {
   grid-column: 1 / -1;

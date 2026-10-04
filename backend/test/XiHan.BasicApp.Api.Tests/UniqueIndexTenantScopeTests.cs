@@ -3,6 +3,7 @@
 
 using SqlSugar;
 using System.Reflection;
+using XiHan.Framework.Data.SqlSugar.Routing;
 using XiHan.Framework.Domain.Entities.Abstracts;
 
 namespace XiHan.BasicApp.Api.Tests;
@@ -45,10 +46,11 @@ public sealed class UniqueIndexTenantScopeTests
     private static readonly IReadOnlySet<string> GlobalUniqueAllowList =
         new HashSet<string>(StringComparer.Ordinal)
         {
-            // OAuth 协议标识（3）：授权/兑换/验签发生在拿到租户上下文之前，作用域只能是全平台
+            // 协议标识（4）：授权/兑换/验签/会话闸门发生在拿到租户上下文之前，作用域只能是全平台
             "SysOAuthApp.UX_{table}_ClId",      // client_id 对外公开，授权请求不带租户
             "SysOAuthCode.UX_{table}_Co",       // 授权码是一次性凭证，兑换时无租户上下文
             "SysOAuthToken.UX_{table}_AcJti",   // JWT ID，用于吊销与防重放，须全局可判重
+            "SysUserSession.UX_{table}_UsSeId", // 会话标识随令牌下发，会话闸门按它跨租户定位会话行
 
             // 平台级实体（3）：实体注释明确写着 TenantId = 0、由平台运营管理
             "SysTenant.UX_{table}_TeCo",                    // 租户编码是租户自身的全局标识
@@ -102,6 +104,29 @@ public sealed class UniqueIndexTenantScopeTests
         Assert.True(violations.Count == 0,
             $"下列 {violations.Count} 个唯一索引作用于软删除实体却不含 IsDeleted，" +
             $"删掉一条后同编码再建会被拒：{Environment.NewLine}{string.Join(Environment.NewLine, violations)}");
+    }
+
+    /// <summary>
+    /// 全局唯一只在一个库里成立：白名单里的实体必须固定在平台库，
+    /// 否则库隔离租户各自的库里各有一份，唯一约束管不到跨库的重复。
+    /// </summary>
+    [Fact]
+    public void GlobalUniqueEntities_ShouldLiveInPlatformDatabase()
+    {
+        var entityTypes = ModuleAssemblies
+            .SelectMany(assembly => assembly.GetTypes())
+            .Where(type => type.GetCustomAttributes<SugarTable>(inherit: false).Any())
+            .ToDictionary(type => type.Name, StringComparer.Ordinal);
+
+        var violations = GlobalUniqueAllowList
+            .Select(key => key[..key.IndexOf('.', StringComparison.Ordinal)])
+            .Distinct(StringComparer.Ordinal)
+            .Where(name => entityTypes[name].GetCustomAttribute<PlatformDataSourceAttribute>(inherit: true) is null)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToList();
+
+        Assert.True(violations.Count == 0,
+            $"下列 {violations.Count} 个实体声明了全局唯一索引却不在平台库：{Environment.NewLine}{string.Join(Environment.NewLine, violations)}");
     }
 
     /// <summary>

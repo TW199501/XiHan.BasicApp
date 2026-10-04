@@ -4,6 +4,7 @@
 using SqlSugar;
 using XiHan.BasicApp.Core.Entities;
 using XiHan.BasicApp.Saas.Domain.Enums;
+using XiHan.Framework.Data.SqlSugar.Routing;
 
 namespace XiHan.BasicApp.Saas.Domain.Entities;
 
@@ -13,11 +14,11 @@ namespace XiHan.BasicApp.Saas.Domain.Entities;
 /// </summary>
 /// <remarks>
 /// 关联：
-/// - 反向：SysUserRole（用户赋角色）、SysRolePermission（角色持权限）、SysRoleHierarchy（闭包表继承）、SysRoleDataScope（自定义数据范围）
+/// - 反向：SysUserRole（用户赋角色）、SysRolePermission（角色持权限）、SysRoleHierarchy（直接继承边）、SysRoleDataScope（自定义数据范围）
 ///
 /// 写入：
 /// - TenantId + RoleCode 租户内唯一（UX_TeId_RoCo）
-/// - RoleType=System 为平台内置角色，禁止普通租户修改/删除
+/// - RoleType=System 为系统角色（平台超管、各租户的所有者角色），成员与定义只由系统流程维护，租户里不能修改、删除、授予或撤销
 /// - DataScope=Custom 时必须同步写入 SysRoleDataScope，否则视为无可见数据
 ///
 /// 查询：
@@ -40,6 +41,7 @@ namespace XiHan.BasicApp.Saas.Domain.Entities;
 [SugarIndex("IX_{table}_TeId_IsDe", nameof(TenantId), OrderByType.Asc, nameof(IsDeleted), OrderByType.Asc)]
 [SugarIndex("UX_{table}_TeId_RoCo", nameof(TenantId), OrderByType.Asc, nameof(RoleCode), OrderByType.Asc, nameof(IsDeleted), OrderByType.Asc, true)]
 [SugarIndex("IX_{table}_TeId_St", nameof(TenantId), OrderByType.Asc, nameof(Status), OrderByType.Asc)]
+[PlatformDataSource]
 public partial class SysRole : BasicAppAggregateRoot
 {
     /// <summary>
@@ -69,11 +71,11 @@ public partial class SysRole : BasicAppAggregateRoot
     /// ┌──────────┬─────────────────┬──────────────────┐
     /// │ RoleType │ IsGlobal=true   │ IsGlobal=false   │
     /// ├──────────┼─────────────────┼──────────────────┤
-    /// │ System   │ 合法（平台预置模板，如 SuperAdmin） │ 不合法（平台预置必须全局） │
+    /// │ System   │ 合法（平台超管 super_admin） │ 合法（租户所有者 tenant_owner，开通时建） │
     /// │ Tenant   │ 合法（租户可见但由平台定义的通用角色） │ 合法（租户自有角色）     │
     /// │ Custom   │ 不合法（租户自定义不应全局化）  │ 合法（租户自建角色）     │
     /// └──────────┴─────────────────┴──────────────────┘
-    /// 该矩阵由 Expand 中的 Validate 校验（System 必须 TenantId=0、Custom 不可 TenantId=0）。
+    /// 该矩阵由 Expand 中的 Validate 校验（租户里的系统角色只有 tenant_owner、Custom 不可 TenantId=0）。
     /// </remarks>
     [SugarColumn(ColumnName = "Role_Type", ColumnDescription = "角色类型")]
     public virtual RoleType RoleType { get; set; } = RoleType.Custom;

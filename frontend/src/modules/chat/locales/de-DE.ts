@@ -4,8 +4,9 @@
 export default {
   chat: {
     bell: 'Chat',
+    unread_label: '{n} ungelesene Chat-Nachrichten',
     island_new_message_fallback: 'Neue Nachricht',
-    drawer: {
+    panel: {
       title: 'Chat',
       open_page: 'Vollständige Seite öffnen',
     },
@@ -61,6 +62,7 @@ export default {
       assistant_thinking: 'Wird generiert…',
       assistant_dismiss: 'Verwerfen',
       voice_unplayed: 'Nicht abgespielt',
+      view_image: 'Bild ansehen',
       recalled: 'Nachricht zurückgerufen',
       recall: 'Zurückrufen',
       recall_failed: 'Zurückrufen der Nachricht fehlgeschlagen',
@@ -106,6 +108,7 @@ export default {
       send_key_enter: 'Mit Eingabetaste senden',
       send_key_ctrl_enter: 'Mit Strg + Eingabetaste senden',
       emoji: 'Emoji',
+      mention: 'Mitglied erwähnen',
       image: 'Bild senden',
       file: 'Datei senden',
       voice: 'Spracheingabe',

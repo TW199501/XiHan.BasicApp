@@ -2,10 +2,9 @@ import type { DynamicApiParams } from '../../base'
 import type { ApiId } from '../../types'
 import type {
   UserDataScopeDetailDto,
-  UserDataScopeGrantDto,
   UserDataScopeListItemDto,
-  UserDataScopeStatusUpdateDto,
-  UserDataScopeUpdateDto,
+  UserDataScopeSetDto,
+  UserDataScopeSettingDto,
 } from './user-data-scope.types'
 import { appendDynamicApiParam, createDynamicApiClient } from '../../base'
 
@@ -19,9 +18,6 @@ export const userDataScopeApi = {
       { id },
     )
   },
-  grant(input: UserDataScopeGrantDto) {
-    return userDataScopeCommandApi.post<UserDataScopeDetailDto, UserDataScopeGrantDto>('UserDataScope', input)
-  },
   list(userId: ApiId, onlyValid = false) {
     const params: DynamicApiParams = {}
     appendDynamicApiParam(params, 'OnlyValid', onlyValid)
@@ -31,16 +27,12 @@ export const userDataScopeApi = {
       { ...params, userId },
     )
   },
-  revoke(id: ApiId) {
-    return userDataScopeCommandApi.delete('UserDataScope', { id })
+  /** 覆盖档位与自定义部门一次提交（单事务） */
+  set(input: UserDataScopeSetDto) {
+    return userDataScopeCommandApi.post<void, UserDataScopeSetDto>('SetUserDataScope', input)
   },
-  update(input: UserDataScopeUpdateDto) {
-    return userDataScopeCommandApi.put<UserDataScopeDetailDto, UserDataScopeUpdateDto>('UserDataScope', input)
-  },
-  updateStatus(input: UserDataScopeStatusUpdateDto) {
-    return userDataScopeCommandApi.put<UserDataScopeDetailDto, UserDataScopeStatusUpdateDto>(
-      'UserDataScopeStatus',
-      input,
-    )
+  /** 成员在本租户的数据范围设置（覆盖档位 + 当前生效的自定义部门） */
+  setting(userId: ApiId) {
+    return userDataScopeQueryApi.get<UserDataScopeSettingDto>('UserDataScopeSetting', { userId })
   },
 }

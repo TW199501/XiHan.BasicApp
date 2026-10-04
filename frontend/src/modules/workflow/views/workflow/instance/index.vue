@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Tone } from '@xihan-ui/kernel'
+import type { Tone } from '@xihan-ui/core'
 import type {
   WorkflowInstanceDetailDto,
   WorkflowInstanceListItemDto,
@@ -16,7 +16,7 @@ import {
   createPageRequest,
   querySortsFromSchema,
 } from '@/api'
-import { SchemaPage, XEditModal, XInput, XJsonBlock } from '~/components'
+import { actionConfirmText, SchemaPage, XEditModal, XInput, XJsonBlock } from '~/components'
 import { toast } from '~/composables'
 import { formatDate } from '~/utils'
 import {
@@ -102,14 +102,14 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 1,
     render: (row) => {
       const r = row as unknown as WorkflowInstanceListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: statusTag(r.status) }, () => h(XhTagLabel, () => statusLabel(r.status)))
+      return h(XhTagRoot, { variant: 'subtle', tone: statusTag(r.status) }, () => h(XhTagLabel, () => statusLabel(r.status)))
     },
   },
   { key: 'definitionCode', title: t('workflow.instance.definition_code'), dataType: 'string', searchable: true, sortable: true, minWidth: 150, order: 2 },
   { key: 'name', title: t('workflow.instance.name'), dataType: 'string', sortable: true, minWidth: 180, order: 10 },
   { key: 'definitionVersion', title: t('workflow.instance.version'), dataType: 'number', width: 80, order: 11, render: (row) => {
     const r = row as unknown as WorkflowInstanceListItemDto
-    return h(XhTagRoot, { variant: 'outline', tone: 'neutral' }, () => h(XhTagLabel, () => `v${r.definitionVersion}`))
+    return h(XhTagRoot, { variant: 'subtle', tone: 'neutral' }, () => h(XhTagLabel, () => `v${r.definitionVersion}`))
   } },
   { key: 'correlationId', title: t('workflow.instance.correlation_id'), dataType: 'string', searchable: true, minWidth: 140, order: 12 },
   { key: 'starterId', title: t('workflow.instance.starter'), dataType: 'string', minWidth: 110, order: 13 },
@@ -122,7 +122,7 @@ const fields = computed<ListFieldSchema[]>(() => [
 ])
 
 const schema = computed<PageSchema>(() => ({
-  pageCode: 'workflow.instance',
+  pageCode: 'workflow_instance',
   pageName: t('workflow.instance.page_name'),
   rowKey: 'basicId',
   fields: fields.value,
@@ -144,11 +144,11 @@ const schema = computed<PageSchema>(() => ({
   actions: [
     { key: 'signal', title: t('workflow.instance.action_signal'), scope: 'page', icon: 'lucide:radio', permission: 'workflow_instance.execute' },
     { key: 'view', title: t('workflow.instance.action_view'), scope: 'row', icon: 'lucide:eye' },
-    { key: 'suspend', title: t('workflow.instance.action_suspend'), scope: 'row', type: 'warning', permission: 'workflow_instance.update', visible: row => isRunning(row as unknown as WorkflowInstanceListItemDto) },
-    { key: 'resume', title: t('workflow.instance.action_resume'), scope: 'row', type: 'success', permission: 'workflow_instance.update', visible: row => (row as unknown as WorkflowInstanceListItemDto).status === WorkflowInstanceStatus.Suspended },
-    { key: 'retry', title: t('workflow.instance.action_retry'), scope: 'row', type: 'primary', permission: 'workflow_instance.execute', visible: row => (row as unknown as WorkflowInstanceListItemDto).status === WorkflowInstanceStatus.Faulted },
-    { key: 'cancel', title: t('workflow.instance.action_cancel'), scope: 'row', type: 'warning', permission: 'workflow_instance.execute', visible: row => isRunning(row as unknown as WorkflowInstanceListItemDto) || (row as unknown as WorkflowInstanceListItemDto).status === WorkflowInstanceStatus.Suspended },
-    { key: 'terminate', title: t('workflow.instance.action_terminate'), scope: 'row', type: 'error', permission: 'workflow_instance.execute', visible: row => !['Completed', 'Canceled', 'Faulted', 'Terminated'].includes((row as unknown as WorkflowInstanceListItemDto).status) },
+    { key: 'suspend', title: t('workflow.instance.action_suspend'), scope: 'row', icon: 'lucide:pause', type: 'warning', permission: 'workflow_instance.update', visible: row => isRunning(row as unknown as WorkflowInstanceListItemDto) },
+    { key: 'resume', title: t('workflow.instance.action_resume'), scope: 'row', icon: 'lucide:play', type: 'success', confirm: true, confirmText: row => actionConfirmText(t, t('workflow.instance.action_resume'), (row as unknown as WorkflowInstanceListItemDto).name), permission: 'workflow_instance.update', visible: row => (row as unknown as WorkflowInstanceListItemDto).status === WorkflowInstanceStatus.Suspended },
+    { key: 'retry', title: t('workflow.instance.action_retry'), scope: 'row', icon: 'lucide:rotate-cw', type: 'primary', confirm: true, confirmText: row => actionConfirmText(t, t('workflow.instance.action_retry'), (row as unknown as WorkflowInstanceListItemDto).name), permission: 'workflow_instance.execute', visible: row => (row as unknown as WorkflowInstanceListItemDto).status === WorkflowInstanceStatus.Faulted },
+    { key: 'cancel', title: t('workflow.instance.action_cancel'), scope: 'row', icon: 'lucide:circle-x', type: 'warning', permission: 'workflow_instance.execute', visible: row => isRunning(row as unknown as WorkflowInstanceListItemDto) || (row as unknown as WorkflowInstanceListItemDto).status === WorkflowInstanceStatus.Suspended },
+    { key: 'terminate', title: t('workflow.instance.action_terminate'), scope: 'row', icon: 'lucide:octagon-x', type: 'error', permission: 'workflow_instance.execute', visible: row => !['Completed', 'Canceled', 'Faulted', 'Terminated'].includes((row as unknown as WorkflowInstanceListItemDto).status) },
   ],
 }))
 
@@ -214,7 +214,7 @@ async function handleDetail(row: WorkflowInstanceListItemDto) {
     }
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('workflow.instance.err_load_detail'))
+    toast.danger((error as Error)?.message || t('workflow.instance.err_load_detail'))
   }
   finally {
     detailLoading.value = false
@@ -265,7 +265,7 @@ async function handleReasonConfirm() {
     reload()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('workflow.instance.err_operation'))
+    toast.danger((error as Error)?.message || t('workflow.instance.err_operation'))
   }
   finally {
     reasonLoading.value = false
@@ -282,7 +282,7 @@ async function handleSimple(action: 'retry' | 'resume', row: WorkflowInstanceLis
     reload()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('workflow.instance.err_operation'))
+    toast.danger((error as Error)?.message || t('workflow.instance.err_operation'))
   }
 }
 
@@ -310,7 +310,7 @@ async function handleSignal() {
     reload()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('workflow.instance.err_operation'))
+    toast.danger((error as Error)?.message || t('workflow.instance.err_operation'))
   }
   finally {
     signalLoading.value = false
@@ -354,7 +354,7 @@ function onAction(payload: SchemaActionPayload) {
           {{ t('workflow.instance.loading') }}
         </div>
         <template v-else-if="detailData">
-          <XhDescriptionsRoot :columns="2" bordered placement="left" size="sm">
+          <XhDescriptionsRoot :columns="2" variant="outline" placement="left" size="sm">
             <XhDescriptionsItem>
               <XhDescriptionsLabel>{{ t('workflow.instance.name') }}</XhDescriptionsLabel>
               <XhDescriptionsValue>
@@ -399,7 +399,7 @@ function onAction(payload: SchemaActionPayload) {
           <XhDescriptionsRoot
             v-if="detailData.faultMessage || detailData.cancellationReason"
             :columns="1"
-            bordered
+            variant="outline"
             placement="left"
             size="sm"
           >
@@ -417,11 +417,12 @@ function onAction(payload: SchemaActionPayload) {
             </XhDescriptionsItem>
           </XhDescriptionsRoot>
 
-          <!-- 运行轨迹（只读图 + 节点状态着色） -->
+          <!-- 运行轨迹（只读图 + 节点状态着色）。
+               分节文字放进分隔线的默认插槽；separator 的子节点对读屏是展示性的，名字另由 aria-label 给 -->
           <template v-if="detailDefinitionJson">
-            <div class="flex items-center gap-3 my-3">
-              <XhSeparator class="flex-1" /><span class="text-xs text-[hsl(var(--muted-foreground))]">{{ t('workflow.instance.graph_label') }}</span><XhSeparator class="flex-1" />
-            </div>
+            <XhSeparator class="my-3" :aria-label="t('workflow.instance.graph_label')">
+              {{ t('workflow.instance.graph_label') }}
+            </XhSeparator>
             <div class="h-[380px] overflow-hidden rounded border border-gray-200 dark:border-gray-700">
               <WorkflowGraphView :definition-json="detailDefinitionJson" :statuses="nodeStatuses" />
             </div>
@@ -433,14 +434,14 @@ function onAction(payload: SchemaActionPayload) {
             </div>
           </template>
 
-          <div class="flex items-center gap-3 my-3">
-            <XhSeparator class="flex-1" /><span class="text-xs text-[hsl(var(--muted-foreground))]">{{ t('workflow.instance.variables_label') }}</span><XhSeparator class="flex-1" />
-          </div>
+          <XhSeparator class="my-3" :aria-label="t('workflow.instance.variables_label')">
+            {{ t('workflow.instance.variables_label') }}
+          </XhSeparator>
           <XJsonBlock :raw="detailData.variablesJson" :default-expanded-depth="2" max-height="12rem" />
 
-          <div class="flex items-center gap-3 my-3">
-            <XhSeparator class="flex-1" /><span class="text-xs text-[hsl(var(--muted-foreground))]">{{ t('workflow.instance.history_label') }}</span><XhSeparator class="flex-1" />
-          </div>
+          <XhSeparator class="my-3" :aria-label="t('workflow.instance.history_label')">
+            {{ t('workflow.instance.history_label') }}
+          </XhSeparator>
           <table class="xh-plain-table">
             <thead>
               <tr>
@@ -457,7 +458,7 @@ function onAction(payload: SchemaActionPayload) {
                 <td>{{ node.name }} ({{ node.nodeId }})</td>
                 <td>{{ node.activityType }}</td>
                 <td>
-                  <XhTagRoot variant="subtle" :tone="nodeStatusTag(node.status)" size="sm">
+                  <XhTagRoot variant="subtle" :tone="nodeStatusTag(node.status)">
                     <XhTagLabel>
                       {{ node.status }}
                     </XhTagLabel>
@@ -471,10 +472,10 @@ function onAction(payload: SchemaActionPayload) {
           </table>
 
           <template v-if="detailData.pendingBookmarks.length > 0">
-            <div class="flex items-center gap-3 my-3">
-              <XhSeparator class="flex-1" /><span class="text-xs text-[hsl(var(--muted-foreground))]">{{ t('workflow.instance.bookmarks_label') }}</span><XhSeparator class="flex-1" />
-            </div>
-            <XhFlex direction="column" gap="xs">
+            <XhSeparator class="my-3" :aria-label="t('workflow.instance.bookmarks_label')">
+              {{ t('workflow.instance.bookmarks_label') }}
+            </XhSeparator>
+            <XhFlex orientation="vertical" gap="xs">
               <div v-for="bookmark in detailData.pendingBookmarks" :key="bookmark.id" class="text-xs text-gray-500">
                 <XhTagRoot variant="subtle" size="sm">
                   <XhTagLabel>
@@ -511,7 +512,7 @@ function onAction(payload: SchemaActionPayload) {
         class="xh-edit-form-grid"
         @submit="handleReasonConfirm"
       >
-        <XhFormFieldGroup value="reason" class="xh-span-2">
+        <XhFormFieldGroup name="reason" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('workflow.instance.reason') }}</XhFieldLabel>
             <XhFieldControl>
@@ -542,7 +543,7 @@ function onAction(payload: SchemaActionPayload) {
         class="xh-edit-form-grid"
         @submit="handleSignal"
       >
-        <XhFormFieldGroup value="signalName">
+        <XhFormFieldGroup name="signalName">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('workflow.instance.signal_name') }}</XhFieldLabel>
             <XhFieldControl>
@@ -551,7 +552,7 @@ function onAction(payload: SchemaActionPayload) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="correlationId">
+        <XhFormFieldGroup name="correlationId">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('workflow.instance.correlation_id') }}</XhFieldLabel>
             <XhFieldControl>
@@ -560,7 +561,7 @@ function onAction(payload: SchemaActionPayload) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="payloadJson" class="xh-span-2">
+        <XhFormFieldGroup name="payloadJson" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('workflow.instance.signal_payload') }}</XhFieldLabel>
             <XhFieldControl>

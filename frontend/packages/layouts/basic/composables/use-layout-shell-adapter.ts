@@ -211,8 +211,12 @@ export function useLayoutShellAdapter() {
   const headerWrapperStyle = computed((): CSSProperties => {
     const fixed = headerFixed.value
     const maximized = contentMaximized.value
+    // 收起（整页内容 / 内容最大化）时把外壳收成 0 高并裁掉溢出；正常展开时必须放开，
+    // 否则顶栏横向菜单的下拉面板（绝对定位在顶栏内，不走 portal）会被这层按外壳高度切掉
+    const collapsed = isFullContent.value || maximized
     return {
       height: isFullContent.value ? '0' : `${headerWrapperHeight.value}px`,
+      overflow: collapsed ? 'hidden' : 'visible',
       left: maximized ? '0' : (isMixedNav.value ? '0' : mainStyle.value.sidebarAndExtraWidth),
       position: fixed || maximized ? 'fixed' : 'static',
       top: maximized
@@ -304,6 +308,17 @@ export function useLayoutShellAdapter() {
       && currentLayout.value !== 'top'
       && appStore.sidebarShow
     )
+  })
+
+  /**
+   * 顶栏 Logo 位要占多宽：有侧栏在下面时按侧栏宽预留，两者才对得齐；
+   * 纯顶部导航没有侧栏可对齐，占着这一截只会把横向菜单挤窄，改为按内容宽。
+   */
+  const headerLogoMinWidth = computed(() => {
+    if (isMobile.value) {
+      return 40
+    }
+    return showSider.value ? appStore.sidebarWidth : 0
   })
 
   // --- Header auto-hide ---
@@ -518,6 +533,7 @@ export function useLayoutShellAdapter() {
     headerZIndex,
     headerWrapperStyle,
     headerHasShadow,
+    headerLogoMinWidth,
     showHeaderToggleButton,
     showHeaderLogo,
 

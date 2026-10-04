@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import type { FormRules } from '@xihan-ui/headless'
-import { XhFieldControl, XhFieldRoot, XhFormFieldGroup, XhFormRoot, XhFormSubmitTrigger } from '@xihan-ui/vue'
+import { XhFieldControl, XhFieldLabel, XhFieldRoot, XhFormFieldGroup, XhFormRoot, XhFormSubmitTrigger } from '@xihan-ui/vue'
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
@@ -18,7 +18,6 @@ const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const { apis } = useAppContext()
-const loading = ref(false)
 
 // 一次性重置令牌（来自找回密码邮件链接）
 const token = computed(() => (route.query.token as string) || '')
@@ -36,19 +35,21 @@ const rules = computed<FormRules>(() => ({
   confirmPassword: [
     { required: true, message: '请再次输入新密码' },
     {
+      // 先填确认、再改新密码时由 deps 带着重验
+      deps: ['newPassword'],
       validator: (value, values) =>
         value === values.newPassword ? null : '两次输入的密码不一致',
     },
   ],
 }))
 
+// 返回的 Promise 交给表单：落定前提交钮报在途、再按不重复提交，失败在这里自己接住
 async function onSubmit() {
   if (!token.value) {
-    toast.error(t('page.auth.reset_token_invalid'))
+    toast.danger(t('page.auth.reset_token_invalid'))
     return
   }
   try {
-    loading.value = true
     await apis.consumePasswordResetTokenApi(token.value, formData.value.newPassword)
     toast.success(t('page.auth.reset_success'))
     router.push(LOGIN_PATH)
@@ -56,17 +57,10 @@ async function onSubmit() {
   catch (e: unknown) {
     const msg = (e as Error)?.message
     if (msg)
-      toast.error(msg)
-  }
-  finally {
-    loading.value = false
+      toast.danger(msg)
   }
 }
 
-function handleKeydown(e: KeyboardEvent) {
-  if (e.key === 'Enter')
-    onSubmit()
-}
 const onAuthInvalid = useAuthFormInvalid()
 </script>
 
@@ -77,7 +71,7 @@ const onAuthInvalid = useAuthFormInvalid()
         重置密码
       </h1>
       <p
-        class="mt-3 text-[15px] leading-7"
+        class="mt-3 auth-body"
         :class="isDark ? 'text-gray-300' : 'text-[hsl(var(--muted-foreground))]'"
       >
         请设置新的登录密码，该链接仅可使用一次。
@@ -89,11 +83,14 @@ const onAuthInvalid = useAuthFormInvalid()
       :rules="rules"
       validate-on="blur"
       @invalid="onAuthInvalid"
-      @keydown="handleKeydown"
       @submit="onSubmit"
     >
-      <XhFormFieldGroup value="newPassword" class="!mb-4">
+      <!-- 两个字段靠占位文案表意，标签只留给读屏 -->
+      <XhFormFieldGroup name="newPassword" class="!mb-4">
         <XhFieldRoot>
+          <XhFieldLabel class="sr-only">
+            {{ t('page.auth.reset_new_password_placeholder') }}
+          </XhFieldLabel>
           <XhFieldControl>
             <XInput
               v-model:value="formData.newPassword"
@@ -105,8 +102,11 @@ const onAuthInvalid = useAuthFormInvalid()
           </XhFieldControl>
         </XhFieldRoot>
       </XhFormFieldGroup>
-      <XhFormFieldGroup value="confirmPassword" class="!mb-6">
+      <XhFormFieldGroup name="confirmPassword" class="!mb-6">
         <XhFieldRoot>
+          <XhFieldLabel class="sr-only">
+            {{ t('page.auth.reset_confirm_placeholder') }}
+          </XhFieldLabel>
           <XhFieldControl>
             <XInput
               v-model:value="formData.confirmPassword"
@@ -119,13 +119,13 @@ const onAuthInvalid = useAuthFormInvalid()
         </XhFieldRoot>
       </XhFormFieldGroup>
 
-      <XhFormSubmitTrigger class="auth-submit" :disabled="loading">
+      <XhFormSubmitTrigger class="auth-submit">
         确认重置
       </XhFormSubmitTrigger>
     </XhFormRoot>
 
     <p
-      class="mt-6 text-sm text-center"
+      class="mt-6 auth-helper text-center"
       :class="isDark ? 'text-gray-400' : 'text-[hsl(var(--muted-foreground))]'"
     >
       <span class="cursor-pointer link-primary" @click="router.push(LOGIN_PATH)">

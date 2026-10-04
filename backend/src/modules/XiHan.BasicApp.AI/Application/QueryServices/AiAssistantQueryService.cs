@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using Microsoft.AspNetCore.Authorization;
+using XiHan.BasicApp.Chat.Domain.Permissions;
 using Microsoft.AspNetCore.Mvc;
 using XiHan.BasicApp.AI.Application.Contracts;
 using XiHan.BasicApp.AI.Application.Dtos;
@@ -54,10 +55,8 @@ public sealed class AiAssistantQueryService : AiApplicationService, IAiAssistant
 
         var request = BuildPageRequest(input);
 
-        // 排序：前端选择优先，FLS 门控剔除不可读/已脱敏字段；无有效排序回退默认排序
-        await _fieldSecurity.GuardSortsAsync(request.Conditions, nameof(SysAiAssistant), cancellationToken);
-        // 过滤：前端区间/多选下发，FLS 门控剔除不可读/已脱敏字段
-        await _fieldSecurity.GuardFiltersAsync(request.Conditions, nameof(SysAiAssistant), cancellationToken);
+        // 字段安全：剔除读受保护字段上的排序、过滤与关键字搜索（防按结果反推原值）
+        await _fieldSecurity.GuardQueryAsync(request.Conditions, typeof(SysAiAssistant), cancellationToken);
         if (request.Conditions.Sorts.Count == 0)
         {
             ApplyAssistantSorts(request);
@@ -104,7 +103,7 @@ public sealed class AiAssistantQueryService : AiApplicationService, IAiAssistant
     /// <remarks>
     /// 聊天页人人可见，只按登录态门控：助手管理权限属后台配置，不能拿它挡住普通用户使用助手。
     /// </remarks>
-    [Authorize]
+    [PermissionAuthorize(ChatPermissionCodes.Read)]
     public async Task<IReadOnlyList<AiAssistantOptionDto>> GetAvailableAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();

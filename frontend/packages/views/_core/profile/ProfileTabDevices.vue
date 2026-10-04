@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import type { UserSessionItem } from '~/types'
-import { XhButton, XhEmptyStateDescription, XhEmptyStateIcon, XhEmptyStateRoot, XhEmptyStateTitle, XhFlex, XhPopconfirmCancelTrigger, XhPopconfirmConfirmTrigger, XhPopconfirmContent, XhPopconfirmPositioner, XhPopconfirmRoot, XhPopconfirmTitle, XhPopconfirmTrigger, XhSpinner, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
+import { XhButton, XhEmptyStateDescription, XhEmptyStateIndicator, XhEmptyStateRoot, XhEmptyStateTitle, XhFlex, XhPopconfirmCancelTrigger, XhPopconfirmConfirmTrigger, XhPopconfirmContent, XhPopconfirmPositioner, XhPopconfirmRoot, XhPopconfirmTitle, XhPopconfirmTrigger, XhSpinner, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
 import { onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { dialog, toast } from '~/composables'
@@ -24,7 +24,7 @@ async function loadSessions() {
     sessionsLoaded.value = true
   }
   catch (e: unknown) {
-    toast.error((e as Error)?.message || t('component.profile.devices.err_load_failed'))
+    toast.danger((e as Error)?.message || t('component.profile.devices.err_load_failed'))
   }
   finally {
     sessionsLoading.value = false
@@ -38,7 +38,7 @@ async function handleRevokeSession(sid: string) {
     await loadSessions()
   }
   catch (e: unknown) {
-    toast.error((e as Error)?.message || t('component.profile.devices.err_operation_failed'))
+    toast.danger((e as Error)?.message || t('component.profile.devices.err_operation_failed'))
   }
 }
 
@@ -62,7 +62,7 @@ function handleRevokeOthers() {
         await loadSessions()
       }
       catch (e: unknown) {
-        toast.error((e as Error)?.message || t('component.profile.devices.err_operation_failed'))
+        toast.danger((e as Error)?.message || t('component.profile.devices.err_operation_failed'))
       }
     },
   })
@@ -96,10 +96,10 @@ onMounted(loadSessions)
         </div>
         <div class="pf-section__extra">
           <XhFlex gap="sm">
-            <XhButton size="sm" variant="ghost" @click="loadSessions">
+            <XhButton size="sm" variant="ghost" icon-only :aria-label="t('common.actions.refresh')" @click="loadSessions">
               <span><Icon icon="lucide:refresh-cw" /></span>
             </XhButton>
-            <XhButton size="sm" @click="handleRevokeOthers">
+            <XhButton variant="subtle" size="sm" @click="handleRevokeOthers">
               {{ t('component.profile.devices.btn_logout_others') }}
             </XhButton>
           </XhFlex>
@@ -111,9 +111,9 @@ onMounted(loadSessions)
             <XhSpinner />
           </div>
           <XhEmptyStateRoot v-if="sessions.length === 0 && sessionsLoaded">
-            <XhEmptyStateIcon>
+            <XhEmptyStateIndicator>
               <Icon icon="lucide:inbox" width="28" height="28" />
-            </XhEmptyStateIcon>
+            </XhEmptyStateIndicator>
             <XhEmptyStateTitle>{{ t('common.no_data') }}</XhEmptyStateTitle>
             <XhEmptyStateDescription>{{ t('component.profile.devices.empty') }}</XhEmptyStateDescription>
           </XhEmptyStateRoot>

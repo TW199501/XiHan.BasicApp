@@ -2,7 +2,7 @@
 import type { ApiId, MenuCreateDto, MenuDetailDto, MenuListItemDto, MenuTreeNodeDto, MenuUpdateDto } from '@/api'
 import type { PageSchema, SchemaActionPayload, SchemaQueryParams, XDataTableColumn } from '~/components'
 import type { TreeSelectOption } from '~/types'
-import { XhButton, XhDescriptionsItem, XhDescriptionsLabel, XhDescriptionsRoot, XhDescriptionsValue, XhDialogCloseTrigger, XhDialogContent, XhDialogRoot, XhDialogTitle, XhEmptyStateDescription, XhEmptyStateIcon, XhEmptyStateRoot, XhEmptyStateTitle, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFlex, XhFormFieldGroup, XhFormRoot, XhSwitch, XhTabsContent, XhTabsList, XhTabsRoot, XhTabsTrigger, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
+import { XhButton, XhDescriptionsItem, XhDescriptionsLabel, XhDescriptionsRoot, XhDescriptionsValue, XhDialogCloseTrigger, XhDialogContent, XhDialogRoot, XhDialogTitle, XhEmptyStateDescription, XhEmptyStateIndicator, XhEmptyStateRoot, XhEmptyStateTitle, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFlex, XhFormFieldGroup, XhFormRoot, XhSwitch, XhTabsContent, XhTabsIndicator, XhTabsList, XhTabsRoot, XhTabsTrigger, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
 import { computed, h, onMounted, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
@@ -10,14 +10,16 @@ import {
   menuManagementApi,
   MenuType,
 } from '@/api'
-import { Icon, IconPicker, SchemaPage, XDataTable, XEditModal, XInput, XNumberInput, XSelect, XTreeSelect } from '~/components'
+import { Icon, IconPicker, SchemaPage, statusConfirmText, XDataTable, XEditModal, XInput, XNumberInput, XSelect, XTreeSelect } from '~/components'
 import { toast } from '~/composables'
+import { usePermission } from '~/hooks'
 import { useUserStore } from '~/stores'
 import { formatDate, getOptionLabel } from '~/utils'
 
 defineOptions({ name: 'PlatformMenuPage' })
 
 const { t } = useI18n()
+const { hasPermission } = usePermission()
 
 /** 编辑弹窗的保存钮靠这个 id 关联到表单，点它才会走整表校验 */
 const editFormId = useId()
@@ -210,7 +212,7 @@ function buildTree(items: MenuListItemDto[]): MenuTreeItem[] {
 }
 
 const schema = computed<PageSchema>(() => ({
-  pageCode: 'platform.menu',
+  pageCode: 'setting.menu',
   exportPermission: 'setting.menu.export',
   pageName: t('setting.menu.page_name'),
   batchRemovable: true,
@@ -268,7 +270,7 @@ const schema = computed<PageSchema>(() => ({
       order: 2,
       render: (row) => {
         const menuType = (row as unknown as MenuListItemDto).menuType
-        return h(XhTagRoot, { variant: 'outline', tone: menuTypeTagType(menuType) }, () => h(XhTagLabel, () => getOptionLabel(menuTypeOptions.value, menuType)))
+        return h(XhTagRoot, { variant: 'subtle', tone: menuTypeTagType(menuType) }, () => h(XhTagLabel, () => getOptionLabel(menuTypeOptions.value, menuType)))
       },
     },
     {
@@ -315,7 +317,7 @@ const schema = computed<PageSchema>(() => ({
           })
         }
         if (item.badge) {
-          return h(XhTagRoot, { variant: 'outline', tone: badgeTone(item.badgeType) }, () => h(XhTagLabel, () => item.badge))
+          return h(XhTagRoot, { variant: 'subtle', tone: badgeTone(item.badgeType) }, () => h(XhTagLabel, () => item.badge))
         }
         return '-'
       },
@@ -327,7 +329,7 @@ const schema = computed<PageSchema>(() => ({
       width: 80,
       order: 6,
       render: row =>
-        h(XhTagRoot, { variant: 'outline', tone: (row as unknown as MenuListItemDto).isVisible ? 'success' : 'neutral' }, () => h(XhTagLabel, () => ((row as unknown as MenuListItemDto).isVisible ? t('common.statuses.yes') : t('common.statuses.no')))),
+        h(XhTagRoot, { variant: 'subtle', tone: (row as unknown as MenuListItemDto).isVisible ? 'success' : 'neutral' }, () => h(XhTagLabel, () => ((row as unknown as MenuListItemDto).isVisible ? t('common.statuses.yes') : t('common.statuses.no')))),
     },
     {
       key: 'status',
@@ -340,7 +342,7 @@ const schema = computed<PageSchema>(() => ({
       width: 90,
       order: 7,
       render: row =>
-        h(XhTagRoot, { variant: 'outline', tone: (row as unknown as MenuListItemDto).status === EnableStatus.Enabled ? 'success' : 'danger' }, () => h(XhTagLabel, () => getOptionLabel(statusOptions.value, (row as unknown as MenuListItemDto).status))),
+        h(XhTagRoot, { variant: 'subtle', tone: (row as unknown as MenuListItemDto).status === EnableStatus.Enabled ? 'success' : 'danger' }, () => h(XhTagLabel, () => getOptionLabel(statusOptions.value, (row as unknown as MenuListItemDto).status))),
     },
     {
       key: 'sort',
@@ -359,12 +361,12 @@ const schema = computed<PageSchema>(() => ({
     },
   ],
   actions: [
-    { key: 'create', title: t('setting.menu.add'), scope: 'page', type: 'primary', icon: 'lucide:plus' },
-    { key: 'addChild', title: t('setting.menu.add_child'), scope: 'row', icon: 'lucide:plus', visible: row => (row as unknown as MenuListItemDto).menuType !== MenuType.Button },
+    { key: 'create', title: t('setting.menu.add'), scope: 'page', type: 'primary', icon: 'lucide:plus', permission: 'setting.menu.create' },
+    { key: 'addChild', title: t('setting.menu.add_child'), scope: 'row', icon: 'lucide:plus', visible: row => (row as unknown as MenuListItemDto).menuType !== MenuType.Button, permission: 'setting.menu.create' },
     { key: 'view', title: t('setting.menu.view'), scope: 'row', icon: 'lucide:eye' },
-    { key: 'edit', title: t('common.actions.edit'), scope: 'row', icon: 'lucide:pen', visible: canMaintainMenu },
-    { key: 'toggle', title: t('setting.menu.toggle'), scope: 'row', icon: 'lucide:power', visible: canMaintainMenu },
-    { key: 'delete', title: t('common.actions.delete'), scope: 'row', type: 'error', icon: 'lucide:trash-2', confirm: true, confirmText: t('setting.menu.confirm_delete'), visible: canMaintainMenu },
+    { key: 'edit', title: t('common.actions.edit'), scope: 'row', icon: 'lucide:pen', visible: canMaintainMenu, permission: 'setting.menu.update' },
+    { key: 'toggle', title: t('setting.menu.toggle'), scope: 'row', icon: 'lucide:power', confirm: true, confirmText: row => statusConfirmText(t, (row as unknown as MenuListItemDto).status === EnableStatus.Enabled, (row as unknown as MenuListItemDto).menuName), visible: canMaintainMenu, permission: 'setting.menu.status' },
+    { key: 'delete', title: t('common.actions.delete'), scope: 'row', type: 'error', icon: 'lucide:trash-2', confirm: true, confirmText: t('setting.menu.confirm_delete'), visible: canMaintainMenu, permission: 'setting.menu.delete' },
   ],
 }))
 
@@ -433,7 +435,7 @@ async function openEdit(row: MenuListItemDto) {
     menuForm.value = buildFormModel(detail ?? row)
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('setting.menu.load_detail_failed'))
+    toast.danger((error as Error)?.message || t('setting.menu.load_detail_failed'))
     menuForm.value = buildFormModel(row)
   }
   modalVisible.value = true
@@ -451,7 +453,7 @@ async function openDetail(row: MenuListItemDto) {
     }
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('setting.menu.load_detail_failed'))
+    toast.danger((error as Error)?.message || t('setting.menu.load_detail_failed'))
   }
   finally {
     detailLoading.value = false
@@ -467,7 +469,7 @@ async function toggleStatus(row: MenuListItemDto) {
     void loadTree()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('setting.menu.status_update_failed'))
+    toast.danger((error as Error)?.message || t('setting.menu.status_update_failed'))
   }
 }
 
@@ -479,7 +481,7 @@ async function removeRow(row: MenuListItemDto) {
     void loadTree()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('common.messages.delete_failed'))
+    toast.danger((error as Error)?.message || t('common.messages.delete_failed'))
   }
 }
 
@@ -581,7 +583,7 @@ async function handleSubmit() {
     void loadTree()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('common.messages.save_failed'))
+    toast.danger((error as Error)?.message || t('common.messages.save_failed'))
   }
   finally {
     submitLoading.value = false
@@ -597,7 +599,7 @@ const childMenuColumns = computed<XDataTableColumn<MenuTreeNodeDto>[]>(() => [
     key: 'menuType',
     width: 80,
     render: row =>
-      h(XhTagRoot, { variant: 'outline', tone: menuTypeTagType(row.menuType) }, () => h(XhTagLabel, () => getOptionLabel(menuTypeOptions.value, row.menuType))),
+      h(XhTagRoot, { variant: 'subtle', tone: menuTypeTagType(row.menuType) }, () => h(XhTagLabel, () => getOptionLabel(menuTypeOptions.value, row.menuType))),
   },
   {
     title: t('setting.menu.child_path'),
@@ -638,10 +640,14 @@ onMounted(() => {
 
     <XhDialogRoot v-model:open="detailVisible">
       <XhDialogContent class="xh-mgmt-detail-modal" style="--xh-dialog-max-w: 720px">
-        <XhDialogTitle v-if="currentDetail">
-          <div class="det-hd-entity">
+        <!-- 标题须在弹窗打开期间一直在：详情未到时先念「加载中」 -->
+        <XhDialogTitle>
+          <template v-if="!currentDetail">
+            {{ t('common.loading') }}
+          </template>
+          <div v-else class="det-hd-entity">
             <div class="det-hd-ico">
-              <Icon icon="tabler:menu-2" :size="22" />
+              <Icon icon="tabler:menu-2" width="22" height="22" />
             </div>
             <div class="min-w-0">
               <div class="det-hd-name">
@@ -667,9 +673,10 @@ onMounted(() => {
             <XhTabsTrigger value="children">
               {{ t('setting.menu.children_tab', { count: childMenus.length }) }}
             </XhTabsTrigger>
+            <XhTabsIndicator />
           </XhTabsList>
           <XhTabsContent value="overview">
-            <XhDescriptionsRoot :columns="2" bordered size="sm">
+            <XhDescriptionsRoot :columns="2" variant="outline" size="sm">
               <XhDescriptionsItem>
                 <XhDescriptionsLabel>{{ t('setting.menu.menu_type') }}</XhDescriptionsLabel>
                 <XhDescriptionsValue>
@@ -803,13 +810,12 @@ onMounted(() => {
                 v-if="childMenus.length"
                 :columns="childMenuColumns"
                 :data="childMenus"
-                size="sm"
                 :row-key="(row: MenuTreeNodeDto) => row.basicId"
               />
               <XhEmptyStateRoot v-else size="sm" style="padding: 32px 0">
-                <XhEmptyStateIcon>
+                <XhEmptyStateIndicator>
                   <Icon icon="lucide:inbox" width="24" />
-                </XhEmptyStateIcon>
+                </XhEmptyStateIndicator>
                 <XhEmptyStateTitle>{{ t('common.no_data') }}</XhEmptyStateTitle>
                 <XhEmptyStateDescription>{{ t('setting.menu.no_children') }}</XhEmptyStateDescription>
               </XhEmptyStateRoot>
@@ -819,11 +825,13 @@ onMounted(() => {
 
         <div class="xh-dialog-footer">
           <XhFlex justify="end">
-            <XhButton size="sm" @click="detailVisible = false">
+            <XhButton variant="subtle" size="sm" @click="detailVisible = false">
               {{ t('common.actions.close') }}
             </XhButton>
+            <!-- 与行内「编辑」同一口径：要编辑按钮，全局菜单只在平台维护 -->
             <XhButton
-              v-if="currentDetail"
+              v-if="currentDetail && canMaintainMenu(currentDetail) && hasPermission('setting.menu.update')"
+              variant="subtle"
               size="sm"
               tone="brand"
               @click="detailVisible = false; openEdit(currentDetail as unknown as MenuListItemDto)"
@@ -848,7 +856,7 @@ onMounted(() => {
         class="xh-edit-form-grid"
         @submit="handleSubmit"
       >
-        <XhFormFieldGroup value="menuName">
+        <XhFormFieldGroup name="menuName">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.menu.menu_name') }}</XhFieldLabel>
             <XhFieldControl>
@@ -857,7 +865,7 @@ onMounted(() => {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="menuCode">
+        <XhFormFieldGroup name="menuCode">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.menu.menu_code') }}</XhFieldLabel>
             <XhFieldControl>
@@ -871,7 +879,7 @@ onMounted(() => {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="parentId">
+        <XhFormFieldGroup name="parentId">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.menu.parent_menu') }}</XhFieldLabel>
             <XhFieldControl>
@@ -880,7 +888,7 @@ onMounted(() => {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="menuType">
+        <XhFormFieldGroup name="menuType">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.menu.menu_type') }}</XhFieldLabel>
             <XhFieldControl>
@@ -889,7 +897,7 @@ onMounted(() => {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="path">
+        <XhFormFieldGroup name="path">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.menu.route_path') }}</XhFieldLabel>
             <XhFieldControl>
@@ -898,7 +906,7 @@ onMounted(() => {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="routeName">
+        <XhFormFieldGroup name="routeName">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.menu.route_name') }}</XhFieldLabel>
             <XhFieldControl>
@@ -907,7 +915,7 @@ onMounted(() => {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="component">
+        <XhFormFieldGroup name="component">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.menu.component_path') }}</XhFieldLabel>
             <XhFieldControl>
@@ -916,7 +924,7 @@ onMounted(() => {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="redirect">
+        <XhFormFieldGroup name="redirect">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.menu.redirect') }}</XhFieldLabel>
             <XhFieldControl>
@@ -925,7 +933,7 @@ onMounted(() => {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="icon">
+        <XhFormFieldGroup name="icon">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.menu.icon') }}</XhFieldLabel>
             <XhFieldControl :as-child="false">
@@ -934,7 +942,7 @@ onMounted(() => {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="title">
+        <XhFormFieldGroup name="title">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.menu.title') }}</XhFieldLabel>
             <XhFieldControl>
@@ -943,7 +951,7 @@ onMounted(() => {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="i18nKey">
+        <XhFormFieldGroup name="i18nKey">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.menu.i18n_key') }}</XhFieldLabel>
             <XhFieldControl>
@@ -952,7 +960,7 @@ onMounted(() => {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="sort">
+        <XhFormFieldGroup name="sort">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.menu.sort') }}</XhFieldLabel>
             <XhFieldControl>
@@ -961,7 +969,7 @@ onMounted(() => {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="badge">
+        <XhFormFieldGroup name="badge">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.menu.badge_content') }}</XhFieldLabel>
             <XhFieldControl>
@@ -970,7 +978,7 @@ onMounted(() => {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="badgeType">
+        <XhFormFieldGroup name="badgeType">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.menu.badge_type') }}</XhFieldLabel>
             <XhFieldControl>
@@ -986,7 +994,7 @@ onMounted(() => {
           </XhFieldControl>
           <XhFieldErrorText />
         </XhFieldRoot>
-        <XhFormFieldGroup v-if="!menuForm.basicId" value="status">
+        <XhFormFieldGroup v-if="!menuForm.basicId" name="status">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.menu.status') }}</XhFieldLabel>
             <XhFieldControl>
@@ -1023,7 +1031,7 @@ onMounted(() => {
           </XhFieldControl>
           <XhFieldErrorText />
         </XhFieldRoot>
-        <XhFormFieldGroup v-if="menuForm.isExternal" value="externalUrl" class="xh-span-2">
+        <XhFormFieldGroup v-if="menuForm.isExternal" name="externalUrl" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.menu.external_url') }}</XhFieldLabel>
             <XhFieldControl>
@@ -1032,7 +1040,7 @@ onMounted(() => {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="remark" class="xh-span-2">
+        <XhFormFieldGroup name="remark" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('setting.menu.remark') }}</XhFieldLabel>
             <XhFieldControl>

@@ -4,7 +4,7 @@
 -->
 <script setup lang="ts">
 import type { PrintTemplateFormModel } from './models'
-import { XhButton, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhPopoverContent, XhPopoverPositioner, XhPopoverRoot, XhPopoverTrigger } from '@xihan-ui/vue'
+import { XhButton, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhPopoverContent, XhPopoverPositioner, XhPopoverRoot, XhPopoverTitle, XhPopoverTrigger } from '@xihan-ui/vue'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { XSelect } from '~/components'
@@ -29,7 +29,7 @@ onMounted(async () => {
   }
   catch (error) {
     // 拉取失败明确提示，避免把网络或权限异常误呈现为「数据源不存在」
-    toast.error(t('setting.print_template.data_source_catalog_load_failed'))
+    toast.danger(t('setting.print_template.data_source_catalog_load_failed'))
     console.error(error)
   }
   finally {
@@ -115,7 +115,7 @@ function switchToFreeTemplate(): void {
             <XhPopoverContent>
               <div class="data-source-field-list">
                 <div class="field-list-heading">
-                  <strong>{{ selectedSource.name }}</strong>
+                  <XhPopoverTitle>{{ selectedSource.name }}</XhPopoverTitle>
                   <span>{{ selectedSource.code }}</span>
                 </div>
                 <div v-for="field in selectedSource.fields" :key="field.key" class="field-list-row">
@@ -135,7 +135,7 @@ function switchToFreeTemplate(): void {
           <Icon width="16" height="16" icon="tabler:chevron-right" />
         </XhPopoverTrigger>
         <XhPopoverPositioner>
-          <XhPopoverContent>
+          <XhPopoverContent :aria-label="t('setting.print_template.data_source_mismatch_compact', { count: unmatchedFieldCount })">
             {{ t('setting.print_template.data_source_mismatch_warning', { count: unmatchedFieldCount }) }}
           </XhPopoverContent>
         </XhPopoverPositioner>

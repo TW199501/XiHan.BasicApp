@@ -5,7 +5,7 @@ using SqlSugar;
 using XiHan.BasicApp.Saas.Domain.Entities;
 using XiHan.BasicApp.Saas.Domain.Events;
 using XiHan.Framework.Data.SqlSugar.Clients;
-using XiHan.Framework.Domain.Entities.Abstracts;
+using XiHan.Framework.Data.SqlSugar.Extensions;
 using XiHan.Framework.EventBus.Abstractions.Local;
 using XiHan.Framework.Uow.Attributes;
 using XiHan.Framework.Web.Core.Clients;
@@ -40,8 +40,6 @@ public sealed class PermissionChangeLogEventHandler
         _clientInfoProvider = clientInfoProvider;
     }
 
-    private ISqlSugarClient DbClient => _clientResolver.GetCurrentClient();
-
     /// <summary>
     /// 事件处理器通过实现此方法来处理事件
     /// </summary>
@@ -68,17 +66,17 @@ public sealed class PermissionChangeLogEventHandler
             ChangeTime = now,
             CreatedTime = now
         };
-        entity.Description = NormalizeText(BuildDescription(entity), 500);
+        entity.Description = NormalizeText(BuildDescription(entity, await ResolveRoleNameAsync(eventData.RelatedRoleId), eventData.RelatedRoleId), 500);
 
-        await DbClient.Insertable(entity).SplitTable().ExecuteCommandAsync();
+        await _clientResolver.GetClientForEntity<SysPermissionChangeLog>().Insertable(entity).SplitTable().ExecuteCommandAsync();
     }
 
     /// <summary>
     /// 解析用户名称（账号名）。
     /// </summary>
     /// <remarks>
-    /// 清租户行过滤：审计名称是写入时快照，需跨租户/平台态解析（如平台超管给某租户用户直授权限，
-    /// 当前上下文不覆盖该租户，若带租户过滤会解析为空）。读取侧仍按日志 TenantId 隔离，不造成越权。
+    /// 清租户行过滤：审计名称是写入时快照，目标用户可能归属别的租户（如跨租户成员），
+    /// 带租户过滤会解析为空。只取名称写进本作用域的日志，读取侧仍按日志 TenantId 隔离，不造成越权。
     /// </remarks>
     private async Task<string?> ResolveUserNameAsync(long? userId)
     {
@@ -87,8 +85,8 @@ public sealed class PermissionChangeLogEventHandler
             return null;
         }
 
-        var name = await DbClient.Queryable<SysUser>()
-            .ClearFilter<IMultiTenantEntity>()
+        var name = await _clientResolver.GetClientForEntity<SysUser>().Queryable<SysUser>()
+            .ClearTenantFilter()
             .Where(user => user.BasicId == userId.Value)
             .Select(user => user.UserName)
             .FirstAsync();
@@ -105,8 +103,8 @@ public sealed class PermissionChangeLogEventHandler
             return null;
         }
 
-        var name = await DbClient.Queryable<SysRole>()
-            .ClearFilter<IMultiTenantEntity>()
+        var name = await _clientResolver.GetClientForEntity<SysRole>().Queryable<SysRole>()
+            .ClearTenantFilter()
             .Where(role => role.BasicId == roleId.Value)
             .Select(role => role.RoleName)
             .FirstAsync();
@@ -123,8 +121,8 @@ public sealed class PermissionChangeLogEventHandler
             return null;
         }
 
-        var name = await DbClient.Queryable<SysPermission>()
-            .ClearFilter<IMultiTenantEntity>()
+        var name = await _clientResolver.GetClientForEntity<SysPermission>().Queryable<SysPermission>()
+            .ClearTenantFilter()
             .Where(permission => permission.BasicId == permissionId.Value)
             .Select(permission => permission.PermissionName)
             .FirstAsync();
@@ -134,7 +132,8 @@ public sealed class PermissionChangeLogEventHandler
     /// <summary>
     /// 构建人类可读摘要（优先名称，回退 ID）。
     /// </summary>
-    private static string BuildDescription(SysPermissionChangeLog log)
+    /// <remarks>角色新增 / 解除上级时，上级角色不单独落列，写进摘要。</remarks>
+    private static string BuildDescription(SysPermissionChangeLog log, string? relatedRoleName, long? relatedRoleId)
     {
         var parts = new List<string>();
         if (log.TargetUserId is > 0)
@@ -150,6 +149,11 @@ public sealed class PermissionChangeLogEventHandler
         if (log.PermissionId is > 0)
         {
             parts.Add($"权限「{log.PermissionName ?? log.PermissionId.ToString()}」");
+        }
+
+        if (relatedRoleId is > 0)
+        {
+            parts.Add($"上级角色「{relatedRoleName ?? relatedRoleId.ToString()}」");
         }
 
         return parts.Count > 0 ? string.Join(" · ", parts) : log.ChangeType.ToString();

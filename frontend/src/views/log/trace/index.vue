@@ -3,7 +3,7 @@ import type { LogDetailField } from '../_components/log-detail.types.ts'
 import type { TracePreset } from '../_components/trace-nav'
 import type { TraceTimelineItemDto, TraceTimelineResultDto } from '@/api'
 import type { ListFieldSchema } from '~/components'
-import { XhCardBody, XhCardRoot, XhEmptyStateDescription, XhEmptyStateIcon, XhEmptyStateRoot, XhEmptyStateTitle, XhSpinner } from '@xihan-ui/vue'
+import { XhButton, XhCardContent, XhCardRoot, XhEmptyStateDescription, XhEmptyStateIndicator, XhEmptyStateRoot, XhEmptyStateTitle, XhSpinner } from '@xihan-ui/vue'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { logManagementApi, TraceDimension, TraceLogType } from '@/api'
@@ -22,6 +22,7 @@ import {
 } from '../_components/log-detail-fields'
 import LogDetailDrawer from '../_components/LogDetailDrawer.vue'
 import { tracePreset } from '../_components/trace-nav'
+import TraceAnalysisDialog from './components/TraceAnalysisDialog.vue'
 
 defineOptions({ name: 'LogTracePage' })
 
@@ -59,6 +60,9 @@ const filters = reactive<Record<string, unknown>>({
 const loading = ref(false)
 const hasQueried = ref(false)
 const result = ref<TraceTimelineResultDto | null>(null)
+
+// 链路分析弹窗
+const analysisVisible = ref(false)
 
 // 详情抽屉
 const detailVisible = ref(false)
@@ -180,7 +184,7 @@ async function runQuery() {
     hasQueried.value = true
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('log.trace.query_failed'))
+    toast.danger((error as Error)?.message || t('log.trace.query_failed'))
   }
   finally {
     loading.value = false
@@ -357,7 +361,7 @@ async function openDetail(item: TraceTimelineItemDto) {
   }
   catch (error) {
     detailData.value = item as unknown as Record<string, unknown>
-    toast.error((error as Error)?.message || t('log.trace.detail_load_failed'))
+    toast.danger((error as Error)?.message || t('log.trace.detail_load_failed'))
   }
   finally {
     detailLoading.value = false
@@ -408,7 +412,7 @@ watch(tracePreset, (preset) => {
 <template>
   <div class="trace-page">
     <XhCardRoot variant="ghost">
-      <XhCardBody>
+      <XhCardContent>
         <SchemaSearchPanel
           :advanced-fields="EMPTY_FIELDS"
           :common-fields="searchFields"
@@ -419,28 +423,42 @@ watch(tracePreset, (preset) => {
         <span v-if="showUnsupportedHint" class="trace-hint">
           {{ t('log.trace.unsupported_hint') }}
         </span>
-      </XhCardBody>
+      </XhCardContent>
     </XhCardRoot>
 
     <XhCardRoot class="flex-1" style="height: 0">
-      <XhCardBody style="height: 100%; display: flex; flex-direction: column; min-height: 0; padding: 0">
-        <div class="xh-loading-stage" :class="{ 'is-loading': loading }">
+      <XhCardContent style="height: 100%; display: flex; flex-direction: column; min-height: 0; padding: 0">
+        <div class="xh-loading-stage trace-stage" :class="{ 'is-loading': loading }">
           <div class="xh-loading-stage__veil">
             <XhSpinner />
           </div>
-          <div v-if="result" class="trace-panel">
+          <div v-if="result" class="trace-panel trace-scroll">
             <div class="trace-panel__header">
               <div class="trace-panel__titlerow">
-                <span class="trace-panel__title">{{ t('log.trace.page_name') }}</span>
-                <span class="trace-panel__count">{{ t('log.trace.summary_total', { total: result.totalCount }) }}</span>
+                <span class="trace-panel__heading">
+                  <span class="trace-panel__title">{{ t('log.trace.page_name') }}</span>
+                  <span class="trace-panel__count">{{ t('log.trace.summary_total', { total: result.totalCount }) }}</span>
+                </span>
                 <span class="trace-panel__grow" />
-                <span
-                  v-for="(count, type) in result.typeCounts"
-                  :key="type"
-                  class="trace-chip"
-                  :class="{ 'is-error': String(type).toLowerCase() === 'exception' }"
-                >
-                  {{ logTypeLabel(type) }}<i>·</i><b>{{ count }}</b>
+                <span class="trace-panel__tools">
+                  <XhButton
+                    size="sm"
+                    variant="subtle"
+                    tone="brand"
+                    :disabled="items.length === 0"
+                    @click="analysisVisible = true"
+                  >
+                    <Icon icon="lucide:chart-network" width="14" height="14" />
+                    {{ t('log.trace.analysis_action') }}
+                  </XhButton>
+                  <span
+                    v-for="(count, type) in result.typeCounts"
+                    :key="type"
+                    class="trace-chip"
+                    :class="{ 'is-error': String(type).toLowerCase() === 'exception' }"
+                  >
+                    {{ logTypeLabel(type) }}<i>·</i><b>{{ count }}</b>
+                  </span>
                 </span>
               </div>
               <div v-if="result.truncated" class="trace-panel__warn">
@@ -500,24 +518,32 @@ watch(tracePreset, (preset) => {
             </XhTimelineRoot>
 
             <XhEmptyStateRoot v-else class="trace-empty">
-              <XhEmptyStateIcon>
+              <XhEmptyStateIndicator>
                 <Icon height="28" icon="lucide:search-x" width="28" />
-              </XhEmptyStateIcon>
+              </XhEmptyStateIndicator>
               <XhEmptyStateTitle>{{ t('common.no_data') }}</XhEmptyStateTitle>
               <XhEmptyStateDescription>{{ emptyDescription }}</XhEmptyStateDescription>
             </XhEmptyStateRoot>
           </div>
 
           <XhEmptyStateRoot v-else class="trace-empty">
-            <XhEmptyStateIcon>
+            <XhEmptyStateIndicator>
               <Icon height="28" icon="lucide:search-x" width="28" />
-            </XhEmptyStateIcon>
+            </XhEmptyStateIndicator>
             <XhEmptyStateTitle>{{ t('common.no_data') }}</XhEmptyStateTitle>
             <XhEmptyStateDescription>{{ emptyDescription }}</XhEmptyStateDescription>
           </XhEmptyStateRoot>
         </div>
-      </XhCardBody>
+      </XhCardContent>
     </XhCardRoot>
+
+    <TraceAnalysisDialog
+      v-model:show="analysisVisible"
+      :items="items"
+      :truncated="result?.truncated ?? false"
+      :log-type-label="logTypeLabel"
+      :result-label="statusLabel"
+    />
 
     <LogDetailDrawer
       v-model:show="detailVisible"
@@ -540,7 +566,17 @@ watch(tracePreset, (preset) => {
   overflow: hidden;
 }
 
-/* 结果区内部滚动：页面已在视口内定高，故 flex-1 + min-height:0 得到确定高度，滚动只发生在时间线内部 */
+/* 加载罩层所在的这一层要吃掉卡片体的剩余高度，下面的结果面板才有确定高度可滚；
+   罩层是它的绝对定位子元素，留在这一层就始终盖住整块结果区，不随内容滚走 */
+.trace-stage {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* 结果区内部滚动：上面那层已给出确定高度，故 flex-1 + min-height:0 得到可滚高度，
+   滚动只发生在时间线内部，页头的 sticky 也据此吸顶 */
 .trace-scroll {
   flex: 1;
   min-height: 0;
@@ -579,11 +615,25 @@ watch(tracePreset, (preset) => {
   border-bottom: 1px solid var(--xh-border-subtle);
 }
 
+/* 标题行两组各自对齐：标题与条数按文字基线，按钮与类型统计按中线（按钮比统计标签高） */
 .trace-panel__titlerow {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   gap: 8px 10px;
+}
+
+.trace-panel__heading {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--xh-space-2);
+}
+
+.trace-panel__tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--xh-space-2);
 }
 
 .trace-panel__title {

@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import type { DataScopeDraft } from '../components/data-scope'
+import type { InheritedPermissionSources } from './role-grants'
+import type { RoleMemberCandidate } from './role-members'
 import type {
   ApiId,
   DepartmentTreeNodeDto,
@@ -6,16 +9,18 @@ import type {
   PageResult,
   PermissionListItemDto,
   RoleCreateDto,
-  RoleDataScopeListItemDto,
   RoleDetailDto,
   RoleListItemDto,
   RoleManagementDetailDto,
+  RoleMemberDto,
   RolePermissionListItemDto,
   RoleUpdateDto,
+  UserSelectItemDto,
+  ValidityStatus,
 } from '@/api'
 import type { ListFieldSchema, PageSchema, SchemaActionPayload } from '~/components'
 import type { TreeSelectOption } from '~/types'
-import { XhButton, XhCheckbox, XhDescriptionsItem, XhDescriptionsLabel, XhDescriptionsRoot, XhDescriptionsValue, XhDrawerCloseTrigger, XhDrawerContent, XhDrawerRoot, XhDrawerTitle, XhEmptyStateDescription, XhEmptyStateIcon, XhEmptyStateRoot, XhEmptyStateTitle, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFormFieldGroup, XhFormRoot, XhSpinner, XhSwitch, XhTabsContent, XhTabsList, XhTabsRoot, XhTabsTrigger, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
+import { XhButton, XhButtonIndicator, XhButtonLabel, XhDescriptionsItem, XhDescriptionsLabel, XhDescriptionsRoot, XhDescriptionsValue, XhDrawerCloseTrigger, XhDrawerContent, XhDrawerRoot, XhDrawerTitle, XhEmptyStateDescription, XhEmptyStateIndicator, XhEmptyStateRoot, XhEmptyStateTitle, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFormFieldGroup, XhFormRoot, XhSpinner, XhTabsContent, XhTabsIndicator, XhTabsList, XhTabsRoot, XhTabsTrigger, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
 import { computed, h, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
@@ -26,19 +31,28 @@ import {
   menuApi,
   MenuType,
   permissionApi,
+  PermissionSide,
   querySortsFromSchema,
   roleDataScopeApi,
+  roleHierarchyApi,
   roleManagementApi,
   rolePermissionApi,
   RoleType,
-  ValidityStatus,
+  userApi,
+  userRoleApi,
 } from '@/api'
 import { DATA_SCOPE_OPTIONS, PERMISSION_ACTION_OPTIONS, ROLE_TYPE_OPTIONS, STATUS_OPTIONS, VALIDITY_STATUS_OPTIONS } from '@/constants'
-import { SchemaPage, XEditModal, XInput, XNumberInput, XPermissionGrantPanel, XSelect, XTree, XTreeSelect } from '~/components'
+import { deleteConfirmText, SchemaPage, statusConfirmText, XEditModal, XGrantTransfer, XInput, XNumberInput, XPermissionTransfer, XSelect, XTree } from '~/components'
 import { toast } from '~/composables'
-import { useEnumOptions } from '~/hooks'
+import { useEnumOptions, usePermission } from '~/hooks'
 import { Icon } from '~/iconify'
+import { useUserStore } from '~/stores'
 import { formatDate, getOptionLabel } from '~/utils'
+import { isDataScopeComplete, isDataScopeDirty, toDataScopePayload } from '../components/data-scope'
+import DataScopeEditor from '../components/DataScopeEditor.vue'
+import RoleParentsDialog from './components/RoleParentsDialog.vue'
+import { diffMenuGrants, mergeGrantedIntoCatalog, summarizeInheritedPermissions, validRoleGrants } from './role-grants'
+import { diffRoleMembers, mergeMemberCandidates } from './role-members'
 
 defineOptions({ name: 'SystemRolePage' })
 
@@ -84,8 +98,26 @@ function toBool(v: unknown): boolean | undefined {
   return Number(v) === 1
 }
 
+const userStore = useUserStore()
+const isPlatformContext = computed(() => userStore.userInfo?.isPlatform ?? false)
+const { hasPermission } = usePermission()
+
+/** 系统角色只在平台分配；全局角色在租户里也可分配给本租户成员 */
+function canAssignMembers(row: RoleListItemDto) {
+  return isPlatformContext.value || row.roleType !== RoleType.System
+}
+
+/**
+ * 全局角色(TenantId=0)与系统角色只在平台维护；租户里隐藏编辑/启停/删除入口，
+ * 避免点击后撞后端「平台全局角色或系统角色仅平台运维态可维护」错误。
+ */
 function canMaintainRole(row: RoleListItemDto) {
-  return !row.isGlobal && row.roleType !== RoleType.System
+  return isPlatformContext.value || (!row.isGlobal && row.roleType !== RoleType.System)
+}
+
+/** 系统角色的权限由系统按上下文整体给出，不参与继承 */
+function canSetParents(row: RoleListItemDto) {
+  return canMaintainRole(row) && row.roleType !== RoleType.System
 }
 
 // ── 字段单一事实源：列 + 搜索 ───────────────────────────────────
@@ -118,7 +150,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     searchPlaceholder: t('identity.role.is_global_placeholder'),
     width: 82,
     order: 5,
-    render: row => h(XhTagRoot, { variant: 'outline', tone: (row as unknown as RoleListItemDto).isGlobal ? 'warning' : 'neutral' }, () => h(XhTagLabel, () => (row as unknown as RoleListItemDto).isGlobal ? t('common.statuses.yes') : t('common.statuses.no'))),
+    render: row => h(XhTagRoot, { variant: 'subtle', tone: (row as unknown as RoleListItemDto).isGlobal ? 'warning' : 'neutral' }, () => h(XhTagLabel, () => (row as unknown as RoleListItemDto).isGlobal ? t('common.statuses.yes') : t('common.statuses.no'))),
   },
   {
     key: 'dataScope',
@@ -148,7 +180,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     searchPlaceholder: t('identity.role.status_placeholder'),
     width: 82,
     order: 9,
-    render: row => h(XhTagRoot, { variant: 'outline', tone: (row as unknown as RoleListItemDto).status === EnableStatus.Enabled ? 'success' : 'danger' }, () => h(XhTagLabel, () => (row as unknown as RoleListItemDto).status === EnableStatus.Enabled ? t('common.statuses.enabled') : t('common.statuses.disabled'))),
+    render: row => h(XhTagRoot, { variant: 'subtle', tone: (row as unknown as RoleListItemDto).status === EnableStatus.Enabled ? 'success' : 'danger' }, () => h(XhTagLabel, () => (row as unknown as RoleListItemDto).status === EnableStatus.Enabled ? t('common.statuses.enabled') : t('common.statuses.disabled'))),
   },
   {
     key: 'createdTime',
@@ -163,7 +195,7 @@ const fields = computed<ListFieldSchema[]>(() => [
 
 // ── 资源适配器：归一化查询参数 → 后端 API ──────────────────────
 const schema = computed<PageSchema>(() => ({
-  pageCode: 'system.role',
+  pageCode: 'identity.role',
   exportPermission: 'identity.role.export',
   pageName: t('identity.role.page_name'),
   batchRemovable: true,
@@ -189,14 +221,16 @@ const schema = computed<PageSchema>(() => ({
     updateStatus: (id, enabled) => roleManagementApi.updateStatus({ basicId: id, status: enabled ? EnableStatus.Enabled : EnableStatus.Disabled, remark: enabled ? t('identity.role.batch_enable_remark') : t('identity.role.batch_disable_remark') }),
   },
   actions: [
-    { key: 'create', title: t('identity.role.action_create'), scope: 'page', type: 'primary', icon: 'lucide:plus' },
-    { key: 'view', title: t('identity.role.action_view'), scope: 'row' },
-    { key: 'edit', title: t('identity.role.action_edit'), scope: 'row', visible: row => canMaintainRole(row as unknown as RoleListItemDto) },
-    { key: 'assignPermission', title: t('identity.role.action_assign_permission'), scope: 'row' },
-    { key: 'assignMenu', title: t('identity.role.action_assign_menu'), scope: 'row' },
-    { key: 'assignDataScope', title: t('identity.role.action_assign_data_scope'), scope: 'row' },
-    { key: 'toggle', title: t('identity.role.action_toggle'), scope: 'row', visible: row => canMaintainRole(row as unknown as RoleListItemDto) },
-    { key: 'delete', title: t('identity.role.action_delete'), scope: 'row', visible: row => canMaintainRole(row as unknown as RoleListItemDto) },
+    { key: 'create', title: t('identity.role.action_create'), scope: 'page', type: 'primary', icon: 'lucide:plus', permission: 'identity.role.create' },
+    { key: 'view', title: t('identity.role.action_view'), scope: 'row', icon: 'lucide:eye' },
+    { key: 'edit', title: t('identity.role.action_edit'), scope: 'row', icon: 'lucide:pencil', visible: row => canMaintainRole(row as unknown as RoleListItemDto), permission: 'identity.role.update' },
+    { key: 'assignPermission', title: t('identity.role.action_assign_permission'), scope: 'row', icon: 'lucide:key-round', visible: row => canMaintainRole(row as unknown as RoleListItemDto), permission: 'identity.role.grant-permission' },
+    { key: 'assignMenu', title: t('identity.role.action_assign_menu'), scope: 'row', icon: 'lucide:list-tree', visible: row => canMaintainRole(row as unknown as RoleListItemDto), permission: 'identity.role.grant-permission' },
+    { key: 'parents', title: t('identity.role.action_parents'), scope: 'row', icon: 'lucide:git-fork', visible: row => canSetParents(row as unknown as RoleListItemDto), permission: 'identity.role.parents' },
+    { key: 'members', title: t('identity.role.action_members'), scope: 'row', icon: 'lucide:users', visible: row => canAssignMembers(row as unknown as RoleListItemDto), permission: 'identity.role.members' },
+    { key: 'assignDataScope', title: t('identity.role.action_assign_data_scope'), scope: 'row', icon: 'lucide:building-2', visible: row => canMaintainRole(row as unknown as RoleListItemDto), permission: 'identity.role.data-scope' },
+    { key: 'toggle', title: t('identity.role.action_toggle'), scope: 'row', icon: 'lucide:power', confirm: true, confirmText: row => statusConfirmText(t, (row as unknown as RoleListItemDto).status === EnableStatus.Enabled, (row as unknown as RoleListItemDto).roleName), visible: row => canMaintainRole(row as unknown as RoleListItemDto), permission: 'identity.role.status' },
+    { key: 'delete', title: t('identity.role.action_delete'), scope: 'row', icon: 'lucide:trash-2', type: 'error', confirm: true, confirmText: row => deleteConfirmText(t, (row as unknown as RoleListItemDto).roleName), visible: row => canMaintainRole(row as unknown as RoleListItemDto), permission: 'identity.role.delete' },
   ],
 }))
 
@@ -242,7 +276,26 @@ function onAction(payload: SchemaActionPayload) {
         void openScopeDrawer(row)
       }
       break
+    case 'members':
+      if (row) {
+        void openMembersDrawer(row)
+      }
+      break
+    case 'parents':
+      if (row) {
+        openParentsDialog(row)
+      }
+      break
   }
+}
+
+// ── 设置上级角色 ────────────────────────────────────────────────
+const parentsVisible = ref(false)
+const parentsRole = ref<RoleListItemDto | null>(null)
+
+function openParentsDialog(row: RoleListItemDto) {
+  parentsRole.value = row
+  parentsVisible.value = true
 }
 
 // ── 权限分配抽屉 ────────────────────────────────────────────────
@@ -250,25 +303,20 @@ const permissionVisible = ref(false)
 const permissionRole = ref<RoleListItemDto | null>(null)
 const permCatalog = ref<PermissionListItemDto[]>([])
 const permGrants = ref<RolePermissionListItemDto[]>([])
+/** 从上级继承来的权限（键为权限主键字符串）：已继承的不必再授予，被上级拒绝的授予了也不生效 */
+const permInherited = ref(new Map<string, InheritedPermissionSources>())
 const permLoading = ref(false)
-const permPanelRef = ref<{ reset: () => void } | null>(null)
-const permChecked = ref<Set<ApiId>>(new Set())
-const permDirty = ref(false)
+/** 已授予的权限主键，即穿梭框右侧那一栏 */
+const permChecked = ref<ApiId[]>([])
+/** 条目为权限目录并上目录外的已授权限，否则一动穿梭框它们就被当成收回 */
+const permItems = computed(() => mergeGrantedIntoCatalog(permCatalog.value, permGrants.value))
 
 /**
  * permissionId → 有效授权记录（收权时取记录主键）
  * 仅纳入 Status===Valid：撤销是软删除（Status=Invalid），列表接口默认返回含软删除的全集，
  * 若不过滤则收回后复选框仍判定为已授权而自动重新勾上，表现为「收回不生效」。
  */
-const permGrantByPermissionId = computed(() => {
-  const map = new Map<ApiId, RolePermissionListItemDto>()
-  for (const grant of permGrants.value) {
-    if (grant.status === ValidityStatus.Valid) {
-      map.set(grant.permissionId, grant)
-    }
-  }
-  return map
-})
+const permGrantByPermissionId = computed(() => new Map(validRoleGrants(permGrants.value).map(grant => [grant.permissionId, grant] as const)))
 
 /** 权限目录一次取全 */
 async function loadPermCatalog() {
@@ -281,51 +329,58 @@ async function loadPermCatalog() {
 async function openPermissionDrawer(row: RoleListItemDto) {
   permissionRole.value = row
   permissionVisible.value = true
-  permPanelRef.value?.reset()
   permLoading.value = true
+  permInherited.value = new Map()
   try {
-    const [, grantsResult] = await Promise.all([loadPermCatalog(), rolePermissionApi.list(row.basicId)])
+    const [, grantsResult, inheritedResult] = await Promise.all([
+      loadPermCatalog(),
+      rolePermissionApi.list(row.basicId),
+      roleHierarchyApi.inheritedPermissions(row.basicId),
+    ])
     permGrants.value = grantsResult
+    permInherited.value = summarizeInheritedPermissions(inheritedResult)
     derivePermChecked()
   }
   catch (e: unknown) {
-    toast.error((e as Error)?.message || t('identity.role.perm_load_failed'))
+    toast.danger((e as Error)?.message || t('identity.role.perm_load_failed'))
   }
   finally {
     permLoading.value = false
   }
 }
 
-/** 本地勾选态：打开抽屉时由有效授权推导，之后只改本地，保存时一次性提交 */
+/** 本地授予态：打开抽屉时由有效授权推导，之后只改本地，保存时一次性提交 */
 function derivePermChecked() {
-  permChecked.value = new Set(permGrantByPermissionId.value.keys())
-  permDirty.value = false
+  permChecked.value = [...permGrantByPermissionId.value.keys()]
 }
 
-function togglePermission(permission: PermissionListItemDto, checked: boolean) {
-  const next = new Set(permChecked.value)
-  if (checked) {
-    next.add(permission.basicId)
-  }
-  else {
-    next.delete(permission.basicId)
-  }
-  permChecked.value = next
-  permDirty.value = true
+function onPermTransfer(next: (number | string)[]) {
+  permChecked.value = next as ApiId[]
 }
+
+/**
+ * 脏态按「当前授予集合 vs 有效授权集合」算，不用回写事件置位的标志位：
+ * 穿梭框挂载时会把规整后的值回写一次，标志位会被这一次空回写点亮，
+ * 抽屉一打开保存钮就是可点的。比出来的脏态没有这个问题，保存后也会自动归位。
+ */
+const permDirty = computed(() => {
+  const granted = permGrantByPermissionId.value
+  return permChecked.value.length !== granted.size
+    || permChecked.value.some(permId => !granted.has(permId))
+})
 
 async function savePermGrants() {
   const role = permissionRole.value
   if (!role || permLoading.value) {
     return
   }
-  const validGrants = permGrants.value.filter(grant => grant.status === ValidityStatus.Valid)
+  const validGrants = validRoleGrants(permGrants.value)
   const grantedPermIds = new Set(validGrants.map(grant => grant.permissionId))
-  const toGrant = [...permChecked.value].filter(permId => !grantedPermIds.has(permId))
-  const toRevoke = validGrants.filter(grant => !permChecked.value.has(grant.permissionId))
+  const checkedPermIds = new Set(permChecked.value)
+  const toGrant = permChecked.value.filter(permId => !grantedPermIds.has(permId))
+  const toRevoke = validGrants.filter(grant => !checkedPermIds.has(grant.permissionId))
   if (toGrant.length === 0 && toRevoke.length === 0) {
     toast.info(t('identity.role.perm_no_change'))
-    permDirty.value = false
     return
   }
   permLoading.value = true
@@ -340,7 +395,7 @@ async function savePermGrants() {
     toast.success(t('identity.role.perm_saved', { grant: toGrant.length, revoke: toRevoke.length }))
   }
   catch (e: unknown) {
-    toast.error((e as Error)?.message || t('common.messages.save_failed'))
+    toast.danger((e as Error)?.message || t('common.messages.save_failed'))
   }
   finally {
     permLoading.value = false
@@ -406,11 +461,7 @@ const menuPermIdById = computed(() => {
 /** 已授权权限对应的菜单节点设为勾选；目录在其所有可授权后代均已授权时一并勾选 */
 function deriveMenuChecked() {
   // 仅「有效」的授权才算已勾选（撤销为软删除 Status=Invalid，需排除，否则撤销后仍显示勾选）
-  const granted = new Set(
-    menuGrants.value
-      .filter(grant => grant.status === ValidityStatus.Valid)
-      .map(grant => grant.permissionId),
-  )
+  const granted = new Set(validRoleGrants(menuGrants.value).map(grant => grant.permissionId))
   const checked: ApiId[] = []
   function visit(node: MenuNode): { hasGrantable: boolean, allGranted: boolean } {
     let hasGrantable = false
@@ -502,7 +553,7 @@ async function openMenuDrawer(row: RoleListItemDto) {
     menuDirty.value = false
   }
   catch (e: unknown) {
-    toast.error((e as Error)?.message || t('identity.role.menu_load_failed'))
+    toast.danger((e as Error)?.message || t('identity.role.menu_load_failed'))
   }
   finally {
     menuLoading.value = false
@@ -519,25 +570,14 @@ function onMenuCheck(keys: Array<string | number>) {
   menuDirty.value = true
 }
 
-/** 统一保存：按当前勾选计算目标权限集，与已授权对比，批量授权新增、收回移除 */
+/** 统一保存：按当前勾选计算目标权限集，只在菜单覆盖到的权限里与已授权对比，批量授权新增、收回移除 */
 async function saveMenuGrants() {
   const role = menuRole.value
   if (!role || menuLoading.value) {
     return
   }
-  const checkedSet = new Set(menuCheckedKeys.value.map(String))
-  const targetPermIds = new Set<ApiId>()
-  for (const [menuId, permId] of menuPermIdById.value) {
-    if (checkedSet.has(String(menuId))) {
-      targetPermIds.add(permId)
-    }
-  }
-  // 仅基于「有效」授权计算差异：已生效的才算已授权，撤销也只撤有效项
-  const validGrants = menuGrants.value.filter(grant => grant.status === ValidityStatus.Valid)
-  const grantedPermIds = new Set(validGrants.map(grant => grant.permissionId))
-  const toGrant = [...targetPermIds].filter(permId => !grantedPermIds.has(permId))
-  const toRevoke = validGrants.filter(grant => !targetPermIds.has(grant.permissionId))
-  if (toGrant.length === 0 && toRevoke.length === 0) {
+  const { grantPermissionIds, revokeRolePermissionIds } = diffMenuGrants(menuCheckedKeys.value, menuPermIdById.value, menuGrants.value)
+  if (grantPermissionIds.length === 0 && revokeRolePermissionIds.length === 0) {
     toast.info(t('identity.role.menu_no_change'))
     menuDirty.value = false
     return
@@ -545,99 +585,166 @@ async function saveMenuGrants() {
   menuLoading.value = true
   try {
     // 一次性提交本次授权改动（单请求、后端单事务）
-    await rolePermissionApi.batchUpdate({
-      roleId: role.basicId,
-      grantPermissionIds: toGrant,
-      revokeRolePermissionIds: toRevoke.map(grant => grant.basicId),
-    })
+    await rolePermissionApi.batchUpdate({ roleId: role.basicId, grantPermissionIds, revokeRolePermissionIds })
     menuGrants.value = await rolePermissionApi.list(role.basicId)
     deriveMenuChecked()
     menuDirty.value = false
-    toast.success(t('identity.role.menu_saved', { grant: toGrant.length, revoke: toRevoke.length }))
+    toast.success(t('identity.role.menu_saved', { grant: grantPermissionIds.length, revoke: revokeRolePermissionIds.length }))
   }
   catch (e: unknown) {
-    toast.error((e as Error)?.message || t('common.messages.save_failed'))
+    toast.danger((e as Error)?.message || t('common.messages.save_failed'))
   }
   finally {
     menuLoading.value = false
   }
 }
 
-// ── 数据范围抽屉（按部门授予角色数据范围） ──────────────────────
+// ── 角色成员抽屉（穿梭框，挪好后一次提交加入与移出） ──────────────
+const membersVisible = ref(false)
+const membersRole = ref<RoleListItemDto | null>(null)
+/** 此刻生效的成员，保存时与草稿比出差量 */
+const members = ref<RoleMemberDto[]>([])
+/** 本租户的成员目录（候选人），保存后与新的成员列表重新合并 */
+const memberDirectory = ref<UserSelectItemDto[]>([])
+const memberCandidates = computed(() => mergeMemberCandidates(memberDirectory.value, members.value))
+const memberDraft = ref<ApiId[]>([])
+const membersLoading = ref(false)
+const membersSubmitting = ref(false)
+const memberChanges = computed(() => diffRoleMembers(memberDraft.value, members.value))
+const membersDirty = computed(() => memberChanges.value.grantUserIds.length > 0 || memberChanges.value.revokeUserRoleIds.length > 0)
+const memberGroups = computed(() => [{ key: 'members', name: '', items: memberCandidates.value }])
+
+function resetMembers(current: RoleMemberDto[]) {
+  members.value = current
+  memberDraft.value = current.map(member => member.userId)
+}
+
+async function openMembersDrawer(row: RoleListItemDto) {
+  membersRole.value = row
+  membersVisible.value = true
+  memberDirectory.value = []
+  resetMembers([])
+  membersLoading.value = true
+  try {
+    // 候选人就是本租户的成员目录（平台里是平台账号），含注册在别处的外部成员
+    const [current, candidates] = await Promise.all([
+      userRoleApi.roleMembers(row.basicId),
+      userApi.select({ limit: 500 }),
+    ])
+    memberDirectory.value = candidates
+    resetMembers(current)
+  }
+  catch (e: unknown) {
+    toast.danger((e as Error)?.message || t('identity.role.members_load_failed'))
+  }
+  finally {
+    membersLoading.value = false
+  }
+}
+
+function memberDescription(item: RoleMemberCandidate) {
+  return item.isExternalMember ? `@${item.userName} · ${t('identity.role.member_external')}` : `@${item.userName}`
+}
+
+async function saveMembers() {
+  const role = membersRole.value
+  if (!role || !membersDirty.value || membersSubmitting.value) {
+    return
+  }
+
+  const { grantUserIds, revokeUserRoleIds } = memberChanges.value
+  membersSubmitting.value = true
+  try {
+    await userRoleApi.batchUpdateRoleMembers({ roleId: role.basicId, grantUserIds, revokeUserRoleIds })
+    resetMembers(await userRoleApi.roleMembers(role.basicId))
+    toast.success(t('identity.role.members_saved', { grant: grantUserIds.length, revoke: revokeUserRoleIds.length }))
+  }
+  catch (e: unknown) {
+    toast.danger((e as Error)?.message || t('common.messages.save_failed'))
+  }
+  finally {
+    membersSubmitting.value = false
+  }
+}
+
+// ── 数据范围抽屉（档位与自定义部门一次保存） ──────────────────────
 const scopeVisible = ref(false)
 const scopeRole = ref<RoleListItemDto | null>(null)
-const scopeGrants = ref<RoleDataScopeListItemDto[]>([])
-const scopeDeptOptions = ref<TreeSelectOption[]>([])
-const scopeSelectedDept = ref<ApiId | null>(null)
-const scopeIncludeChildren = ref(true)
+const scopeTree = ref<DepartmentTreeNodeDto[]>([])
+const scopeDraft = ref<DataScopeDraft>({ dataScope: DataPermissionScope.SelfOnly, departments: [] })
+/** 打开时的现状，保存钮只在有改动时可用 */
+const scopeOriginal = ref<DataScopeDraft>({ dataScope: DataPermissionScope.SelfOnly, departments: [] })
 const scopeLoading = ref(false)
 const scopeSubmitting = ref(false)
+/** 全局角色是各租户共用的模板：只设档位，部门是租户自己的数据 */
+const scopeAllowCustom = computed(() => !(scopeRole.value?.isGlobal ?? false))
+const scopeDirty = computed(() => isDataScopeDirty(scopeDraft.value, scopeOriginal.value))
 
-function toDeptOptions(nodes: DepartmentTreeNodeDto[]): TreeSelectOption[] {
-  return nodes.map(node => ({
-    value: node.basicId,
-    label: node.departmentName,
-    children: node.children?.length ? toDeptOptions(node.children) : undefined,
-  }))
+function resetScopeDraft(draft: DataScopeDraft) {
+  scopeDraft.value = draft
+  scopeOriginal.value = draft
 }
 
 async function openScopeDrawer(row: RoleListItemDto) {
   scopeRole.value = row
   scopeVisible.value = true
-  scopeSelectedDept.value = null
-  scopeIncludeChildren.value = true
+  scopeTree.value = []
+  resetScopeDraft({ dataScope: row.dataScope, departments: [] })
+  if (row.isGlobal) {
+    return
+  }
+
   scopeLoading.value = true
   try {
+    // 比对基准只取此刻生效的部门：撤销过、已过期的历史行不进草稿，再选中即从现在起生效
     const [tree, grants] = await Promise.all([
-      departmentApi.tree({ limit: 1000 }),
-      roleDataScopeApi.list(row.basicId),
+      departmentApi.tree({ limit: 1000, onlyEnabled: true }),
+      roleDataScopeApi.list(row.basicId, true),
     ])
-    scopeDeptOptions.value = toDeptOptions(tree)
-    scopeGrants.value = grants
+    scopeTree.value = tree
+    resetScopeDraft({
+      dataScope: row.dataScope,
+      departments: row.dataScope === DataPermissionScope.Custom
+        ? grants.map(({ departmentId, includeChildren }) => ({ departmentId, includeChildren }))
+        : [],
+    })
   }
   catch (e: unknown) {
-    toast.error((e as Error)?.message || t('identity.role.scope_load_failed'))
+    toast.danger((e as Error)?.message || t('identity.data_scope.load_failed'))
   }
   finally {
     scopeLoading.value = false
   }
 }
 
-async function addScope() {
-  if (!scopeRole.value || scopeSelectedDept.value == null) {
-    toast.warning(t('identity.role.scope_select_dept_required'))
+async function saveScopes() {
+  const role = scopeRole.value
+  if (!role || !scopeDirty.value || scopeSubmitting.value) {
     return
   }
+  if (!isDataScopeComplete(scopeDraft.value)) {
+    toast.warning(t('identity.data_scope.custom_required'))
+    return
+  }
+
+  // 角色的编辑器不提供「跟随角色」，档位恒有值
+  const { dataScope, departments } = toDataScopePayload(scopeDraft.value)
+  if (dataScope == null) {
+    return
+  }
+
   scopeSubmitting.value = true
   try {
-    await roleDataScopeApi.grant({
-      roleId: scopeRole.value.basicId,
-      departmentId: scopeSelectedDept.value,
-      includeChildren: scopeIncludeChildren.value,
-    })
-    toast.success(t('identity.role.scope_added'))
-    scopeSelectedDept.value = null
-    scopeGrants.value = await roleDataScopeApi.list(scopeRole.value.basicId)
+    await roleDataScopeApi.set({ roleId: role.basicId, dataScope, departments })
+    toast.success(t('identity.data_scope.saved'))
+    scopeVisible.value = false
+    reloadRole()
   }
   catch (e: unknown) {
-    toast.error((e as Error)?.message || t('identity.role.scope_add_failed'))
+    toast.danger((e as Error)?.message || t('common.messages.save_failed'))
   }
   finally {
     scopeSubmitting.value = false
-  }
-}
-
-async function removeScope(grant: RoleDataScopeListItemDto) {
-  if (!scopeRole.value) {
-    return
-  }
-  try {
-    await roleDataScopeApi.revoke(grant.basicId)
-    toast.success(t('identity.role.scope_removed'))
-    scopeGrants.value = await roleDataScopeApi.list(scopeRole.value.basicId)
-  }
-  catch (e: unknown) {
-    toast.error((e as Error)?.message || t('identity.role.scope_remove_failed'))
   }
 }
 
@@ -654,7 +761,6 @@ const modalTitle = computed(() => (roleForm.value.basicId ? t('identity.role.for
 
 function createDefaultRoleForm(): RoleFormModel {
   return {
-    dataScope: DataPermissionScope.SelfOnly,
     maxMembers: 0,
     remark: null,
     roleCode: '',
@@ -679,6 +785,11 @@ function formatBoolean(value?: boolean | null) {
     return '-'
   }
   return value ? t('common.statuses.yes') : t('common.statuses.no')
+}
+
+/** 继承方式：1 级为直接继承，更深为经其他上级的间接继承 */
+function formatInheritMode(depth: number) {
+  return depth <= 1 ? t('identity.role.inherit_direct') : t('identity.role.inherit_indirect', { depth })
 }
 
 function formatStatus(value?: EnableStatus | null) {
@@ -707,7 +818,6 @@ async function handleEdit(row: RoleListItemDto) {
   }
   roleForm.value = {
     basicId: row.basicId,
-    dataScope: detail?.dataScope ?? row.dataScope,
     maxMembers: detail?.maxMembers ?? row.maxMembers,
     remark: detail?.remark ?? null,
     roleCode: detail?.roleCode ?? row.roleCode,
@@ -732,7 +842,7 @@ async function handleView(row: RoleListItemDto) {
     }
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('identity.role.msg_load_detail_failed'))
+    toast.danger((error as Error)?.message || t('identity.role.msg_load_detail_failed'))
   }
   finally {
     detailLoading.value = false
@@ -753,6 +863,9 @@ function validateRoleForm() {
   return true
 }
 
+/** 新建时状态随创建一起提交；编辑时改状态走启停接口，没有启停按钮就不让改，免得资料存了一半再被拒 */
+const canEditFormStatus = computed(() => !roleForm.value.basicId || hasPermission('identity.role.status'))
+
 async function handleSubmit() {
   if (!validateRoleForm()) {
     return
@@ -764,7 +877,6 @@ async function handleSubmit() {
     if (roleForm.value.basicId) {
       const updateInput: RoleUpdateDto = {
         basicId: roleForm.value.basicId,
-        dataScope: roleForm.value.dataScope,
         maxMembers: roleForm.value.maxMembers,
         remark: roleForm.value.remark,
         roleDescription: roleForm.value.roleDescription,
@@ -784,7 +896,6 @@ async function handleSubmit() {
     }
     else {
       const createInput: RoleCreateDto = {
-        dataScope: roleForm.value.dataScope,
         maxMembers: roleForm.value.maxMembers,
         remark: roleForm.value.remark,
         roleCode: roleForm.value.roleCode.trim(),
@@ -803,7 +914,7 @@ async function handleSubmit() {
     reloadRole()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('common.messages.save_failed'))
+    toast.danger((error as Error)?.message || t('common.messages.save_failed'))
   }
   finally {
     submitLoading.value = false
@@ -842,9 +953,9 @@ async function handleToggleStatus(row: RoleListItemDto) {
             <XhSpinner />
           </div>
           <XhEmptyStateRoot v-if="!detailLoading && !currentDetail" class="xh-detail-empty">
-            <XhEmptyStateIcon>
+            <XhEmptyStateIndicator>
               <Icon icon="lucide:inbox" width="28" />
-            </XhEmptyStateIcon>
+            </XhEmptyStateIndicator>
             <XhEmptyStateTitle>{{ t('common.empty') }}</XhEmptyStateTitle>
             <XhEmptyStateDescription>{{ t('identity.role.detail_empty') }}</XhEmptyStateDescription>
           </XhEmptyStateRoot>
@@ -858,6 +969,9 @@ async function handleToggleStatus(row: RoleListItemDto) {
                 <XhTabsTrigger value="permissions">
                   {{ t('identity.role.tab_permissions', { count: currentDetail.permissions.length }) }}
                 </XhTabsTrigger>
+                <XhTabsTrigger value="inheritedPermissions">
+                  {{ t('identity.role.tab_inherited_permissions', { count: currentDetail.inheritedPermissions.length }) }}
+                </XhTabsTrigger>
                 <XhTabsTrigger value="dataScopes">
                   {{ t('identity.role.tab_data_scopes', { count: currentDetail.dataScopes.length }) }}
                 </XhTabsTrigger>
@@ -870,9 +984,10 @@ async function handleToggleStatus(row: RoleListItemDto) {
                 <XhTabsTrigger value="grantedUsers">
                   {{ t('identity.role.tab_granted_users', { count: currentDetail.grantedUsers.length }) }}
                 </XhTabsTrigger>
+                <XhTabsIndicator />
               </XhTabsList>
               <XhTabsContent value="overview">
-                <XhDescriptionsRoot :columns="2" bordered size="sm">
+                <XhDescriptionsRoot :columns="2" variant="outline" size="sm">
                   <XhDescriptionsItem>
                     <XhDescriptionsLabel>{{ t('identity.role.label_role_name') }}</XhDescriptionsLabel>
                     <XhDescriptionsValue>
@@ -969,11 +1084,40 @@ async function handleToggleStatus(row: RoleListItemDto) {
                   </tbody>
                 </table>
                 <XhEmptyStateRoot v-else style="padding: 40px 0">
-                  <XhEmptyStateIcon>
+                  <XhEmptyStateIndicator>
                     <Icon icon="lucide:inbox" width="28" />
-                  </XhEmptyStateIcon>
+                  </XhEmptyStateIndicator>
                   <XhEmptyStateTitle>{{ t('common.empty') }}</XhEmptyStateTitle>
                   <XhEmptyStateDescription>{{ t('identity.role.empty_permissions') }}</XhEmptyStateDescription>
+                </XhEmptyStateRoot>
+              </XhTabsContent>
+              <XhTabsContent value="inheritedPermissions">
+                <table v-if="currentDetail.inheritedPermissions.length" class="xh-detail-table">
+                  <thead>
+                    <tr>
+                      <th>{{ t('identity.role.th_permission') }}</th>
+                      <th>{{ t('identity.role.th_code') }}</th>
+                      <th>{{ t('identity.role.th_action') }}</th>
+                      <th>{{ t('identity.role.th_source_role') }}</th>
+                      <th>{{ t('identity.role.th_inherit_mode') }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="item in currentDetail.inheritedPermissions" :key="`${item.permissionId}-${item.sourceRoleId}-${item.permissionAction}`">
+                      <td>{{ formatNullable(item.permissionName) }}</td>
+                      <td>{{ formatNullable(item.permissionCode) }}</td>
+                      <td>{{ getOptionLabel(permissionActionOptions, item.permissionAction) }}</td>
+                      <td>{{ formatNullable(item.sourceRoleName) }}</td>
+                      <td>{{ formatInheritMode(item.depth) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+                <XhEmptyStateRoot v-else style="padding: 40px 0">
+                  <XhEmptyStateIndicator>
+                    <Icon icon="lucide:inbox" width="28" />
+                  </XhEmptyStateIndicator>
+                  <XhEmptyStateTitle>{{ t('common.empty') }}</XhEmptyStateTitle>
+                  <XhEmptyStateDescription>{{ t('identity.role.empty_inherited_permissions') }}</XhEmptyStateDescription>
                 </XhEmptyStateRoot>
               </XhTabsContent>
               <XhTabsContent value="dataScopes">
@@ -998,9 +1142,9 @@ async function handleToggleStatus(row: RoleListItemDto) {
                   </tbody>
                 </table>
                 <XhEmptyStateRoot v-else style="padding: 40px 0">
-                  <XhEmptyStateIcon>
+                  <XhEmptyStateIndicator>
                     <Icon icon="lucide:inbox" width="28" />
-                  </XhEmptyStateIcon>
+                  </XhEmptyStateIndicator>
                   <XhEmptyStateTitle>{{ t('common.empty') }}</XhEmptyStateTitle>
                   <XhEmptyStateDescription>{{ t('identity.role.empty_data_scopes') }}</XhEmptyStateDescription>
                 </XhEmptyStateRoot>
@@ -1011,25 +1155,34 @@ async function handleToggleStatus(row: RoleListItemDto) {
                     <tr>
                       <th>{{ t('identity.role.th_parent_role') }}</th>
                       <th>{{ t('identity.role.th_code') }}</th>
-                      <th>{{ t('identity.role.th_depth') }}</th>
+                      <th>{{ t('identity.role.th_inherit_mode') }}</th>
                       <th>{{ t('identity.role.th_status') }}</th>
+                      <th>{{ t('identity.role.th_effective') }}</th>
                       <th>{{ t('identity.role.th_path') }}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="item in currentDetail.ancestors" :key="item.basicId">
-                      <td>{{ formatNullable(item.ancestorRoleName) }}</td>
-                      <td>{{ formatNullable(item.ancestorRoleCode) }}</td>
-                      <td>{{ item.depth }}</td>
-                      <td>{{ formatStatus(item.ancestorStatus) }}</td>
-                      <td>{{ formatNullable(item.path) }}</td>
+                    <tr v-for="item in currentDetail.ancestors" :key="item.roleId">
+                      <td>{{ item.roleName }}</td>
+                      <td>{{ item.roleCode }}</td>
+                      <td>{{ formatInheritMode(item.depth) }}</td>
+                      <td>{{ formatStatus(item.status) }}</td>
+                      <td>
+                        <XhTagRoot v-if="item.isEffective" variant="subtle" size="sm" tone="success">
+                          <XhTagLabel>{{ t('identity.role.effective_yes') }}</XhTagLabel>
+                        </XhTagRoot>
+                        <XhTagRoot v-else variant="subtle" size="sm" tone="neutral" :title="t('identity.role.effective_no_hint')">
+                          <XhTagLabel>{{ t('identity.role.effective_no') }}</XhTagLabel>
+                        </XhTagRoot>
+                      </td>
+                      <td>{{ item.pathRoleNames.join(' → ') }}</td>
                     </tr>
                   </tbody>
                 </table>
                 <XhEmptyStateRoot v-else style="padding: 40px 0">
-                  <XhEmptyStateIcon>
+                  <XhEmptyStateIndicator>
                     <Icon icon="lucide:inbox" width="28" />
-                  </XhEmptyStateIcon>
+                  </XhEmptyStateIndicator>
                   <XhEmptyStateTitle>{{ t('common.empty') }}</XhEmptyStateTitle>
                   <XhEmptyStateDescription>{{ t('identity.role.empty_ancestors') }}</XhEmptyStateDescription>
                 </XhEmptyStateRoot>
@@ -1040,25 +1193,34 @@ async function handleToggleStatus(row: RoleListItemDto) {
                     <tr>
                       <th>{{ t('identity.role.th_child_role') }}</th>
                       <th>{{ t('identity.role.th_code') }}</th>
-                      <th>{{ t('identity.role.th_depth') }}</th>
+                      <th>{{ t('identity.role.th_inherit_mode') }}</th>
                       <th>{{ t('identity.role.th_status') }}</th>
+                      <th>{{ t('identity.role.th_effective') }}</th>
                       <th>{{ t('identity.role.th_path') }}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="item in currentDetail.descendants" :key="item.basicId">
-                      <td>{{ formatNullable(item.descendantRoleName) }}</td>
-                      <td>{{ formatNullable(item.descendantRoleCode) }}</td>
-                      <td>{{ item.depth }}</td>
-                      <td>{{ formatStatus(item.descendantStatus) }}</td>
-                      <td>{{ formatNullable(item.path) }}</td>
+                    <tr v-for="item in currentDetail.descendants" :key="item.roleId">
+                      <td>{{ item.roleName }}</td>
+                      <td>{{ item.roleCode }}</td>
+                      <td>{{ formatInheritMode(item.depth) }}</td>
+                      <td>{{ formatStatus(item.status) }}</td>
+                      <td>
+                        <XhTagRoot v-if="item.isEffective" variant="subtle" size="sm" tone="success">
+                          <XhTagLabel>{{ t('identity.role.effective_yes') }}</XhTagLabel>
+                        </XhTagRoot>
+                        <XhTagRoot v-else variant="subtle" size="sm" tone="neutral" :title="t('identity.role.effective_no_hint')">
+                          <XhTagLabel>{{ t('identity.role.effective_no') }}</XhTagLabel>
+                        </XhTagRoot>
+                      </td>
+                      <td>{{ item.pathRoleNames.join(' → ') }}</td>
                     </tr>
                   </tbody>
                 </table>
                 <XhEmptyStateRoot v-else style="padding: 40px 0">
-                  <XhEmptyStateIcon>
+                  <XhEmptyStateIndicator>
                     <Icon icon="lucide:inbox" width="28" />
-                  </XhEmptyStateIcon>
+                  </XhEmptyStateIndicator>
                   <XhEmptyStateTitle>{{ t('common.empty') }}</XhEmptyStateTitle>
                   <XhEmptyStateDescription>{{ t('identity.role.empty_descendants') }}</XhEmptyStateDescription>
                 </XhEmptyStateRoot>
@@ -1085,9 +1247,9 @@ async function handleToggleStatus(row: RoleListItemDto) {
                   </tbody>
                 </table>
                 <XhEmptyStateRoot v-else style="padding: 40px 0">
-                  <XhEmptyStateIcon>
+                  <XhEmptyStateIndicator>
                     <Icon icon="lucide:inbox" width="28" />
-                  </XhEmptyStateIcon>
+                  </XhEmptyStateIndicator>
                   <XhEmptyStateTitle>{{ t('common.empty') }}</XhEmptyStateTitle>
                   <XhEmptyStateDescription>{{ t('identity.role.empty_granted_users') }}</XhEmptyStateDescription>
                 </XhEmptyStateRoot>
@@ -1111,7 +1273,7 @@ async function handleToggleStatus(row: RoleListItemDto) {
         class="xh-edit-form-grid"
         @submit="handleSubmit"
       >
-        <XhFormFieldGroup value="roleName">
+        <XhFormFieldGroup name="roleName">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.role.label_role_name') }}</XhFieldLabel>
             <XhFieldControl>
@@ -1120,7 +1282,7 @@ async function handleToggleStatus(row: RoleListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="roleCode">
+        <XhFormFieldGroup name="roleCode">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.role.label_role_code') }}</XhFieldLabel>
             <XhFieldControl>
@@ -1134,7 +1296,7 @@ async function handleToggleStatus(row: RoleListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="roleType">
+        <XhFormFieldGroup name="roleType">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.role.label_role_type') }}</XhFieldLabel>
             <XhFieldControl>
@@ -1143,16 +1305,7 @@ async function handleToggleStatus(row: RoleListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="dataScope">
-          <XhFieldRoot>
-            <XhFieldLabel>{{ t('identity.role.label_data_scope') }}</XhFieldLabel>
-            <XhFieldControl>
-              <XSelect v-model:value="roleForm.dataScope" :options="dataScopeOptions" />
-            </XhFieldControl>
-            <XhFieldErrorText />
-          </XhFieldRoot>
-        </XhFormFieldGroup>
-        <XhFormFieldGroup value="maxMembers">
+        <XhFormFieldGroup name="maxMembers">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.role.label_max_members') }}</XhFieldLabel>
             <XhFieldControl>
@@ -1161,7 +1314,7 @@ async function handleToggleStatus(row: RoleListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="sort">
+        <XhFormFieldGroup name="sort">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.role.label_sort') }}</XhFieldLabel>
             <XhFieldControl>
@@ -1170,16 +1323,16 @@ async function handleToggleStatus(row: RoleListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="status">
+        <XhFormFieldGroup name="status">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.role.label_status') }}</XhFieldLabel>
             <XhFieldControl>
-              <XSelect v-model:value="roleForm.status" :options="statusOptions" />
+              <XSelect v-model:value="roleForm.status" :options="statusOptions" :disabled="!canEditFormStatus" />
             </XhFieldControl>
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="remark">
+        <XhFormFieldGroup name="remark">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.role.label_remark') }}</XhFieldLabel>
             <XhFieldControl>
@@ -1188,7 +1341,7 @@ async function handleToggleStatus(row: RoleListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="roleDescription" class="xh-span-2">
+        <XhFormFieldGroup name="roleDescription" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('identity.role.label_description') }}</XhFieldLabel>
             <XhFieldControl>
@@ -1207,32 +1360,61 @@ async function handleToggleStatus(row: RoleListItemDto) {
     </XEditModal>
 
     <XhDrawerRoot v-model:open="permissionVisible" side="right">
-      <XhDrawerContent style="--xh-drawer-size: 760px">
+      <XhDrawerContent style="--xh-drawer-size: 980px">
         <XhDrawerTitle>{{ t('identity.role.perm_drawer_title', { name: permissionRole?.roleName ?? '' }) }}</XhDrawerTitle>
         <XhDrawerCloseTrigger />
-        <XPermissionGrantPanel
-          ref="permPanelRef"
-          :items="permCatalog"
+        <p v-if="permInherited.size > 0" class="drawer-tip">
+          {{ t('identity.role.perm_inherit_tip') }}
+        </p>
+        <XPermissionTransfer
+          :items="permItems"
+          :value="permChecked"
           :loading="permLoading"
+          :disabled="permLoading"
+          :source-title="t('identity.role.perm_available')"
+          :target-title="t('identity.role.perm_granted')"
           :search-placeholder="t('identity.role.perm_search')"
-          :granted-count-label="t('identity.role.perm_granted_count', { count: permChecked.size })"
-          :empty-description="t('identity.role.perm_no_match')"
           :other-group-label="t('identity.role.perm_group_other')"
+          @update:value="onPermTransfer"
         >
-          <template #action="{ item }">
-            <XhCheckbox
-              :checked="permChecked.has(item.basicId)"
-              :disabled="permLoading"
-              @update:checked="(checked: boolean) => togglePermission(item as PermissionListItemDto, checked)"
-            />
+          <template #suffix="{ item }">
+            <!-- 上级拒绝的，本角色授予了也不生效；已继承的，不必再授予 -->
+            <XhTagRoot
+              v-if="permInherited.get(String(item.basicId))?.deniedBy.length"
+              variant="subtle"
+              size="sm"
+              tone="danger"
+              :title="t('identity.role.perm_denied_by', { names: permInherited.get(String(item.basicId))?.deniedBy.join('、') })"
+            >
+              <XhTagLabel>{{ t('identity.role.perm_inherited_denied') }}</XhTagLabel>
+            </XhTagRoot>
+            <XhTagRoot
+              v-else-if="permInherited.get(String(item.basicId))?.grantedBy.length"
+              variant="subtle"
+              size="sm"
+              tone="success"
+              :title="t('identity.role.perm_granted_by', { names: permInherited.get(String(item.basicId))?.grantedBy.join('、') })"
+            >
+              <XhTagLabel>{{ t('identity.role.perm_inherited') }}</XhTagLabel>
+            </XhTagRoot>
+            <!-- 平台的授权目录含两侧权限：单侧的标出来，授给平台角色的租户侧权限在平台里不生效，反之亦然 -->
+            <template v-if="isPlatformContext">
+              <XhTagRoot v-if="item.side === PermissionSide.Platform" variant="subtle" size="sm" tone="info">
+                <XhTagLabel>{{ t('identity.role.perm_side_platform') }}</XhTagLabel>
+              </XhTagRoot>
+              <XhTagRoot v-else-if="item.side === PermissionSide.Tenant" variant="subtle" size="sm" tone="neutral">
+                <XhTagLabel>{{ t('identity.role.perm_side_tenant') }}</XhTagLabel>
+              </XhTagRoot>
+            </template>
           </template>
-        </XPermissionGrantPanel>
+        </XPermissionTransfer>
         <div class="xh-dialog-footer">
-          <XhButton @click="permissionVisible = false">
+          <XhButton variant="subtle" @click="permissionVisible = false">
             {{ t('common.actions.cancel') }}
           </XhButton>
-          <XhButton tone="brand" :loading="permLoading" :disabled="!permDirty" style="margin-left: 8px" @click="savePermGrants">
-            {{ t('identity.role.perm_save') }}
+          <XhButton variant="subtle" tone="brand" :loading="permLoading" :disabled="!permDirty" style="margin-left: 8px" @click="savePermGrants">
+            <XhButtonIndicator />
+            <XhButtonLabel>{{ t('identity.role.perm_save') }}</XhButtonLabel>
           </XhButton>
         </div>
       </XhDrawerContent>
@@ -1247,16 +1429,17 @@ async function handleToggleStatus(row: RoleListItemDto) {
             <XhSpinner />
           </div>
           <XhEmptyStateRoot v-if="menuTreeData.length === 0 && !menuLoading" size="sm" class="perm-empty">
-            <XhEmptyStateIcon>
+            <XhEmptyStateIndicator>
               <Icon icon="lucide:inbox" width="28" height="28" />
-            </XhEmptyStateIcon>
+            </XhEmptyStateIndicator>
             <XhEmptyStateTitle>{{ t('common.no_data') }}</XhEmptyStateTitle>
             <XhEmptyStateDescription>{{ t('identity.role.menu_empty') }}</XhEmptyStateDescription>
           </XhEmptyStateRoot>
           <XTree
             v-else
             :data="menuTreeOptions"
-            selection-mode="multiple"
+            :aria-label="t('identity.role.menu_drawer_title', { name: menuRole?.roleName ?? '' })"
+            multiple
             cascade
             checked-strategy="all"
             :selected-keys="menuCheckedKeys.map(String)"
@@ -1267,87 +1450,78 @@ async function handleToggleStatus(row: RoleListItemDto) {
           {{ t('identity.role.menu_tip') }}
         </p>
         <div class="xh-dialog-footer">
-          <XhButton @click="menuVisible = false">
+          <XhButton variant="subtle" @click="menuVisible = false">
             {{ t('common.actions.cancel') }}
           </XhButton>
-          <XhButton tone="brand" :loading="menuLoading" :disabled="!menuDirty" style="margin-left: 8px" @click="saveMenuGrants">
-            {{ t('identity.role.menu_save') }}
+          <XhButton variant="subtle" tone="brand" :loading="menuLoading" :disabled="!menuDirty" style="margin-left: 8px" @click="saveMenuGrants">
+            <XhButtonIndicator />
+            <XhButtonLabel>{{ t('identity.role.menu_save') }}</XhButtonLabel>
+          </XhButton>
+        </div>
+      </XhDrawerContent>
+    </XhDrawerRoot>
+
+    <XhDrawerRoot v-model:open="membersVisible" side="right">
+      <XhDrawerContent style="--xh-drawer-size: 720px">
+        <XhDrawerTitle>{{ t('identity.role.members_title', { name: membersRole?.roleName ?? '' }) }}</XhDrawerTitle>
+        <XhDrawerCloseTrigger />
+        <p class="drawer-tip">
+          {{ t('identity.role.members_tip') }}
+        </p>
+        <XGrantTransfer
+          :items="memberCandidates"
+          :value="memberDraft"
+          :groups="memberGroups"
+          :get-label="item => item.displayName"
+          :get-description="memberDescription"
+          :loading="membersLoading"
+          :disabled="membersLoading || membersSubmitting"
+          :source-title="t('identity.role.members_source')"
+          :target-title="t('identity.role.members_target')"
+          :search-placeholder="t('identity.role.members_search')"
+          @update:value="value => (memberDraft = value)"
+        />
+        <div class="xh-dialog-footer">
+          <XhButton variant="subtle" @click="membersVisible = false">
+            {{ t('common.actions.cancel') }}
+          </XhButton>
+          <XhButton variant="subtle" tone="brand" :loading="membersSubmitting" :disabled="!membersDirty || membersLoading" style="margin-left: 8px" @click="saveMembers">
+            <XhButtonIndicator />
+            <XhButtonLabel>{{ t('identity.role.members_save') }}</XhButtonLabel>
           </XhButton>
         </div>
       </XhDrawerContent>
     </XhDrawerRoot>
 
     <XhDrawerRoot v-model:open="scopeVisible" side="right">
-      <XhDrawerContent style="--xh-drawer-size: 560px">
-        <XhDrawerTitle>{{ t('identity.role.scope_drawer_title', { name: scopeRole?.roleName ?? '' }) }}</XhDrawerTitle>
+      <XhDrawerContent style="--xh-drawer-size: 640px">
+        <XhDrawerTitle>{{ t('identity.data_scope.drawer_title', { name: scopeRole?.roleName ?? '' }) }}</XhDrawerTitle>
         <XhDrawerCloseTrigger />
-        <div class="scope-add">
-          <XTreeSelect
-            v-model:value="scopeSelectedDept"
-            clearable
-            :options="scopeDeptOptions"
-            :placeholder="t('identity.role.scope_select_dept')" style="flex: 1"
-          />
-          <!-- 开关旁的文字随状态切换：含下级 / 仅本级 -->
-          <XhSwitch v-model:checked="scopeIncludeChildren">
-            {{ scopeIncludeChildren ? t('identity.role.scope_include_children') : t('identity.role.scope_only_self') }}
-          </XhSwitch>
-          <XhButton :loading="scopeSubmitting" tone="brand" @click="addScope">
-            {{ t('identity.role.scope_add') }}
-          </XhButton>
-        </div>
-        <div class="xh-loading-stage" :class="{ 'is-loading': scopeLoading }">
+        <div class="xh-loading-stage scope-stage" :class="{ 'is-loading': scopeLoading }">
           <div class="xh-loading-stage__veil">
             <XhSpinner />
           </div>
-          <XhEmptyStateRoot v-if="scopeGrants.length === 0 && !scopeLoading" size="sm" class="perm-empty">
-            <XhEmptyStateIcon>
-              <Icon icon="lucide:inbox" width="28" height="28" />
-            </XhEmptyStateIcon>
-            <XhEmptyStateTitle>{{ t('common.no_data') }}</XhEmptyStateTitle>
-            <XhEmptyStateDescription>{{ t('identity.role.scope_empty') }}</XhEmptyStateDescription>
-          </XhEmptyStateRoot>
-          <div v-else class="scope-list">
-            <div v-for="grant in scopeGrants" :key="String(grant.basicId)" class="scope-row">
-              <span class="scope-dept">{{ grant.departmentName || grant.departmentId }}</span>
-              <XhTagRoot variant="subtle" size="sm" :tone="grant.includeChildren ? 'info' : 'neutral'">
-                <XhTagLabel>
-                  {{ grant.includeChildren ? t('identity.role.scope_include_children') : t('identity.role.scope_only_self') }}
-                </XhTagLabel>
-              </XhTagRoot>
-              <XhButton variant="ghost" size="sm" tone="danger" @click="removeScope(grant)">
-                {{ t('identity.role.scope_remove') }}
-              </XhButton>
-            </div>
-          </div>
+          <DataScopeEditor v-model="scopeDraft" :department-tree="scopeTree" :allow-custom="scopeAllowCustom" />
+        </div>
+        <div class="xh-dialog-footer">
+          <XhButton variant="subtle" @click="scopeVisible = false">
+            {{ t('common.actions.cancel') }}
+          </XhButton>
+          <XhButton variant="subtle" tone="brand" :loading="scopeSubmitting" :disabled="!scopeDirty || scopeLoading" style="margin-left: 8px" @click="saveScopes">
+            <XhButtonIndicator />
+            <XhButtonLabel>{{ t('identity.data_scope.save') }}</XhButtonLabel>
+          </XhButton>
         </div>
       </XhDrawerContent>
     </XhDrawerRoot>
+
+    <RoleParentsDialog v-model:show="parentsVisible" :role="parentsRole" />
   </SchemaPage>
 </template>
 
 <style scoped>
 .xh-detail-empty {
   padding: 48px 0;
-}
-
-.xh-detail-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-
-.xh-detail-table th,
-.xh-detail-table td {
-  padding: 9px 10px;
-  border: 1px solid hsl(var(--border));
-  text-align: left;
-  vertical-align: top;
-}
-
-.xh-detail-table th {
-  background: hsl(var(--muted));
-  font-weight: 500;
 }
 
 /* 权限分配抽屉 */
@@ -1359,35 +1533,18 @@ async function handleToggleStatus(row: RoleListItemDto) {
   opacity: 0.6;
 }
 
-/* 数据范围抽屉 */
-.scope-add {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
+/* 抽屉顶部的说明（角色成员、权限分配里的继承提示） */
+.drawer-tip {
+  margin: 0;
+  color: var(--xh-fg-muted);
+  font-size: var(--xh-text-caption-size);
 }
 
-.scope-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.scope-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  border: 1px solid hsl(var(--border));
-  border-radius: 8px;
-}
-
-.scope-dept {
+/* 数据范围抽屉：编辑区撑满抽屉剩余高度，保存/取消落在抽屉底部；部门多时在这里滚动 */
+.scope-stage {
   flex: 1;
-  font-size: 13px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-block-size: 0;
+  overflow-y: auto;
 }
 
 /* 菜单树撑满抽屉剩余高度：树自带 24rem 的最大高，不放开就是一块矮框加大片空白 */

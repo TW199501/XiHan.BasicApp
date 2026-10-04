@@ -1,6 +1,5 @@
 <script setup lang="ts" generic="TRow extends object">
 import type { MenuNode } from '@xihan-ui/headless'
-import type { Tone } from '@xihan-ui/kernel'
 import type { ActionSchema } from './types'
 import { XhButton, XhMenuRoot } from '@xihan-ui/vue'
 import { computed } from 'vue'
@@ -8,7 +7,10 @@ import { useI18n } from 'vue-i18n'
 import { useIsMobile } from '~/composables'
 import { usePermission } from '~/hooks'
 import { Icon } from '~/iconify'
+import { VNodeRender } from '../common/VNodeRender'
 import XIconButton from '../common/XIconButton.vue'
+import { actionMenuPrefix } from './action-menu'
+import { actionButtonTone, actionMenuTone } from './action-tone'
 
 defineOptions({ name: 'SchemaActionPanel' })
 
@@ -37,22 +39,6 @@ function isIconOnly(action: ActionSchema<TRow>): boolean {
   return isMobile.value && !!action.icon
 }
 
-/** 操作 Schema 的 type 到组件库 tone 轴的换算 */
-function toneOf(type: ActionSchema<TRow>['type']): Tone {
-  switch (type) {
-    case 'primary':
-      return 'brand'
-    case 'error':
-      return 'danger'
-    case 'info':
-    case 'success':
-    case 'warning':
-      return type
-    default:
-      return 'neutral'
-  }
-}
-
 /** 有权限的页面操作 */
 const permitted = computed(() =>
   props.actions.filter(a => a.scope === 'page' && (!a.permission || hasPermission(a.permission))),
@@ -65,12 +51,17 @@ const primaryActions = computed(() => permitted.value.slice(0, props.maxButtons)
 const moreActions = computed(() => permitted.value.slice(props.maxButtons))
 
 const moreOptions = computed<MenuNode[]>(() =>
-  moreActions.value.map(a => ({ value: a.key, label: a.title })),
+  moreActions.value.map(a => ({ value: a.key, label: a.title, tone: actionMenuTone(a.type) })),
 )
+
+/** 「更多」里的行首图标；没有一条声明图标时为空，不铺这一列 */
+const moreItemPrefix = computed(() => actionMenuPrefix(moreActions.value))
 </script>
 
 <template>
   <div class="flex flex-wrap gap-2 items-center">
+    <!-- 前置插槽：页面级上下文标签（如主从页当前所属对象），排在操作按钮之前 -->
+    <slot name="leading" />
     <template v-for="action in primaryActions" :key="action.key">
       <!-- 小屏收成纯图标钮，文案退到提示里；宽屏照常出文字 -->
       <XIconButton
@@ -83,7 +74,7 @@ const moreOptions = computed<MenuNode[]>(() =>
         v-else
         size="sm"
         :variant="action.type && action.type !== 'default' ? 'solid' : 'outline'"
-        :tone="toneOf(action.type)"
+        :tone="actionButtonTone(action.type)"
         :aria-label="action.title"
         @click="emit('action', action.key)"
       >
@@ -100,10 +91,19 @@ const moreOptions = computed<MenuNode[]>(() =>
       @select="(details: { value: string }) => emit('action', details.value)"
     >
       <template #trigger>
-        <XhButton size="sm" variant="outline">
+        <!-- 窄屏只剩省略号图标：转成图标钮并补名字 -->
+        <XhButton
+          size="sm"
+          variant="outline"
+          :icon-only="isMobile"
+          :aria-label="isMobile ? t('component.schema_page.more') : undefined"
+        >
           <Icon :icon="isMobile ? 'lucide:ellipsis' : 'lucide:chevron-down'" />
           <span v-if="!isMobile">{{ t('component.schema_page.more') }}</span>
         </XhButton>
+      </template>
+      <template v-if="moreItemPrefix" #item-prefix="node">
+        <VNodeRender :content="moreItemPrefix!(node)" />
       </template>
     </XhMenuRoot>
 

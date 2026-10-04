@@ -10,6 +10,7 @@ import { AccessResult, createPageRequest, logManagementApi, querySortsFromSchema
 import { SchemaPage } from '~/components'
 import { toast } from '~/composables'
 import { getOptionLabel } from '~/utils'
+import { renderHttpMethod } from '../_components/http-method'
 import { accessLogDetailFields } from '../_components/log-detail-fields'
 import LogDetailDrawer from '../_components/LogDetailDrawer.vue'
 import { decorateTraceFields, gotoTrace } from '../_components/trace-nav'
@@ -73,8 +74,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     searchPlaceholder: t('log.access.method_placeholder'),
     width: 100,
     order: 17,
-    // 直接展示原始方法字符串：OPTIONS/HEAD 等不在搜索选项内，避免按枚举映射后显示为空
-    render: row => (row as unknown as AccessLogListItemDto).method || '-',
+    render: row => renderHttpMethod((row as unknown as AccessLogListItemDto).method),
   },
   {
     key: 'accessResult',
@@ -89,7 +89,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 18,
     render: (row) => {
       const r = row as unknown as AccessLogListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: accessResultType(r.accessResult) }, () => h(XhTagLabel, () => getOptionLabel(accessResultOptions.value, r.accessResult)))
+      return h(XhTagRoot, { variant: 'subtle', tone: accessResultType(r.accessResult) }, () => h(XhTagLabel, () => getOptionLabel(accessResultOptions.value, r.accessResult)))
     },
   },
   { key: 'statusCode', title: t('log.common.status_code'), dataType: 'number', advancedSearch: true, sortable: true, width: 100, order: 19 },
@@ -175,7 +175,7 @@ async function handleDetail(row: AccessLogListItemDto) {
   }
   catch (error) {
     detailData.value = row
-    toast.error((error as Error)?.message || t('log.access.detail_load_failed'))
+    toast.danger((error as Error)?.message || t('log.access.detail_load_failed'))
   }
   finally {
     detailLoading.value = false

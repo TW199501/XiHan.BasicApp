@@ -24,7 +24,7 @@ XiHan.BasicApp 把"谁在什么时候、从哪里、对什么做了什么、结�
 - **操作日志 vs 实体变更**：操作日志覆盖宽泛的业务动作；实体变更只记**数据库行**的字段级前后快照，是合规级的数据溯源。
 - **登录日志 vs 操作日志**：认证类动作（登录/登出/令牌刷新/改密/绑定 MFA）由登录日志专门承担，操作日志写入器会**主动跳过**这些动作（见下），不重复记账。
 
-所有六张表都是**只追加、永不更新**的审计数据，并且都是**按月分表**（`Sys_Xxx_Log_{year}{month}{day}`，`SplitType.Month`）。这带来一条硬约束：**查询与清理必须带时间范围**，否则框架会扫描全部月表。业务上不支持删除；清理已自动化——动态任务 `LogRetentionCleanupTask`（覆盖本页六类 + 下文的权限变更日志共 7 类分表日志）按 `CreatedTime` 逐行删除过期数据（只删行、不 `DROP` 表），保留天数读全局配置 `saas:log:retention-days`（默认 180 天，非法/缺省时回退默认值），不依赖人工 `TRUNCATE`/`DROP`。
+所有六张表都是**只追加、永不更新**的审计数据，并且都是**按月分表**（`Sys_Xxx_Log_{year}{month}{day}`，`SplitType.Month`）。这带来一条硬约束：**查询与清理必须带时间范围**，否则框架会扫描全部月表。业务上不支持删除；清理已自动化——动态任务 `LogRetentionCleanupTask`（覆盖本页六类 + 下文的权限变更日志共 7 类分表日志）按 `CreatedTime` 逐行删除过期数据（只删行、不 `DROP` 表），保留天数读平台参数 `saas.log.retention-days`（缺省 180 天；不是正整数时任务直接失败，不按错误的保留期删数据），不依赖人工 `TRUNCATE`/`DROP`。
 
 ## 逐类详解
 
@@ -53,10 +53,10 @@ XiHan.BasicApp 把"谁在什么时候、从哪里、对什么做了什么、结�
 
 面向业务行为，写入器（`SaasOperationLogWriter`）有两处关键决策：
 
-1. **查询动作不落库**：先按动作名语义识别 `OperationType`，若判定为 `Query` 则直接返回，不记操作日志（避免海量读请求灌满表）。
+1. **查询动作不落库**：GET/HEAD/OPTIONS 请求在框架过滤器处就不交给写入器；其余请求先看端点所属服务——查询服务（`XxxQueryService`，动态 API 控制器名 `XxxQuery`）只承载读，其端点一律判为 `Query`，命令服务再按动作名语义识别 `OperationType`。判定为 `Query` 则直接返回，不记操作日志（避免海量读请求灌满表）。先看服务角色是因为带复杂条件的读（分页、"我的"列表、时间线）走 POST、动作名又被剥掉 `Get` 前缀，单看动作名会误判：`ExportTaskQuery.Mine` 曾被记成"新增"，`ReviewQuery.ReviewPage` 被记成"审核"。`XiHan.BasicApp.Api.Tests` 的 `OperationLogClassificationTests` 按运行期路由约定逐端点守住这条约定：查询服务的端点全部排除，命令服务的控制器名不得以 `Query` 结尾。
 2. **认证动作让位登录日志**：`Auth` 控制器下的 `Login`/`Logout`/`EmailLogin`/`RefreshToken`/`Register`/`SwitchTenant` 等动作跳过（这些由登录日志承担）。
 
-`OperationType` 是共享枚举（`OperationType`，也用于实体变更），语义识别优先看动作名而非 HTTP 方法（避免 POST 一律记成"新增"）：
+`OperationType` 是共享枚举（`OperationType`，也用于实体变更），命令服务的语义识别优先看动作名，认不出才回退到 HTTP 方法（避免 POST 一律记成"新增"）：
 
 | 值 | 标签 | 值 | 标签 |
 | --- | --- | --- | --- |
@@ -159,7 +159,7 @@ services.AddScoped<IEntityAuditContextProvider, SaasEntityDiffContextProvider>()
 
 - **分页走 POST**：`GetXxxLogPageAsync` 显式标 `[HttpPost]`，前端把整个查询对象（含 `conditions`/`filters`/`sorts`）作 body 下发。
 - **权限门控**：每个方法用 `[PermissionAuthorize(SaasPermissionCodes.XxxLog.Read)]` 校验查看权限。
-- **字段级安全（FLS）**：排序与过滤在下推前经 `IFieldSecurityService.GuardSortsAsync` / `GuardFiltersAsync` 门控，剔除**不可读或已脱敏**的字段——保证用户不能借排序/过滤旁路脱敏策略。前端选择的多字段排序优先，无有效排序时回退默认按时间倒序（访问日志按 `AccessTime`、操作日志按 `OperationTime`、实体变更按 `AuditTime` 等）。
+- **字段级安全（FLS）**：排序、过滤与关键字在下推前经 `IFieldSecurityService.GuardQueryAsync` 门控，剔除**读受保护**（非明文）的字段——保证用户不能借排序/过滤旁路脱敏策略；响应按日志实体打码（`SysAccessLog`、`SysOpenApiLog` 等各自登记，列表 DTO 的 `SessionId` 声明了来源 `UserSessionId`，链路时间线按每条的日志类型打码）。前端选择的多字段排序优先，无有效排序时回退默认按时间倒序（访问日志按 `AccessTime`、操作日志按 `OperationTime`、实体变更按 `AuditTime` 等）。
 - **分表查询**：查询链路都带 `.SplitTable()`，配合时间区间条件命中对应月表。
 
 查询支持的过滤维度按日志类型定制，共性包括：时间区间（`Between`）、`UserId`/`UserName`、`TraceId`（跨日志串联同一请求）、关键字模糊、执行耗时区间；再叠加各自特有维度（访问结果、操作类型、异常严重级别、登录结果、实体类型/风险等级等）。

@@ -7,37 +7,36 @@
  */
 import { mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { defineComponent, h } from 'vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { LOGIN_PATH } from '~/constants'
 import { i18n } from '~/locales'
 import AuthEntrySwitcher from './AuthEntrySwitcher.vue'
 
-const captured: { options: ReadonlyArray<{ label: string }> } = { options: [] }
+const captured: { size: string } = { size: '' }
 
-vi.mock('~/components', () => ({
-  XSegmented: defineComponent({
-    name: 'XSegmented',
-    props: { options: { type: Array, required: true }, value: { type: String, default: '' } },
-    setup(props) {
-      return () => {
-        captured.options = props.options as ReadonlyArray<{ label: string }>
-        return h('div')
-      }
-    },
-  }),
-}))
+/** 标签带拿到的宽度：jsdom 不排版，由这里拨好；缺省取宽屏与平板竖屏的表单栏宽 */
+const strip = vi.hoisted(() => ({ width: 460 }))
+
+vi.mock('@vueuse/core', async (importOriginal) => {
+  const { ref } = await import('vue')
+  return {
+    ...await importOriginal<typeof import('@vueuse/core')>(),
+    useElementSize: () => ({ width: ref(strip.width), height: ref(0), stop: () => {} }),
+  }
+})
 
 async function labelsFor(locale: string): Promise<string[]> {
   i18n.global.locale.value = locale as typeof i18n.global.locale.value
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/:p(.*)*', component: { render: () => null } }] })
   await router.push(LOGIN_PATH)
-  mount(AuthEntrySwitcher, { global: { plugins: [i18n, router] } })
-  return captured.options.map(option => option.label)
+  const wrapper = mount(AuthEntrySwitcher, { props: { enabled: true }, global: { plugins: [i18n, router] } })
+  captured.size = wrapper.find('[data-scope="tabs"][data-part="root"]').attributes('data-size') ?? ''
+  return wrapper.findAll('[data-scope="tabs"][data-part="trigger"]').map(item => item.text())
 }
 
 afterEach(() => {
   i18n.global.locale.value = 'zh-CN'
+  strip.width = 460
 })
 
 describe('登录方式切换器文案', () => {
@@ -58,9 +57,24 @@ describe('登录方式切换器文案', () => {
     expect(await labelsFor('hi-IN')).toEqual(['खाता', 'फ़ोन', 'ईमेल', 'QR कोड'])
   })
 
-  it('中文本来放得下，维持原有完整说法', async () => {
+  it('中文四字一组：小屏一行只放得下四个四字段', async () => {
     expect(await labelsFor('zh-CN')).toEqual(['账号登录', '手机登录', '邮箱登录', '扫码登录'])
-    expect(await labelsFor('zh-TW')).toEqual(['帳號登入', '手機登入', '電子郵件登入', '掃碼登入'])
+    expect(await labelsFor('zh-TW')).toEqual(['帳號登入', '手機登入', '郵件登入', '掃碼登入'])
+  })
+
+  it('档位随标签带宽度走：放得下就用 lg，手机窄栏依次降到 md、sm，四条标签仍排在一行', async () => {
+    await labelsFor('zh-CN')
+    expect(captured.size).toBe('lg')
+
+    // 375 宽视口的表单栏
+    strip.width = 304
+    await labelsFor('zh-CN')
+    expect(captured.size).toBe('md')
+
+    // 360 宽视口的表单栏：日文四条 md 合计 294，再窄就得降档
+    strip.width = 289
+    await labelsFor('zh-CN')
+    expect(captured.size).toBe('sm')
   })
 
   it('页面标题键不受影响，浏览器标签页仍显示完整说法', () => {

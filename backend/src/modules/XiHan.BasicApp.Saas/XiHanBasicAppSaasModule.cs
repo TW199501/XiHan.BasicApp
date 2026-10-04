@@ -40,7 +40,7 @@ public class XiHanBasicAppSaasModule : XiHanModule
     {
         var services = context.Services;
 
-        // 注册 SaaS 模块种子数据（系统基线始终播种；演示数据由 Saas:Seed:EnableDemoData 控制）
+        // 注册 SaaS 模块种子数据（基础数据始终播种；演示数据只在 Saas:Seed:EnableDemoData 为 true 时写入）
         services.AddSaasDataSeeders();
         services.AddSaasDemoDataSeeders();
 
@@ -49,6 +49,7 @@ public class XiHanBasicAppSaasModule : XiHanModule
 
         // 注册 SaaS 应用层内部服务
         services.AddSaasApplicationServices();
+        services.AddSaasFieldSecurityEntities();
 
         // 修正 .NET 配置对 List<T> 的「追加而非替换」语义：框架 XiHanOpenApiSecurityOptions 的默认
         // ProtectedPathPrefixes=["/api"] 不会被 appsettings 的值替换，而是被追加，导致最终为 ["/api", 配置值...]，

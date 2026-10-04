@@ -1,11 +1,9 @@
 <script setup lang="ts">
 import type { MenuRoute } from '~/types'
 import { useFullscreen } from '@vueuse/core'
-import { XhHotkeys } from '@xihan-ui/vue'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { GLOBAL_HOTKEYS } from '~/composables/useGlobalShortcuts'
 import { ensurePinyin, getPinyinIndex, usePinyinReady } from '~/composables/usePinyin'
 import { useRecentRoutes } from '~/composables/useRecentRoutes'
 import { AUTH_PATH, LAYOUT_EVENT_OPEN_GLOBAL_SEARCH } from '~/constants'
@@ -13,7 +11,11 @@ import { useRefresh, useTheme } from '~/hooks'
 import { Icon } from '~/iconify'
 import { useAccessStore, useAppStore, useAuthStore, useFavoritesStore, useLayoutBridgeStore } from '~/stores'
 
-defineOptions({ name: 'AppGlobalSearch', inheritAttrs: false })
+/**
+ * 命令面板：布局层常驻一份，由 layoutBridgeStore.requestOpenGlobalSearch 打开。
+ * 顶栏入口（HeaderSearchTrigger）、悬浮组入口与快捷键都只发请求，入口放哪、藏不藏都不影响面板可用
+ */
+defineOptions({ name: 'AppGlobalSearch' })
 
 const router = useRouter()
 const route = useRoute()
@@ -28,9 +30,6 @@ const { refresh: refreshCurrentTab } = useRefresh()
 const { isFullscreen, toggle: toggleFullscreen } = useFullscreen()
 const { recent, recordRecent } = useRecentRoutes()
 const pinyinReady = usePinyinReady()
-
-// 仅在快捷键启用时展示触发按钮上的 ⌘K/Ctrl+K 徽标
-const showShortcut = computed(() => appStore.shortcutEnable && appStore.shortcutSearch)
 
 const visible = ref(false)
 const keyword = ref('')
@@ -420,24 +419,6 @@ watch(
 </script>
 
 <template>
-  <!-- 触发按钮容器：$attrs 挂到此处（如外部传 class="mr-1"） -->
-  <div v-bind="$attrs">
-    <div class="hidden sm:block">
-      <button type="button" class="search-trigger" @click="layoutBridgeStore.requestOpenGlobalSearch()">
-        <span class="shrink-0 text-[hsl(var(--muted-foreground))]" style="display: inline-flex; font-size: 14px">
-          <Icon icon="lucide:search" />
-        </span>
-        <span class="search-trigger-text">{{ t('header.search.placeholder') }}</span>
-        <XhHotkeys v-if="showShortcut" class="search-kbd" :keys="[...GLOBAL_HOTKEYS.search]" :prevent-default="false" />
-      </button>
-    </div>
-    <div class="sm:hidden">
-      <button type="button" class="search-trigger-icon" @click="layoutBridgeStore.requestOpenGlobalSearch()">
-        <Icon width="16" height="16" icon="lucide:search" />
-      </button>
-    </div>
-  </div>
-
   <Teleport to="body">
     <Transition name="cmdk">
       <div v-if="visible" class="cmdk-mask" @click="close">
@@ -511,58 +492,6 @@ watch(
 </template>
 
 <style scoped>
-/* ===== 触发按钮（保持原样） ===== */
-.search-trigger {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 10px;
-  border: 1px solid hsl(var(--border));
-  border-radius: 9999px;
-  background: hsl(var(--muted) / 0.4);
-  cursor: pointer;
-  transition:
-    background var(--xh-motion-duration-micro) var(--xh-motion-ease-enter),
-    border-color var(--xh-motion-duration-micro) var(--xh-motion-ease-enter);
-  outline: none;
-}
-
-.search-trigger:hover {
-  background: hsl(var(--muted) / 0.8);
-}
-
-.search-trigger-text {
-  font-size: 13px;
-  color: hsl(var(--muted-foreground));
-  white-space: nowrap;
-  user-select: none;
-}
-
-/* 键帽画在触发按钮里，点它等于点按钮 */
-.search-kbd {
-  pointer-events: none;
-}
-
-.search-trigger-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: none;
-  border-radius: 50%;
-  background: transparent;
-  cursor: pointer;
-  color: hsl(var(--foreground));
-  transition: background var(--xh-motion-duration-micro) var(--xh-motion-ease-enter);
-  outline: none;
-}
-
-.search-trigger-icon:hover {
-  background: hsl(var(--accent));
-}
-
 /* ===== 命令面板 ===== */
 .cmdk-mask {
   position: fixed;
@@ -595,7 +524,6 @@ watch(
   gap: 10px;
   padding: 0 14px;
   height: 52px;
-  border-bottom: 1px solid hsl(var(--border));
   flex-shrink: 0;
 }
 
@@ -719,7 +647,6 @@ watch(
   display: flex;
   gap: 16px;
   padding: 8px 14px;
-  border-top: 1px solid hsl(var(--border));
   font-size: 12px;
   color: hsl(var(--muted-foreground));
   flex-shrink: 0;
@@ -753,7 +680,7 @@ watch(
 }
 
 .cmdk-enter-active .cmdk-panel {
-  transition: transform var(--xh-motion-duration-enter) var(--xh-motion-ease-settle);
+  transition: transform var(--xh-motion-duration-move) var(--xh-motion-ease-settle);
 }
 
 .cmdk-enter-from .cmdk-panel {

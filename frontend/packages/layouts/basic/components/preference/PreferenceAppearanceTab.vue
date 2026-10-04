@@ -1,12 +1,13 @@
 <script setup lang="ts">
+import type { UiDensity } from '~/constants'
 import type { useAppStore } from '~/stores'
 import { XhSwitch } from '@xihan-ui/vue'
 import { computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { XColorPicker, XInput, XNumberInput, XSlider } from '~/components'
+import { XColorPicker, XInput, XNumberInput, XSegmented, XSlider } from '~/components'
 import { LOADER_CURVES } from '~/components/common/math-curve-loaders'
 import PageLoader from '~/components/common/PageLoader.vue'
-import { ALL_THEME_COLORS, DEFAULT_THEME_COLOR, THEME_COLOR_GROUPS } from '~/constants'
+import { ALL_THEME_COLORS, DEFAULT_THEME_COLOR, THEME_COLOR_GROUPS, UI_DENSITY_COMFORTABLE, UI_DENSITY_COMPACT } from '~/constants'
 import { useTheme } from '~/hooks'
 import { Icon } from '~/iconify'
 import PrefTip from './PrefTip.vue'
@@ -73,6 +74,12 @@ function handleModeChange(value: 'light' | 'dark' | 'auto', event: Event) {
     clientY: rect.top + rect.height / 2,
   })
 }
+
+// 界面密度：两档对应 XiHan.UI 的 data-density，控件 32/36 与 28/32
+const densityOptions = computed<Array<{ value: UiDensity, label: string }>>(() => [
+  { value: UI_DENSITY_COMFORTABLE, label: t('preference.appearance.density.comfortable') },
+  { value: UI_DENSITY_COMPACT, label: t('preference.appearance.density.compact') },
+])
 
 const transitionItems = computed(() => [
   { value: 'scale-up', label: t('preference.general.animation.scale_up') },
@@ -157,19 +164,12 @@ const loaderItems = computed(() =>
                 <div class="theme-color-dot custom-dot">
                   <Icon icon="lucide:pipette" />
                 </div>
-                <!-- 包裹 div 承载定位 class：NColorPicker 根为 VBinder(teleport)，class 无法直接挂载 -->
+                <!-- 透明取色器整张铺在卡片上，点卡片任意处都打开取色面板 -->
                 <div class="custom-color-overlay">
                   <XColorPicker
                     :value="appStore.themeColor"
-                    :modes="['hex']"
-                    :show-alpha="false"
-                    :actions="['confirm']"
                     @update:value="(value) => appStore.setThemeColor(value)"
-                  >
-                    <template #label>
-                      <span />
-                    </template>
-                  </XColorPicker>
+                  />
                 </div>
               </div>
               <span class="theme-color-label">{{ t('preference.appearance.color.custom') }}</span>
@@ -201,7 +201,7 @@ const loaderItems = computed(() =>
           <span>{{ t('preference.appearance.color.dynamic') }}</span>
           <PrefTip :content="t('preference.appearance.color.dynamic_tip')" />
         </div>
-        <XhSwitch v-model:checked="appStore.themeDynamicColor" />
+        <XhSwitch v-model:checked="appStore.themeDynamicColor" :aria-label="t('preference.appearance.color.dynamic')" />
       </div>
     </section>
 
@@ -224,6 +224,25 @@ const loaderItems = computed(() =>
       </div>
     </section>
 
+    <!-- 密度 -->
+    <section class="pref-card">
+      <div class="section-title">
+        {{ t('preference.appearance.density.title') }}
+      </div>
+      <div class="pref-row">
+        <div class="flex gap-1 items-center">
+          <span>{{ t('preference.appearance.density.level') }}</span>
+          <PrefTip :content="t('preference.appearance.density.tip')" />
+        </div>
+        <XSegmented
+          :value="appStore.uiDensity"
+          :options="densityOptions"
+          size="sm"
+          @update:value="(value) => appStore.setUiDensity(value)"
+        />
+      </div>
+    </section>
+
     <!-- 导航 -->
     <section class="pref-card">
       <div class="section-title">
@@ -236,7 +255,7 @@ const loaderItems = computed(() =>
           </span>
           <PrefTip :content="t('preference.appearance.navigation.sidebar_dark_tip')" />
         </div>
-        <XhSwitch v-model:checked="appStore.sidebarDark" :disabled="sidebarDarkDisabled" />
+        <XhSwitch v-model:checked="appStore.sidebarDark" :disabled="sidebarDarkDisabled" :aria-label="t('preference.appearance.navigation.sidebar_dark')" />
       </div>
       <div class="pref-row">
         <div class="flex gap-1 items-center">
@@ -245,7 +264,7 @@ const loaderItems = computed(() =>
           </span>
           <PrefTip :content="t('preference.appearance.navigation.sidebar_sub_dark_tip')" />
         </div>
-        <XhSwitch v-model:checked="appStore.sidebarSubDark" :disabled="sidebarSubDarkDisabled" />
+        <XhSwitch v-model:checked="appStore.sidebarSubDark" :disabled="sidebarSubDarkDisabled" :aria-label="t('preference.appearance.navigation.sidebar_sub_dark')" />
       </div>
       <div class="pref-row">
         <div class="flex gap-1 items-center">
@@ -254,7 +273,7 @@ const loaderItems = computed(() =>
           </span>
           <PrefTip :content="t('preference.appearance.navigation.header_dark_tip')" />
         </div>
-        <XhSwitch v-model:checked="appStore.headerDark" :disabled="headerDarkDisabled" />
+        <XhSwitch v-model:checked="appStore.headerDark" :disabled="headerDarkDisabled" :aria-label="t('preference.appearance.navigation.header_dark')" />
       </div>
     </section>
 
@@ -272,9 +291,9 @@ const loaderItems = computed(() =>
             :max="20"
             :step="1"
             size="sm"
-            button-placement="both"
             class="pref-num pref-num--center"
             style="width: 130px"
+            :aria-label="t('preference.appearance.font.size')"
             @update:value="(value) => value !== null && appStore.setFontSize(value)"
           />
           <span class="unit-label">px</span>
@@ -292,14 +311,14 @@ const loaderItems = computed(() =>
           <span>{{ t('preference.general.animation.transition_progress') }}</span>
           <PrefTip :content="t('preference.general.animation.transition_progress_tip')" />
         </div>
-        <XhSwitch v-model:checked="appStore.transitionProgress" />
+        <XhSwitch v-model:checked="appStore.transitionProgress" :aria-label="t('preference.general.animation.transition_progress')" />
       </div>
       <div class="pref-row">
         <div class="flex gap-1 items-center">
           <span>{{ t('preference.general.animation.transition_loading') }}</span>
           <PrefTip :content="t('preference.general.animation.transition_loading_tip')" />
         </div>
-        <XhSwitch v-model:checked="appStore.transitionLoading" />
+        <XhSwitch v-model:checked="appStore.transitionLoading" :aria-label="t('preference.general.animation.transition_loading')" />
       </div>
       <div
         class="transition-grid"
@@ -326,6 +345,7 @@ const loaderItems = computed(() =>
         <XhSwitch
           v-model:checked="appStore.loadingFixedColor"
           :disabled="!appStore.transitionLoading"
+          :aria-label="t('preference.general.animation.loading_fixed_color')"
         />
       </div>
       <div class="pref-row">
@@ -333,14 +353,14 @@ const loaderItems = computed(() =>
           <span>{{ t('preference.general.animation.theme_animation') }}</span>
           <PrefTip :content="t('preference.general.animation.theme_animation_tip')" />
         </div>
-        <XhSwitch v-model:checked="appStore.themeAnimationEnabled" />
+        <XhSwitch v-model:checked="appStore.themeAnimationEnabled" :aria-label="t('preference.general.animation.theme_animation')" />
       </div>
       <div class="pref-row">
         <div class="flex gap-1 items-center">
           <span>{{ t('preference.general.animation.transition_enable') }}</span>
           <PrefTip :content="t('preference.general.animation.transition_enable_tip')" />
         </div>
-        <XhSwitch v-model:checked="appStore.transitionEnable" />
+        <XhSwitch v-model:checked="appStore.transitionEnable" :aria-label="t('preference.general.animation.transition_enable')" />
       </div>
       <div
         class="transition-grid"
@@ -371,21 +391,21 @@ const loaderItems = computed(() =>
           <span>{{ t('preference.general.dynamic_island') }}</span>
           <PrefTip :content="t('preference.general.dynamic_island_tip')" />
         </div>
-        <XhSwitch v-model:checked="appStore.widgetDynamicIsland" />
+        <XhSwitch v-model:checked="appStore.widgetDynamicIsland" :aria-label="t('preference.general.dynamic_island')" />
       </div>
       <div class="pref-row">
         <div class="flex gap-1 items-center">
           <span>{{ t('preference.general.notify_sound') }}</span>
           <PrefTip :content="t('preference.general.notify_sound_tip')" />
         </div>
-        <XhSwitch v-model:checked="appStore.notifySound" />
+        <XhSwitch v-model:checked="appStore.notifySound" :aria-label="t('preference.general.notify_sound')" />
       </div>
       <div class="pref-row">
         <div class="flex gap-1 items-center">
           <span>{{ t('preference.general.table_row_peek') }}</span>
           <PrefTip :content="t('preference.general.table_row_peek_tip')" />
         </div>
-        <XhSwitch v-model:checked="appStore.tableRowPeek" />
+        <XhSwitch v-model:checked="appStore.tableRowPeek" :aria-label="t('preference.general.table_row_peek')" />
       </div>
     </section>
 
@@ -399,7 +419,7 @@ const loaderItems = computed(() =>
           <span>{{ t('preference.general.frosted_glass') }}</span>
           <PrefTip :content="t('preference.general.frosted_glass_tip')" />
         </div>
-        <XhSwitch v-model:checked="appStore.frostedGlassEnabled" />
+        <XhSwitch v-model:checked="appStore.frostedGlassEnabled" :aria-label="t('preference.general.frosted_glass')" />
       </div>
       <div v-if="appStore.frostedGlassEnabled" class="pref-row">
         <span>{{ t('preference.general.frosted_glass_intensity') }}</span>
@@ -408,7 +428,8 @@ const loaderItems = computed(() =>
           :min="1"
           :max="100"
           :step="1"
-          :tooltip="true"
+          show-value
+          :aria-label="t('preference.general.frosted_glass_intensity')"
           style="width: 150px"
         />
       </div>
@@ -417,7 +438,7 @@ const loaderItems = computed(() =>
           <span>{{ t('preference.general.watermark') }}</span>
           <PrefTip :content="t('preference.general.watermark_tip')" />
         </div>
-        <XhSwitch v-model:checked="appStore.watermarkEnabled" />
+        <XhSwitch v-model:checked="appStore.watermarkEnabled" :aria-label="t('preference.general.watermark')" />
       </div>
       <div v-if="appStore.watermarkEnabled" class="mb-2 pref-row">
         <span>{{ t('preference.general.watermark_content') }}</span>
@@ -426,6 +447,7 @@ const loaderItems = computed(() =>
           size="sm"
           style="width: 150px"
           :placeholder="t('preference.general.watermark_text')"
+          :aria-label="t('preference.general.watermark_content')"
         />
       </div>
     </section>
@@ -440,14 +462,14 @@ const loaderItems = computed(() =>
           <span>{{ t('preference.appearance.other.color_weakness') }}</span>
           <PrefTip :content="t('preference.appearance.other.color_weakness_tip')" />
         </div>
-        <XhSwitch v-model:checked="appStore.colorWeaknessEnabled" />
+        <XhSwitch v-model:checked="appStore.colorWeaknessEnabled" :aria-label="t('preference.appearance.other.color_weakness')" />
       </div>
       <div class="pref-row">
         <div class="flex gap-1 items-center">
           <span>{{ t('preference.appearance.other.grayscale') }}</span>
           <PrefTip :content="t('preference.appearance.other.grayscale_tip')" />
         </div>
-        <XhSwitch v-model:checked="appStore.grayscaleEnabled" />
+        <XhSwitch v-model:checked="appStore.grayscaleEnabled" :aria-label="t('preference.appearance.other.grayscale')" />
       </div>
     </section>
   </div>
@@ -612,8 +634,7 @@ const loaderItems = computed(() =>
   border-style: dashed;
 }
 
-/* NColorPicker 透明遮罩：绝对覆盖整张卡片，点击即弹出取色器 */
-/* 透明触发层：绝对覆盖整卡（包裹 div，class 挂在此处而非 NColorPicker 上） */
+/* 透明触发层：绝对覆盖整卡，点击即弹出取色器 */
 .custom-color-overlay {
   position: absolute;
   inset: 0;
@@ -622,8 +643,9 @@ const loaderItems = computed(() =>
   cursor: pointer;
 }
 
-/* 内部 NColorPicker 触发块充满整层，确保任意位置点击都能弹出取色器 */
+/* 取色器根、视觉盒与触发钮逐层充满整层，确保任意位置点击都能弹出取色器 */
 .custom-color-overlay :deep([data-scope='color-picker'][data-part='root']),
+.custom-color-overlay :deep([data-scope='color-picker'][data-part='control']),
 .custom-color-overlay :deep([data-scope='color-picker'][data-part='trigger']) {
   width: 100%;
   height: 100%;
@@ -933,7 +955,7 @@ const loaderItems = computed(() =>
   animation: anim-skew-slide 2.2s var(--xh-motion-ease-sweep) infinite;
 }
 
-/* 数字输入框里的文字对齐：input 由组件库渲染，只能经 :deep 够到 */
+/* 数字输入框里的文字对齐：减钮在前、加钮在后，数字居中夹在两钮之间；input 由组件库渲染，只能经 :deep 够到 */
 .pref-num--center :deep([data-scope='number-field'][data-part='input']) {
   text-align: center;
 }

@@ -10,6 +10,7 @@ using XiHan.BasicApp.Saas.Application.Contracts;
 using XiHan.BasicApp.Saas.Application.Dtos;
 using XiHan.BasicApp.Saas.Application.Extensions;
 using XiHan.BasicApp.Saas.Application.Mappers;
+using XiHan.BasicApp.Saas.Application.Services;
 using XiHan.BasicApp.Saas.Domain.Entities;
 using XiHan.BasicApp.Saas.Domain.Enums;
 using XiHan.BasicApp.Saas.Domain.Permissions;
@@ -53,18 +54,25 @@ public sealed class DictQueryService
     private readonly IDistributedCache<SaasDictItemTreeCacheItem, string> _dictItemTreeCache;
 
     /// <summary>
+    /// 字段级安全服务（排序/过滤门控）
+    /// </summary>
+    private readonly IFieldSecurityService _fieldSecurity;
+
+    /// <summary>
     /// 构造函数
     /// </summary>
     public DictQueryService(
         IDictRepository dictRepository,
         IDictItemRepository dictItemRepository,
         ICurrentTenant currentTenant,
-        IDistributedCache<SaasDictItemTreeCacheItem, string> dictItemTreeCache)
+        IDistributedCache<SaasDictItemTreeCacheItem, string> dictItemTreeCache,
+        IFieldSecurityService fieldSecurityService)
     {
         _dictRepository = dictRepository;
         _dictItemRepository = dictItemRepository;
         _currentTenant = currentTenant;
         _dictItemTreeCache = dictItemTreeCache;
+        _fieldSecurity = fieldSecurityService;
     }
 
     /// <summary>
@@ -81,6 +89,15 @@ public sealed class DictQueryService
         cancellationToken.ThrowIfCancellationRequested();
 
         var request = BuildDictPageRequest(input);
+
+        // 字段安全：剔除读受保护字段上的排序、过滤与关键字搜索（防按结果反推原值）
+        await _fieldSecurity.GuardQueryAsync(request.Conditions, typeof(SysDict), cancellationToken);
+
+        if (request.Conditions.Sorts.Count == 0)
+        {
+            ApplyDictSorts(request);
+        }
+
         var dicts = await _dictRepository.GetPagedAsync(request, cancellationToken);
         return dicts.Map(DictApplicationMapper.ToListItemDto);
     }
@@ -119,6 +136,14 @@ public sealed class DictQueryService
         cancellationToken.ThrowIfCancellationRequested();
 
         var request = BuildDictItemPageRequest(input);
+
+        // 字段安全：剔除读受保护字段上的排序、过滤与关键字搜索（防按结果反推原值）
+        await _fieldSecurity.GuardQueryAsync(request.Conditions, typeof(SysDictItem), cancellationToken);
+        if (request.Conditions.Sorts.Count == 0)
+        {
+            ApplyDictItemSorts(request);
+        }
+
         var dictItems = await _dictItemRepository.GetPagedAsync(request, cancellationToken);
         return dictItems.Map(DictApplicationMapper.ToItemListItemDto);
     }
@@ -160,6 +185,48 @@ public sealed class DictQueryService
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        return await LoadDictItemTreeAsync(input, cancellationToken);
+    }
+
+    /// <summary>
+    /// 按字典编码获取下拉选项
+    /// </summary>
+    /// <param name="dictCode">字典编码</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>字典选项（字典停用时为空）</returns>
+    /// <remarks>
+    /// 只按登录态门控（类级 Authorize，不挂权限码）：字典是业务表单下拉的选项来源，
+    /// 使用者不一定持有字典管理权限。只暴露下拉用得到的码、名、层级、默认与停用标记，
+    /// 不含项值、说明与扩展元数据。停用的字典不暴露任何项；停用的项照样返回并标成停用，
+    /// 引用了它的历史数据仍能显示名称，只是不能再选。
+    /// </remarks>
+    [HttpGet]
+    public async Task<IReadOnlyList<DictOptionDto>> GetDictOptionsAsync(string dictCode, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(dictCode);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var dict = await _dictRepository.GetByCodeAsync(dictCode.Trim(), cancellationToken)
+            ?? throw new InvalidOperationException($"字典 {dictCode.Trim()} 不存在。");
+        if (dict.Status != EnableStatus.Enabled)
+        {
+            return [];
+        }
+
+        var tree = await LoadDictItemTreeAsync(
+            new DictItemTreeQueryDto { DictId = dict.BasicId, OnlyEnabled = false },
+            cancellationToken);
+
+        var options = new List<DictOptionDto>();
+        AppendOptions(tree, null, options);
+        return options;
+    }
+
+    /// <summary>
+    /// 读取字典项树（走分布式缓存）
+    /// </summary>
+    private async Task<IReadOnlyList<DictItemTreeNodeDto>> LoadDictItemTreeAsync(DictItemTreeQueryDto input, CancellationToken cancellationToken)
+    {
         // 字典项树为高频读取（字典驱动的下拉/选项渲染），走分布式缓存；
         // 字典/字典项写路径调 InvalidateDictionaryAsync 整体失效（considerUow 事务提交后生效）
         var cacheKey = SaasCacheKeys.DictItemTree(_currentTenant.Id, input.DictId, input.OnlyEnabled, input.Limit);
@@ -231,7 +298,18 @@ public sealed class DictQueryService
             request.Conditions.AddFilter((SysDict dict) => dict.Status, input.Status.Value);
         }
 
-        ApplyDictSorts(request);
+        // 前端选择的排序原样带入（FLS 门控与默认兜底在调用方 GetDictPageAsync 处理）
+        if (input.Conditions?.Sorts is { Count: > 0 } sorts)
+        {
+            _ = request.Conditions.AddSorts(sorts);
+        }
+
+        // 前端多选过滤原样带入（FLS 门控在调用方 GetDictPageAsync 处理）
+        if (input.Conditions?.Filters is { Count: > 0 } filters)
+        {
+            _ = request.Conditions.AddFilters(filters);
+        }
+
         return request;
     }
 
@@ -256,7 +334,18 @@ public sealed class DictQueryService
             input.ItemCode,
             input.IsDefault,
             input.Status);
-        ApplyDictItemSorts(request);
+
+        // 前端选择的排序与多选过滤原样带入（FLS 门控与默认兜底在调用方 GetDictItemPageAsync 处理）
+        if (input.Conditions?.Sorts is { Count: > 0 } sorts)
+        {
+            _ = request.Conditions.AddSorts(sorts);
+        }
+
+        if (input.Conditions?.Filters is { Count: > 0 } filters)
+        {
+            _ = request.Conditions.AddFilters(filters);
+        }
+
         return request;
     }
 
@@ -334,7 +423,7 @@ public sealed class DictQueryService
     }
 
     /// <summary>
-    /// 应用系统字典排序
+    /// 应用系统字典默认排序（前端未指定有效排序时使用）
     /// </summary>
     private static void ApplyDictSorts(BasicAppPRDto request)
     {
@@ -352,6 +441,28 @@ public sealed class DictQueryService
         request.Conditions.AddSort((SysDictItem item) => item.ParentId, SortDirection.Ascending, 1);
         request.Conditions.AddSort((SysDictItem item) => item.Sort, SortDirection.Ascending, 2);
         request.Conditions.AddSort((SysDictItem item) => item.ItemCode, SortDirection.Ascending, 3);
+    }
+
+    /// <summary>
+    /// 字典项树按深度优先展平成下拉选项（顺序即树的呈现顺序）
+    /// </summary>
+    /// <param name="nodes">同级字典项</param>
+    /// <param name="parentValue">上级项编码（顶层为 null）</param>
+    /// <param name="options">收集结果</param>
+    private static void AppendOptions(IEnumerable<DictItemTreeNodeDto> nodes, string? parentValue, List<DictOptionDto> options)
+    {
+        foreach (var node in nodes)
+        {
+            options.Add(new DictOptionDto
+            {
+                Value = node.ItemCode,
+                Label = node.ItemName,
+                ParentValue = parentValue,
+                IsDefault = node.IsDefault,
+                Disabled = node.Status != EnableStatus.Enabled
+            });
+            AppendOptions(node.Children, node.ItemCode, options);
+        }
     }
 
     /// <summary>

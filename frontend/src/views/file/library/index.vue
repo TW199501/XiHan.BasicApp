@@ -9,7 +9,7 @@ import type {
 } from '@/api'
 import type { ListFieldSchema, PageSchema, SchemaActionPayload, XDataTableColumn } from '~/components'
 import { createHighlighter } from '@xihan-ui/code-highlight'
-import { XhButton, XhCodeBlock, XhDescriptionsItem, XhDescriptionsLabel, XhDescriptionsRoot, XhDescriptionsValue, XhDialogCloseTrigger, XhDialogContent, XhDialogRoot, XhDialogTitle, XhDrawerCloseTrigger, XhDrawerContent, XhDrawerRoot, XhDrawerTitle, XhFileUploadDropzone, XhFileUploadHiddenInput, XhFileUploadRoot, XhFlex, XhSwitch, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
+import { XhButton, XhButtonIndicator, XhButtonLabel, XhButtonPrefix, XhCodeViewCode, XhCodeViewPre, XhCodeViewRoot, XhDescriptionsItem, XhDescriptionsLabel, XhDescriptionsRoot, XhDescriptionsValue, XhDialogCloseTrigger, XhDialogContent, XhDialogRoot, XhDialogTitle, XhDrawerCloseTrigger, XhDrawerContent, XhDrawerRoot, XhDrawerTitle, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFileUploadDropzone, XhFileUploadHiddenInput, XhFileUploadRoot, XhFlex, XhSwitch, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
 import { computed, h, nextTick, reactive, ref, watch } from 'vue'
 
 import { useI18n } from 'vue-i18n'
@@ -23,9 +23,10 @@ import {
   querySortsFromSchema,
   ResourceAccessLevel,
 } from '@/api'
-import { Icon, SchemaPage, XDataTable, XInput, XMdEditor, XNumberInput, XPopconfirm, XSelect } from '~/components'
+import { actionConfirmText, Icon, SchemaPage, XDataTable, XInput, XMdEditor, XNumberInput, XPopconfirm, XSelect } from '~/components'
 import { dialog, toast } from '~/composables'
 import { islandStart } from '~/composables/useDynamicIsland'
+import { usePermission } from '~/hooks'
 import { downloadBlob, formatDate, formatFileSize, getOptionLabel, parseCsvRows } from '~/utils'
 
 defineOptions({ name: 'PlatformFilePage' })
@@ -263,7 +264,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     searchPlaceholder: t('file.library.columns.file_type_placeholder'),
     width: 110,
     order: 3,
-    render: row => h(XhTagRoot, { variant: 'outline', tone: 'neutral' }, () => h(XhTagLabel, () => getOptionLabel(fileTypeOptions.value, (row as unknown as FileListItemDto).fileType))),
+    render: row => h(XhTagRoot, { variant: 'subtle', tone: 'neutral' }, () => h(XhTagLabel, () => getOptionLabel(fileTypeOptions.value, (row as unknown as FileListItemDto).fileType))),
   },
   {
     key: 'fileSize',
@@ -286,7 +287,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     searchPlaceholder: t('file.library.columns.status_placeholder'),
     width: 110,
     order: 5,
-    render: row => h(XhTagRoot, { variant: 'outline', tone: getFileStatusTagType((row as unknown as FileListItemDto).status) }, () => h(XhTagLabel, () => getOptionLabel(fileStatusOptions.value, (row as unknown as FileListItemDto).status))),
+    render: row => h(XhTagRoot, { variant: 'subtle', tone: getFileStatusTagType((row as unknown as FileListItemDto).status) }, () => h(XhTagLabel, () => getOptionLabel(fileStatusOptions.value, (row as unknown as FileListItemDto).status))),
   },
   {
     key: 'accessLevel',
@@ -332,7 +333,7 @@ const fields = computed<ListFieldSchema[]>(() => [
 ])
 
 const schema = computed<PageSchema>(() => ({
-  pageCode: 'platform.file',
+  pageCode: 'file.library',
   exportPermission: 'file.library.export',
   pageName: t('file.library.page_name'),
   rowKey: 'basicId',
@@ -356,16 +357,16 @@ const schema = computed<PageSchema>(() => ({
     },
   },
   actions: [
-    { key: 'upload', title: t('file.library.actions.upload'), scope: 'page', type: 'primary', icon: 'lucide:upload' },
-    { key: 'preview', title: t('file.library.actions.preview'), scope: 'row', visible: row => canPreview(row as unknown as FileListItemDto) },
-    { key: 'download', title: t('file.library.actions.download'), scope: 'row', visible: row => (row as unknown as FileListItemDto).status === FileStatus.Normal },
-    { key: 'view', title: t('file.library.actions.view'), scope: 'row' },
-    { key: 'metadata', title: t('file.library.actions.metadata'), scope: 'row' },
-    { key: 'storages', title: t('file.library.actions.storages'), scope: 'row' },
+    { key: 'upload', title: t('file.library.actions.upload'), scope: 'page', type: 'primary', icon: 'lucide:upload', permission: 'file.library.create' },
+    { key: 'preview', title: t('file.library.actions.preview'), scope: 'row', icon: 'lucide:scan-eye', visible: row => canPreview(row as unknown as FileListItemDto) },
+    { key: 'download', title: t('file.library.actions.download'), scope: 'row', icon: 'lucide:download', visible: row => (row as unknown as FileListItemDto).status === FileStatus.Normal },
+    { key: 'view', title: t('file.library.actions.view'), scope: 'row', icon: 'lucide:eye' },
+    { key: 'metadata', title: t('file.library.actions.metadata'), scope: 'row', icon: 'lucide:tags', permission: 'file.library.update' },
+    { key: 'storages', title: t('file.library.actions.storages'), scope: 'row', icon: 'lucide:hard-drive' },
     // 回收站语义：正常文件可「归档」（软删，可恢复）；非正常文件可「恢复」；任意状态可「彻底删除」（物理删，不可恢复）
-    { key: 'archive', title: t('file.library.actions.archive'), scope: 'row', visible: row => (row as unknown as FileListItemDto).status === FileStatus.Normal },
-    { key: 'restore', title: t('file.library.actions.restore'), scope: 'row', visible: row => (row as unknown as FileListItemDto).status !== FileStatus.Normal },
-    { key: 'destroy', title: t('file.library.actions.destroy'), scope: 'row', type: 'error' },
+    { key: 'archive', title: t('file.library.actions.archive'), scope: 'row', icon: 'lucide:archive', type: 'warning', confirm: true, confirmText: row => actionConfirmText(t, t('file.library.actions.archive'), (row as unknown as FileListItemDto).originalName || (row as unknown as FileListItemDto).fileName), visible: row => (row as unknown as FileListItemDto).status === FileStatus.Normal, permission: 'file.library.status' },
+    { key: 'restore', title: t('file.library.actions.restore'), scope: 'row', icon: 'lucide:archive-restore', visible: row => (row as unknown as FileListItemDto).status !== FileStatus.Normal, permission: 'file.library.status' },
+    { key: 'destroy', title: t('file.library.actions.destroy'), scope: 'row', icon: 'lucide:trash-2', type: 'error', permission: 'file.library.delete' },
   ],
 }))
 
@@ -544,7 +545,7 @@ async function handleSaveMetadata() {
     reload()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('file.library.metadata.update_failed'))
+    toast.danger((error as Error)?.message || t('file.library.metadata.update_failed'))
   }
   finally {
     metadataLoading.value = false
@@ -559,7 +560,7 @@ async function handleUpdateFileStatus(row: FileListItemDto, status: FileStatus, 
     reload()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('file.library.message.operation_failed'))
+    toast.danger((error as Error)?.message || t('file.library.message.operation_failed'))
   }
   finally {
     actionLoading.value = false
@@ -583,7 +584,7 @@ function handleDestroyFile(row: FileListItemDto) {
         reload()
       }
       catch (error) {
-        toast.error((error as Error)?.message || t('file.library.message.destroy_failed'))
+        toast.danger((error as Error)?.message || t('file.library.message.destroy_failed'))
       }
       finally {
         actionLoading.value = false
@@ -644,7 +645,7 @@ async function handleFileDetail(row: FileListItemDto) {
   }
   catch (error) {
     currentFileDetail.value = null
-    toast.error((error as Error)?.message || t('file.library.message.file_detail_failed'))
+    toast.danger((error as Error)?.message || t('file.library.message.file_detail_failed'))
   }
   finally {
     detailLoading.value = false
@@ -681,7 +682,7 @@ async function copyPreviewText() {
     toast.success(t('file.library.preview.copied'))
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('file.library.preview.copy_failed'))
+    toast.danger((error as Error)?.message || t('file.library.preview.copy_failed'))
   }
 }
 
@@ -731,7 +732,7 @@ async function handlePreview(row: FileListItemDto) {
     if (kind === 'markdown' || kind === 'text') {
       previewTextError.value = reason
     }
-    toast.error(reason)
+    toast.danger(reason)
   }
   finally {
     previewLoading.value = false
@@ -770,7 +771,7 @@ async function handleDownload(row: FileListItemDto) {
     downloadBlob(blob, row.originalName)
   }
   catch (error) {
-    toast.error((error as Error).message || t('file.library.message.download_failed'))
+    toast.danger((error as Error).message || t('file.library.message.download_failed'))
   }
 }
 
@@ -820,7 +821,7 @@ async function loadStorageRows() {
   }
   catch (error) {
     storageRows.value = []
-    toast.error((error as Error)?.message || t('file.library.storage_list.load_failed'))
+    toast.danger((error as Error)?.message || t('file.library.storage_list.load_failed'))
   }
   finally {
     storageListLoading.value = false
@@ -839,7 +840,7 @@ async function viewStorageDetail(storageId: string) {
   }
   catch (error) {
     currentStorageDetail.value = null
-    toast.error((error as Error)?.message || t('file.library.message.storage_detail_failed'))
+    toast.danger((error as Error)?.message || t('file.library.message.storage_detail_failed'))
   }
   finally {
     detailLoading.value = false
@@ -859,7 +860,7 @@ async function handleSwitchPrimary(storage: FileStorageListItemDto) {
     await loadStorageRows()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('file.library.message.set_primary_failed'))
+    toast.danger((error as Error)?.message || t('file.library.message.set_primary_failed'))
   }
   finally {
     actionLoading.value = false
@@ -875,7 +876,7 @@ async function handleVerifyStorage(storage: FileStorageListItemDto) {
     await loadStorageRows()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('file.library.message.verify_failed'))
+    toast.danger((error as Error)?.message || t('file.library.message.verify_failed'))
   }
   finally {
     actionLoading.value = false
@@ -894,12 +895,17 @@ async function handleToggleStorageStatus(storage: FileStorageListItemDto) {
     await loadStorageRows()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('file.library.message.storage_status_failed'))
+    toast.danger((error as Error)?.message || t('file.library.message.storage_status_failed'))
   }
   finally {
     actionLoading.value = false
   }
 }
+
+const { hasPermission } = usePermission()
+/** 存储副本的写操作：切换主存储是编辑，校验与启停副本是状态维护（与后端 File.Update / File.Status 对应的按钮码） */
+const canUpdateFile = computed(() => hasPermission('file.library.update'))
+const canMaintainStorage = computed(() => hasPermission('file.library.status'))
 
 const storageColumns = computed<XDataTableColumn<FileStorageListItemDto>[]>(() => [
   {
@@ -920,7 +926,7 @@ const storageColumns = computed<XDataTableColumn<FileStorageListItemDto>[]>(() =
     title: t('file.library.storage_list.columns.is_primary'),
     width: 80,
     render: row => row.isPrimary
-      ? h(XhTagRoot, { variant: 'outline', tone: 'info' }, () => h(XhTagLabel, () => t('file.library.flag.primary')))
+      ? h(XhTagRoot, { variant: 'subtle', tone: 'info' }, () => h(XhTagLabel, () => t('file.library.flag.primary')))
       : h('span', { class: 'text-foreground/40' }, '-'),
   },
   {
@@ -933,7 +939,7 @@ const storageColumns = computed<XDataTableColumn<FileStorageListItemDto>[]>(() =
     key: 'status',
     title: t('file.library.storage_list.columns.status'),
     width: 100,
-    render: row => h(XhTagRoot, { variant: 'outline', tone: getStorageStatusTagType(row.status) }, () => h(XhTagLabel, () => getOptionLabel(storageStatusOptions.value, row.status))),
+    render: row => h(XhTagRoot, { variant: 'subtle', tone: getStorageStatusTagType(row.status) }, () => h(XhTagLabel, () => getOptionLabel(storageStatusOptions.value, row.status))),
   },
   {
     key: 'actions',
@@ -942,19 +948,22 @@ const storageColumns = computed<XDataTableColumn<FileStorageListItemDto>[]>(() =
     fixed: 'right',
     render: row => h('div', { style: 'display:flex;align-items:center;gap:2px;' }, [
       // 图标钮的说明文字走原生 title：气泡触发器本身是按钮，按钮里再套按钮不合法
-      h(XhButton, { iconOnly: true, size: 'sm', variant: 'ghost', ariaLabel: t('file.library.storage_list.tooltip.detail'), title: t('file.library.storage_list.tooltip.detail'), onClick: () => viewStorageDetail(row.basicId) }, () => h(Icon, { icon: 'lucide:eye' })),
-      h(XhButton, { iconOnly: true, size: 'sm', variant: 'ghost', tone: 'brand', disabled: row.isPrimary, ariaLabel: row.isPrimary ? t('file.library.storage_list.tooltip.is_primary') : t('file.library.storage_list.tooltip.set_primary'), title: row.isPrimary ? t('file.library.storage_list.tooltip.is_primary') : t('file.library.storage_list.tooltip.set_primary'), onClick: () => handleSwitchPrimary(row) }, () => h(Icon, { icon: 'lucide:star' })),
-      h(XhButton, { iconOnly: true, size: 'sm', variant: 'ghost', tone: 'info', ariaLabel: t('file.library.storage_list.tooltip.verify'), title: t('file.library.storage_list.tooltip.verify'), onClick: () => handleVerifyStorage(row) }, () => h(Icon, { icon: 'lucide:shield-check' })),
-      h(XPopconfirm, { onConfirm: () => handleToggleStorageStatus(row) }, {
+      h(XhButton, { 'iconOnly': true, 'size': 'sm', 'variant': 'ghost', 'aria-label': t('file.library.storage_list.tooltip.detail'), 'title': t('file.library.storage_list.tooltip.detail'), 'onClick': () => viewStorageDetail(row.basicId) }, () => h(Icon, { icon: 'lucide:eye' })),
+      canUpdateFile.value && h(XhButton, { 'iconOnly': true, 'size': 'sm', 'variant': 'ghost', 'tone': 'brand', 'disabled': row.isPrimary, 'aria-label': row.isPrimary ? t('file.library.storage_list.tooltip.is_primary') : t('file.library.storage_list.tooltip.set_primary'), 'title': row.isPrimary ? t('file.library.storage_list.tooltip.is_primary') : t('file.library.storage_list.tooltip.set_primary'), 'onClick': () => handleSwitchPrimary(row) }, () => h(Icon, { icon: 'lucide:star' })),
+      canMaintainStorage.value && h(XhButton, { 'iconOnly': true, 'size': 'sm', 'variant': 'ghost', 'tone': 'info', 'aria-label': t('file.library.storage_list.tooltip.verify'), 'title': t('file.library.storage_list.tooltip.verify'), 'onClick': () => handleVerifyStorage(row) }, () => h(Icon, { icon: 'lucide:shield-check' })),
+      // 确认文案走 description 属性：浮层没有标题时以它为名
+      canMaintainStorage.value && h(XPopconfirm, {
+        description: t('file.library.storage_list.confirm_toggle', { action: row.status === FileStorageStatus.Normal ? t('file.library.storage_list.tooltip.disable') : t('file.library.storage_list.tooltip.enable') }),
+        onConfirm: () => handleToggleStorageStatus(row),
+      }, {
         trigger: () => h(XhButton, {
-          iconOnly: true,
-          size: 'sm',
-          variant: 'ghost',
-          tone: row.status === FileStorageStatus.Normal ? 'warning' : 'success',
-          ariaLabel: row.status === FileStorageStatus.Normal ? t('file.library.storage_list.tooltip.disable') : t('file.library.storage_list.tooltip.enable'),
-          title: row.status === FileStorageStatus.Normal ? t('file.library.storage_list.tooltip.disable') : t('file.library.storage_list.tooltip.enable'),
+          'iconOnly': true,
+          'size': 'sm',
+          'variant': 'ghost',
+          'tone': row.status === FileStorageStatus.Normal ? 'warning' : 'success',
+          'aria-label': row.status === FileStorageStatus.Normal ? t('file.library.storage_list.tooltip.disable') : t('file.library.storage_list.tooltip.enable'),
+          'title': row.status === FileStorageStatus.Normal ? t('file.library.storage_list.tooltip.disable') : t('file.library.storage_list.tooltip.enable'),
         }, () => h(Icon, { icon: row.status === FileStorageStatus.Normal ? 'lucide:ban' : 'lucide:circle-check' })),
-        default: () => t('file.library.storage_list.confirm_toggle', { action: row.status === FileStorageStatus.Normal ? t('file.library.storage_list.tooltip.disable') : t('file.library.storage_list.tooltip.enable') }),
       }),
     ]),
   },
@@ -968,10 +977,10 @@ const storageColumns = computed<XDataTableColumn<FileStorageListItemDto>[]>(() =
     @action="onAction"
   >
     <XhDialogRoot v-model:open="uploadVisible">
-      <XhDialogContent style="--xh-dialog-max-w: 520px">
+      <XhDialogContent style="--xh-dialog-max-w: 520px; max-block-size: 100%">
         <XhDialogTitle>{{ t('file.library.upload.title') }}</XhDialogTitle>
         <XhDialogCloseTrigger />
-        <XhFlex direction="column" gap="lg">
+        <XhFlex class="file-upload-body" orientation="vertical" gap="lg">
           <!-- 拖拽区：点击或拖入文件即上传（按当前默认存储配置保存） -->
           <XhFileUploadRoot
             :upload="handleUploadRequest"
@@ -991,47 +1000,69 @@ const storageColumns = computed<XDataTableColumn<FileStorageListItemDto>[]>(() =
             </XhFileUploadDropzone>
           </XhFileUploadRoot>
 
-          <!-- 访问级别 -->
-          <div class="file-upload-field">
-            <span class="file-upload-field__label">{{ t('file.library.upload.access_level') }}</span>
-            <XSelect
-              v-model:value="uploadForm.accessLevel"
-              :options="accessLevelOptions"
-              :disabled="uploadLoading"
-              :placeholder="t('file.library.upload.access_level_placeholder')"
-            />
+          <!-- 上传参数：与新增/编辑弹窗同一套表单网格，字段名在上、控件在下 -->
+          <div class="xh-edit-form-grid">
+            <XhFieldRoot>
+              <XhFieldLabel>{{ t('file.library.upload.access_level') }}</XhFieldLabel>
+              <XhFieldControl>
+                <XSelect
+                  v-model:value="uploadForm.accessLevel"
+                  :options="accessLevelOptions"
+                  :disabled="uploadLoading"
+                  :placeholder="t('file.library.upload.access_level_placeholder')"
+                />
+              </XhFieldControl>
+              <XhFieldErrorText />
+            </XhFieldRoot>
+            <XhFieldRoot>
+              <XhFieldLabel>{{ t('file.library.upload.overwrite') }}</XhFieldLabel>
+              <XhFieldControl>
+                <XhSwitch v-model:checked="uploadForm.overwrite" :disabled="uploadLoading" />
+              </XhFieldControl>
+              <XhFieldErrorText />
+            </XhFieldRoot>
+            <XhFieldRoot>
+              <XhFieldLabel>{{ t('file.library.upload.encrypt') }}</XhFieldLabel>
+              <XhFieldControl>
+                <XhSwitch v-model:checked="uploadForm.isEncrypted" :disabled="uploadLoading" />
+              </XhFieldControl>
+              <XhFieldErrorText />
+            </XhFieldRoot>
+            <XhFieldRoot>
+              <XhFieldLabel>{{ t('file.library.upload.temporary') }}</XhFieldLabel>
+              <XhFieldControl>
+                <XhSwitch v-model:checked="uploadForm.isTemporary" :disabled="uploadLoading" />
+              </XhFieldControl>
+              <XhFieldErrorText />
+            </XhFieldRoot>
+            <!-- 保留天数：仅临时文件需要 -->
+            <XhFieldRoot v-if="uploadForm.isTemporary">
+              <XhFieldLabel>{{ t('file.library.upload.retention_days') }}</XhFieldLabel>
+              <XhFieldControl>
+                <XNumberInput
+                  v-model:value="uploadForm.retentionDays"
+                  :min="1"
+                  :disabled="uploadLoading"
+                  :placeholder="t('file.library.upload.retention_placeholder')"
+                />
+              </XhFieldControl>
+              <XhFieldErrorText />
+            </XhFieldRoot>
+            <XhFieldRoot class="xh-span-2">
+              <XhFieldLabel>{{ t('file.library.detail.tags') }}</XhFieldLabel>
+              <XhFieldControl>
+                <XInput v-model:value="uploadForm.tags" clearable :disabled="uploadLoading" :placeholder="t('file.library.upload.tags_placeholder')" />
+              </XhFieldControl>
+              <XhFieldErrorText />
+            </XhFieldRoot>
+            <XhFieldRoot class="xh-span-2">
+              <XhFieldLabel>{{ t('file.library.detail.remark') }}</XhFieldLabel>
+              <XhFieldControl>
+                <XInput v-model:value="uploadForm.remark" clearable :disabled="uploadLoading" :placeholder="t('file.library.upload.remark_placeholder')" type="textarea" :rows="2" />
+              </XhFieldControl>
+              <XhFieldErrorText />
+            </XhFieldRoot>
           </div>
-
-          <!-- 开关：覆盖 / 加密 / 临时 -->
-          <div class="file-upload-switches">
-            <div class="file-upload-switch">
-              <span>{{ t('file.library.upload.overwrite') }}</span>
-              <XhSwitch v-model:checked="uploadForm.overwrite" :disabled="uploadLoading" />
-            </div>
-            <div class="file-upload-switch">
-              <span>{{ t('file.library.upload.encrypt') }}</span>
-              <XhSwitch v-model:checked="uploadForm.isEncrypted" :disabled="uploadLoading" />
-            </div>
-            <div class="file-upload-switch">
-              <span>{{ t('file.library.upload.temporary') }}</span>
-              <XhSwitch v-model:checked="uploadForm.isTemporary" :disabled="uploadLoading" />
-            </div>
-          </div>
-
-          <!-- 保留天数：仅临时文件需要 -->
-          <div v-if="uploadForm.isTemporary" class="file-upload-field">
-            <span class="file-upload-field__label">{{ t('file.library.upload.retention_days') }}</span>
-            <XNumberInput
-              v-model:value="uploadForm.retentionDays"
-              :min="1"
-              :disabled="uploadLoading"
-              :placeholder="t('file.library.upload.retention_placeholder')"
-              style="width: 100%"
-            />
-          </div>
-
-          <XInput v-model:value="uploadForm.tags" clearable :disabled="uploadLoading" :placeholder="t('file.library.upload.tags_placeholder')" />
-          <XInput v-model:value="uploadForm.remark" clearable :disabled="uploadLoading" :placeholder="t('file.library.upload.remark_placeholder')" type="textarea" :rows="2" />
         </XhFlex>
       </XhDialogContent>
     </XhDialogRoot>
@@ -1040,43 +1071,64 @@ const storageColumns = computed<XDataTableColumn<FileStorageListItemDto>[]>(() =
       <XhDrawerContent style="--xh-drawer-size: 460px">
         <XhDrawerTitle>{{ t('file.library.metadata.title') }}</XhDrawerTitle>
         <XhDrawerCloseTrigger />
-        <XhFlex direction="column" gap="lg">
-          <div class="file-upload-field">
-            <span class="file-upload-field__label">{{ t('file.library.upload.access_level') }}</span>
-            <XSelect
-              v-model:value="metadataForm.accessLevel"
-              :options="accessLevelOptions"
-              :placeholder="t('file.library.upload.access_level_placeholder')"
-            />
+        <XhFlex orientation="vertical" gap="lg">
+          <div class="xh-edit-form-grid">
+            <XhFieldRoot>
+              <XhFieldLabel>{{ t('file.library.upload.access_level') }}</XhFieldLabel>
+              <XhFieldControl>
+                <XSelect
+                  v-model:value="metadataForm.accessLevel"
+                  :options="accessLevelOptions"
+                  :placeholder="t('file.library.upload.access_level_placeholder')"
+                />
+              </XhFieldControl>
+              <XhFieldErrorText />
+            </XhFieldRoot>
+            <XhFieldRoot>
+              <XhFieldLabel>{{ t('file.library.upload.encrypt') }}</XhFieldLabel>
+              <XhFieldControl>
+                <XhSwitch v-model:checked="metadataForm.isEncrypted" />
+              </XhFieldControl>
+              <XhFieldErrorText />
+            </XhFieldRoot>
+            <XhFieldRoot>
+              <XhFieldLabel>{{ t('file.library.upload.temporary') }}</XhFieldLabel>
+              <XhFieldControl>
+                <XhSwitch v-model:checked="metadataForm.isTemporary" />
+              </XhFieldControl>
+              <XhFieldErrorText />
+            </XhFieldRoot>
+            <XhFieldRoot v-if="metadataForm.isTemporary">
+              <XhFieldLabel>{{ t('file.library.upload.retention_days') }}</XhFieldLabel>
+              <XhFieldControl>
+                <XNumberInput
+                  v-model:value="metadataForm.retentionDays"
+                  :min="1"
+                  :placeholder="t('file.library.upload.retention_placeholder')"
+                />
+              </XhFieldControl>
+              <XhFieldErrorText />
+            </XhFieldRoot>
+            <XhFieldRoot class="xh-span-2">
+              <XhFieldLabel>{{ t('file.library.detail.tags') }}</XhFieldLabel>
+              <XhFieldControl>
+                <XInput v-model:value="metadataForm.tags" clearable :placeholder="t('file.library.upload.tags_placeholder')" />
+              </XhFieldControl>
+              <XhFieldErrorText />
+            </XhFieldRoot>
+            <XhFieldRoot class="xh-span-2">
+              <XhFieldLabel>{{ t('file.library.detail.remark') }}</XhFieldLabel>
+              <XhFieldControl>
+                <XInput v-model:value="metadataForm.remark" clearable :placeholder="t('file.library.upload.remark_placeholder')" type="textarea" :rows="2" />
+              </XhFieldControl>
+              <XhFieldErrorText />
+            </XhFieldRoot>
           </div>
-
-          <div class="file-upload-switches">
-            <div class="file-upload-switch">
-              <span>{{ t('file.library.upload.encrypt') }}</span>
-              <XhSwitch v-model:checked="metadataForm.isEncrypted" />
-            </div>
-            <div class="file-upload-switch">
-              <span>{{ t('file.library.upload.temporary') }}</span>
-              <XhSwitch v-model:checked="metadataForm.isTemporary" />
-            </div>
-          </div>
-
-          <div v-if="metadataForm.isTemporary" class="file-upload-field">
-            <span class="file-upload-field__label">{{ t('file.library.upload.retention_days') }}</span>
-            <XNumberInput
-              v-model:value="metadataForm.retentionDays"
-              :min="1"
-              :placeholder="t('file.library.upload.retention_placeholder')"
-              style="width: 100%"
-            />
-          </div>
-
-          <XInput v-model:value="metadataForm.tags" clearable :placeholder="t('file.library.upload.tags_placeholder')" />
-          <XInput v-model:value="metadataForm.remark" clearable :placeholder="t('file.library.upload.remark_placeholder')" type="textarea" :rows="2" />
 
           <XhButton full-width variant="solid" tone="brand" :loading="metadataLoading" @click="handleSaveMetadata">
-            <span><Icon icon="lucide:save" /></span>
-            {{ t('file.library.metadata.save') }}
+            <XhButtonIndicator />
+            <XhButtonPrefix><Icon icon="lucide:save" /></XhButtonPrefix>
+            <XhButtonLabel>{{ t('file.library.metadata.save') }}</XhButtonLabel>
           </XhButton>
         </XhFlex>
       </XhDrawerContent>
@@ -1090,7 +1142,7 @@ const storageColumns = computed<XDataTableColumn<FileStorageListItemDto>[]>(() =
           {{ t('common.statuses.loading') }}
         </XhFlex>
 
-        <XhDescriptionsRoot v-else-if="detailKind === 'file' && currentFileDetail" :columns="2" bordered placement="left" size="sm">
+        <XhDescriptionsRoot v-else-if="detailKind === 'file' && currentFileDetail" :columns="2" variant="outline" placement="left" size="sm">
           <XhDescriptionsItem style="grid-column: span 2">
             <XhDescriptionsLabel>{{ t('file.library.detail.original_name') }}</XhDescriptionsLabel>
             <XhDescriptionsValue>
@@ -1225,7 +1277,7 @@ const storageColumns = computed<XDataTableColumn<FileStorageListItemDto>[]>(() =
           </XhDescriptionsItem>
         </XhDescriptionsRoot>
 
-        <XhDescriptionsRoot v-else-if="detailKind === 'storage' && currentStorageDetail" :columns="1" bordered size="sm">
+        <XhDescriptionsRoot v-else-if="detailKind === 'storage' && currentStorageDetail" :columns="1" variant="outline" size="sm">
           <XhDescriptionsItem>
             <XhDescriptionsLabel>{{ t('file.library.detail.storage_basic_id') }}</XhDescriptionsLabel>
             <XhDescriptionsValue>
@@ -1389,12 +1441,13 @@ const storageColumns = computed<XDataTableColumn<FileStorageListItemDto>[]>(() =
       <XhDrawerContent style="--xh-drawer-size: 760px">
         <XhDrawerTitle>{{ t('file.library.storage_list.title', { name: storageFile?.originalName ?? '' }) }}</XhDrawerTitle>
         <XhDrawerCloseTrigger />
-        <XhFlex direction="column" gap="md">
+        <XhFlex orientation="vertical" gap="md">
           <div class="flex items-center justify-between">
             <span class="text-sm text-foreground/60">{{ t('file.library.storage_list.total', { count: storageRows.length }) }}</span>
-            <XhButton size="sm" :loading="storageListLoading" @click="loadStorageRows">
-              <span><Icon icon="lucide:refresh-cw" /></span>
-              {{ t('common.actions.refresh') }}
+            <XhButton variant="subtle" size="sm" :loading="storageListLoading" @click="loadStorageRows">
+              <XhButtonIndicator />
+              <XhButtonPrefix><Icon icon="lucide:refresh-cw" /></XhButtonPrefix>
+              <XhButtonLabel>{{ t('common.actions.refresh') }}</XhButtonLabel>
             </XhButton>
           </div>
           <XDataTable
@@ -1402,7 +1455,6 @@ const storageColumns = computed<XDataTableColumn<FileStorageListItemDto>[]>(() =
             :data="storageRows"
             :loading="storageListLoading"
             :row-key="(row: FileStorageListItemDto) => row.basicId"
-            size="sm"
           />
         </XhFlex>
       </XhDrawerContent>
@@ -1434,11 +1486,17 @@ const storageColumns = computed<XDataTableColumn<FileStorageListItemDto>[]>(() =
               {{ t('file.library.preview.copy_code') }}
             </button>
             <div class="file-preview-code-scroll">
-              <XhCodeBlock
+              <!-- 预览文本已整段到手，complete 让它一次着色 -->
+              <XhCodeViewRoot
                 :code="previewText"
                 :lang="previewLang || undefined"
                 :highlighter="highlighter"
-              />
+                complete
+              >
+                <XhCodeViewPre>
+                  <XhCodeViewCode />
+                </XhCodeViewPre>
+              </XhCodeViewRoot>
             </div>
           </div>
           <XDataTable
@@ -1446,7 +1504,6 @@ const storageColumns = computed<XDataTableColumn<FileStorageListItemDto>[]>(() =
             :columns="csvColumns"
             :data="csvData"
             max-height="66vh"
-            size="sm"
             class="file-preview-csv"
           />
           <div v-else-if="!previewUrl" class="text-gray-400">
@@ -1482,18 +1539,15 @@ const storageColumns = computed<XDataTableColumn<FileStorageListItemDto>[]>(() =
   word-break: break-word;
 }
 
-.file-upload-switches {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 20px;
-}
-
-.file-upload-switch {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  font-size: 13px;
-  color: var(--xh-fg-default);
+/* 上传弹窗正文：手机上字段单列、视口又矮时在弹窗内部滚动，标题留在原地（面板封顶在视口高）。
+   与 XEditModal 正文同一做法：滚动口向两侧借走面板内衬、再用同宽内边距推回，
+   粗指针下框内按钮往外扩的 44px 命中区落在这段沟槽里，不撑出横向滚动条 */
+.file-upload-body {
+  flex: 1 1 auto;
+  min-block-size: 0;
+  margin-inline: calc(-1 * var(--xh-surface-px-md));
+  padding-inline: var(--xh-surface-px-md);
+  overflow: auto;
 }
 
 .file-upload-dragger {
@@ -1513,17 +1567,6 @@ const storageColumns = computed<XDataTableColumn<FileStorageListItemDto>[]>(() =
 .file-upload-dragger__hint {
   font-size: 12px;
   color: var(--text-secondary, rgb(140 145 150));
-}
-
-.file-upload-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.file-upload-field__label {
-  font-size: 13px;
-  color: var(--text-secondary, rgb(118 124 130));
 }
 
 .file-preview-body {

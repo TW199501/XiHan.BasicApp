@@ -16,7 +16,7 @@ import {
   querySortsFromSchema,
 } from '@/api'
 import { STATUS_OPTIONS } from '@/constants'
-import { SchemaPage, XEditModal, XInput, XNumberInput, XSelect } from '~/components'
+import { actionConfirmText, SchemaPage, XEditModal, XInput, XNumberInput, XSelect } from '~/components'
 import { dialog, toast } from '~/composables'
 import { useEnumOptions } from '~/hooks'
 import { getOptionLabel } from '~/utils'
@@ -74,7 +74,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 5,
     render: (row) => {
       const r = row as unknown as AiAssistantListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: r.enableKnowledge ? 'success' : 'neutral' }, () => h(XhTagLabel, () => (r.enableKnowledge ? t('common.statuses.yes') : t('common.statuses.no'))))
+      return h(XhTagRoot, { variant: 'subtle', tone: r.enableKnowledge ? 'success' : 'neutral' }, () => h(XhTagLabel, () => (r.enableKnowledge ? t('common.statuses.yes') : t('common.statuses.no'))))
     },
   },
   {
@@ -86,7 +86,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 6,
     render: (row) => {
       const r = row as unknown as AiAssistantListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: r.isDefault ? 'info' : 'neutral' }, () => h(XhTagLabel, () => (r.isDefault ? t('common.statuses.yes') : t('common.statuses.no'))))
+      return h(XhTagRoot, { variant: 'subtle', tone: r.isDefault ? 'info' : 'neutral' }, () => h(XhTagLabel, () => (r.isDefault ? t('common.statuses.yes') : t('common.statuses.no'))))
     },
   },
   {
@@ -98,7 +98,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 7,
     render: (row) => {
       const r = row as unknown as AiAssistantListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: r.isEnabled ? 'success' : 'neutral' }, () => h(XhTagLabel, () => (r.isEnabled ? t('common.statuses.yes') : t('common.statuses.no'))))
+      return h(XhTagRoot, { variant: 'subtle', tone: r.isEnabled ? 'success' : 'neutral' }, () => h(XhTagLabel, () => (r.isEnabled ? t('common.statuses.yes') : t('common.statuses.no'))))
     },
   },
   {
@@ -115,14 +115,14 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 8,
     render: (row) => {
       const r = row as unknown as AiAssistantListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: r.status === EnableStatus.Enabled ? 'success' : 'danger' }, () => h(XhTagLabel, () => getOptionLabel(statusEnumOptions.value, r.status)))
+      return h(XhTagRoot, { variant: 'subtle', tone: r.status === EnableStatus.Enabled ? 'success' : 'danger' }, () => h(XhTagLabel, () => getOptionLabel(statusEnumOptions.value, r.status)))
     },
   },
   { key: 'sort', title: t('common.fields.sort'), dataType: 'number', width: 80, sortable: true, order: 9 },
 ])
 
 const schema = computed<PageSchema>(() => ({
-  pageCode: 'develop.ai.assistant',
+  pageCode: 'ai_assistant',
   pageName: t('develop.ai_assistant.page_name'),
   rowKey: 'basicId',
   batchRemovable: true,
@@ -141,10 +141,10 @@ const schema = computed<PageSchema>(() => ({
     remove: id => aiAssistantApi.delete(id),
   },
   actions: [
-    { key: 'create', title: t('develop.ai_assistant.add'), scope: 'page', type: 'primary', icon: 'lucide:plus' },
-    { key: 'edit', title: t('common.actions.edit'), scope: 'row', icon: 'lucide:pencil' },
-    { key: 'default', title: t('develop.ai_assistant.action_default'), scope: 'row', icon: 'lucide:star', disabled: row => (row as unknown as AiAssistantListItemDto).isDefault },
-    { key: 'delete', title: t('common.actions.delete'), scope: 'row', type: 'error', icon: 'lucide:trash-2' },
+    { key: 'create', title: t('develop.ai_assistant.add'), scope: 'page', type: 'primary', icon: 'lucide:plus', permission: 'ai_assistant.create' },
+    { key: 'edit', title: t('common.actions.edit'), scope: 'row', icon: 'lucide:pencil', permission: 'ai_assistant.update' },
+    { key: 'default', title: t('develop.ai_assistant.action_default'), scope: 'row', icon: 'lucide:star', confirm: true, confirmText: row => actionConfirmText(t, t('develop.ai_assistant.action_default'), (row as unknown as AiAssistantListItemDto).assistantName), disabled: row => (row as unknown as AiAssistantListItemDto).isDefault, permission: 'ai_assistant.update' },
+    { key: 'delete', title: t('common.actions.delete'), scope: 'row', type: 'error', icon: 'lucide:trash-2', permission: 'ai_assistant.delete' },
   ],
 }))
 
@@ -179,7 +179,7 @@ async function handleSetDefault(row: AiAssistantListItemDto) {
     reload()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('develop.ai_assistant.set_default_error'))
+    toast.danger((error as Error)?.message || t('develop.ai_assistant.set_default_error'))
   }
 }
 
@@ -198,7 +198,7 @@ function handleDelete(row: AiAssistantListItemDto) {
         reload()
       }
       catch (error) {
-        toast.error((error as Error)?.message || t('common.messages.delete_failed'))
+        toast.danger((error as Error)?.message || t('common.messages.delete_failed'))
       }
     },
   })
@@ -242,7 +242,7 @@ async function handleEdit(row: AiAssistantListItemDto) {
   try {
     const detail = await aiAssistantApi.detail(row.basicId)
     if (!detail) {
-      toast.error(t('develop.ai_assistant.not_found'))
+      toast.danger(t('develop.ai_assistant.not_found'))
       return
     }
     editingStatus.value = detail.status
@@ -268,7 +268,7 @@ async function handleEdit(row: AiAssistantListItemDto) {
     modalVisible.value = true
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('develop.ai_assistant.load_detail_failed'))
+    toast.danger((error as Error)?.message || t('develop.ai_assistant.load_detail_failed'))
   }
 }
 
@@ -343,7 +343,7 @@ async function handleSubmit() {
     reload()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('common.messages.save_failed'))
+    toast.danger((error as Error)?.message || t('common.messages.save_failed'))
   }
   finally {
     submitLoading.value = false
@@ -366,7 +366,7 @@ async function handleSubmit() {
         class="xh-edit-form-grid"
         @submit="handleSubmit"
       >
-        <XhFormFieldGroup value="assistantCode">
+        <XhFormFieldGroup name="assistantCode">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.ai_assistant.form_assistant_code') }}</XhFieldLabel>
             <XhFieldControl>
@@ -380,7 +380,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="assistantName">
+        <XhFormFieldGroup name="assistantName">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.ai_assistant.form_assistant_name') }}</XhFieldLabel>
             <XhFieldControl>
@@ -389,7 +389,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="providerCode">
+        <XhFormFieldGroup name="providerCode">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.ai_assistant.form_provider_code') }}</XhFieldLabel>
             <XhFieldControl>
@@ -398,7 +398,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="promptCode">
+        <XhFormFieldGroup name="promptCode">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.ai_assistant.form_prompt_code') }}</XhFieldLabel>
             <XhFieldControl>
@@ -407,7 +407,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="enableKnowledge">
+        <XhFormFieldGroup name="enableKnowledge">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.ai_assistant.form_enable_knowledge') }}</XhFieldLabel>
             <XhFieldControl>
@@ -416,7 +416,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="knowledgeProviderCode">
+        <XhFormFieldGroup name="knowledgeProviderCode">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.ai_assistant.form_knowledge_provider_code') }}</XhFieldLabel>
             <XhFieldControl>
@@ -425,7 +425,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="knowledgeTopK">
+        <XhFormFieldGroup name="knowledgeTopK">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.ai_assistant.form_knowledge_top_k') }}</XhFieldLabel>
             <XhFieldControl>
@@ -434,7 +434,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="historyRounds">
+        <XhFormFieldGroup name="historyRounds">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.ai_assistant.form_history_rounds') }}</XhFieldLabel>
             <XhFieldControl>
@@ -443,7 +443,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="avatar">
+        <XhFormFieldGroup name="avatar">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.ai_assistant.form_avatar') }}</XhFieldLabel>
             <XhFieldControl>
@@ -452,7 +452,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="sort">
+        <XhFormFieldGroup name="sort">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('common.fields.sort') }}</XhFieldLabel>
             <XhFieldControl>
@@ -461,7 +461,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="isDefault">
+        <XhFormFieldGroup name="isDefault">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.ai_assistant.form_is_default') }}</XhFieldLabel>
             <XhFieldControl>
@@ -470,7 +470,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="isEnabled">
+        <XhFormFieldGroup name="isEnabled">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.ai_assistant.form_is_enabled') }}</XhFieldLabel>
             <XhFieldControl>
@@ -479,7 +479,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup v-if="!form.basicId" value="status">
+        <XhFormFieldGroup v-if="!form.basicId" name="status">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('common.fields.status') }}</XhFieldLabel>
             <XhFieldControl>
@@ -488,7 +488,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="description" class="xh-span-2">
+        <XhFormFieldGroup name="description" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.ai_assistant.form_description') }}</XhFieldLabel>
             <XhFieldControl>
@@ -497,7 +497,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="greeting" class="xh-span-2">
+        <XhFormFieldGroup name="greeting" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.ai_assistant.form_greeting') }}</XhFieldLabel>
             <XhFieldControl>
@@ -512,7 +512,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="remark" class="xh-span-2">
+        <XhFormFieldGroup name="remark" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('common.fields.remark') }}</XhFieldLabel>
             <XhFieldControl>

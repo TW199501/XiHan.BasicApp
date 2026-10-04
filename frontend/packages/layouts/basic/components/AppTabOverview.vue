@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { XhEmptyStateDescription, XhEmptyStateIcon, XhEmptyStateRoot, XhEmptyStateTitle, XhSortableItem, XhSortableLiveRegion, XhSortableRoot } from '@xihan-ui/vue'
+import { XhEmptyStateDescription, XhEmptyStateIndicator, XhEmptyStateRoot, XhEmptyStateTitle, XhSortableItem, XhSortableLiveRegion, XhSortableRoot } from '@xihan-ui/vue'
 import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
@@ -300,9 +300,9 @@ function onKeydown(e: KeyboardEvent): void {
             </XhSortableItem>
 
             <XhEmptyStateRoot v-if="!filteredCards.length" class="tab-ov__empty">
-              <XhEmptyStateIcon>
+              <XhEmptyStateIndicator>
                 <Icon :icon="keyword.trim() ? 'lucide:search-x' : 'lucide:app-window'" width="28" height="28" />
-              </XhEmptyStateIcon>
+              </XhEmptyStateIndicator>
               <XhEmptyStateTitle>{{ t('common.no_data') }}</XhEmptyStateTitle>
               <XhEmptyStateDescription>{{ t('tabbar.overview_empty') }}</XhEmptyStateDescription>
             </XhEmptyStateRoot>
@@ -433,7 +433,7 @@ function onKeydown(e: KeyboardEvent): void {
   cursor: pointer;
   user-select: none;
   transition:
-    transform var(--xh-motion-duration-micro) var(--xh-motion-ease-enter),
+    transform var(--xh-motion-duration-nudge) var(--xh-motion-ease-enter),
     border-color var(--xh-motion-duration-micro) var(--xh-motion-ease-enter),
     box-shadow var(--xh-motion-duration-micro) var(--xh-motion-ease-enter);
   animation: tab-ov-card-in var(--xh-motion-duration-slide) var(--xh-motion-ease-enter-strong) both;
@@ -531,7 +531,7 @@ function onKeydown(e: KeyboardEvent): void {
 
   --xh-empty-state-title-fg: #fff;
   --xh-empty-state-description-fg: rgb(255 255 255 / 70%);
-  --xh-empty-state-icon-fg: rgb(255 255 255 / 60%);
+  --xh-empty-state-indicator-fg: rgb(255 255 255 / 60%);
 }
 
 .tab-ov__footer {

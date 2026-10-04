@@ -9,6 +9,9 @@ namespace XiHan.BasicApp.Saas.Application.Dtos;
 /// <summary>
 /// 租户创建 DTO
 /// </summary>
+/// <remarks>
+/// 不含管理员：任何隔离模式都是先建租户，再经 InitializeTenantAdmin 开通管理员（库隔离租户在两步之间初始化数据库）。
+/// </remarks>
 public sealed class TenantCreateDto : BasicAppCDto
 {
     /// <summary>
@@ -40,21 +43,6 @@ public sealed class TenantCreateDto : BasicAppCDto
     /// 版本/套餐主键
     /// </summary>
     public long? EditionId { get; set; }
-
-    /// <summary>
-    /// 租户管理员用户名（必填，租户内唯一；开通后自动创建管理员 + Owner 角色 + 按版本授权）
-    /// </summary>
-    public string AdminUserName { get; set; } = string.Empty;
-
-    /// <summary>
-    /// 租户管理员邮箱（必填，登录身份标识，全平台唯一）
-    /// </summary>
-    public string AdminEmail { get; set; } = string.Empty;
-
-    /// <summary>
-    /// 租户管理员初始密码（必填，须满足密码策略）
-    /// </summary>
-    public string AdminPassword { get; set; } = string.Empty;
 
     /// <summary>
     /// 隔离模式

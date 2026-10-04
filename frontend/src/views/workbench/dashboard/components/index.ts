@@ -1,6 +1,20 @@
 import type { Component } from 'vue'
 import { markRaw } from 'vue'
 import AnnouncementWidget from './AnnouncementWidget.vue'
+import CategoryMixWidget from './charts/CategoryMixWidget.vue'
+import ChannelShareWidget from './charts/ChannelShareWidget.vue'
+import ConversionFunnelWidget from './charts/ConversionFunnelWidget.vue'
+import CustomerMixWidget from './charts/CustomerMixWidget.vue'
+import MaterialPriceWidget from './charts/MaterialPriceWidget.vue'
+import OrderFlowWidget from './charts/OrderFlowWidget.vue'
+import OrderHeatmapWidget from './charts/OrderHeatmapWidget.vue'
+import ProductPerformanceWidget from './charts/ProductPerformanceWidget.vue'
+import ProfitWaterfallWidget from './charts/ProfitWaterfallWidget.vue'
+import SalesKpiWidget from './charts/SalesKpiWidget.vue'
+import SalesTrendWidget from './charts/SalesTrendWidget.vue'
+import StoreRadarWidget from './charts/StoreRadarWidget.vue'
+import SupplyNetworkWidget from './charts/SupplyNetworkWidget.vue'
+import TargetProgressWidget from './charts/TargetProgressWidget.vue'
 import ClockWidget from './ClockWidget.vue'
 import FavoritesWidget from './FavoritesWidget.vue'
 import StatsWidget from './StatsWidget.vue'
@@ -19,14 +33,43 @@ export interface WidgetDef {
   permission?: string
 }
 
-/** 小组件登记表：新增小组件只需在此追加一项 */
+function widget(key: string, i18nKey: string, icon: string, defaultSpan: number, component: Component): WidgetDef {
+  return {
+    key,
+    titleKey: `workbench.widgets.${i18nKey}.title`,
+    descKey: `workbench.widgets.${i18nKey}.desc`,
+    icon,
+    defaultSpan,
+    component: markRaw(component),
+  }
+}
+
+/**
+ * 小组件登记表：新增小组件只需在此追加一项。
+ * 今日统计与各图表用的是前端生成的示例数据（charts/demo-data.ts），标题旁标有「示例数据」；
+ * 接入真实业务时在后端 WorkbenchQueryService 加接口，再把对应小组件换成接口取数。
+ */
 export const WIDGETS: WidgetDef[] = [
-  { key: 'clock', titleKey: 'workbench.widgets.clock.title', descKey: 'workbench.widgets.clock.desc', icon: 'lucide:clock', defaultSpan: 2, component: markRaw(ClockWidget) },
-  { key: 'welcome', titleKey: 'workbench.widgets.welcome.title', descKey: 'workbench.widgets.welcome.desc', icon: 'lucide:sparkles', defaultSpan: 4, component: markRaw(WelcomeWidget) },
-  { key: 'stats', titleKey: 'workbench.widgets.stats.title', descKey: 'workbench.widgets.stats.desc', icon: 'lucide:gauge', defaultSpan: 3, component: markRaw(StatsWidget), permission: 'workbench.dashboard.user-statistics' },
-  { key: 'favorites', titleKey: 'workbench.widgets.favorites.title', descKey: 'workbench.widgets.favorites.desc', icon: 'lucide:star', defaultSpan: 3, component: markRaw(FavoritesWidget) },
-  { key: 'todo', titleKey: 'workbench.widgets.todo.title', descKey: 'workbench.widgets.todo.desc', icon: 'lucide:check-square', defaultSpan: 3, component: markRaw(TodoWidget) },
-  { key: 'announcement', titleKey: 'workbench.widgets.announcement.title', descKey: 'workbench.widgets.announcement.desc', icon: 'lucide:megaphone', defaultSpan: 6, component: markRaw(AnnouncementWidget) },
+  widget('welcome', 'welcome', 'lucide:sparkles', 4, WelcomeWidget),
+  widget('clock', 'clock', 'lucide:clock', 4, ClockWidget),
+  widget('favorites', 'favorites', 'lucide:star', 4, FavoritesWidget),
+  widget('todo', 'todo', 'lucide:check-square', 3, TodoWidget),
+  widget('announcement', 'announcement', 'lucide:megaphone', 9, AnnouncementWidget),
+  widget('stats', 'stats', 'lucide:gauge', 2, StatsWidget),
+  widget('sales-kpi', 'sales_kpi', 'lucide:activity', 4, SalesKpiWidget),
+  widget('channel-share', 'channel_share', 'lucide:pie-chart', 3, ChannelShareWidget),
+  widget('conversion-funnel', 'conversion_funnel', 'lucide:filter', 3, ConversionFunnelWidget),
+  widget('sales-trend', 'sales_trend', 'lucide:trending-up', 8, SalesTrendWidget),
+  widget('order-flow', 'order_flow', 'lucide:waypoints', 4, OrderFlowWidget),
+  widget('product-performance', 'product_performance', 'lucide:package', 8, ProductPerformanceWidget),
+  widget('customer-mix', 'customer_mix', 'lucide:users', 4, CustomerMixWidget),
+  widget('order-heatmap', 'order_heatmap', 'lucide:calendar-clock', 4, OrderHeatmapWidget),
+  widget('store-radar', 'store_radar', 'lucide:radar', 4, StoreRadarWidget),
+  widget('profit-waterfall', 'profit_waterfall', 'lucide:chart-column-decreasing', 4, ProfitWaterfallWidget),
+  widget('category-mix', 'category_mix', 'lucide:layout-grid', 4, CategoryMixWidget),
+  widget('supply-network', 'supply_network', 'lucide:share-2', 4, SupplyNetworkWidget),
+  widget('material-price', 'material_price', 'lucide:chart-candlestick', 4, MaterialPriceWidget),
+  widget('target-progress', 'target_progress', 'lucide:target', 12, TargetProgressWidget),
 ]
 
 export const WIDGET_MAP: Record<string, WidgetDef> = Object.fromEntries(WIDGETS.map(widget => [widget.key, widget]))
@@ -37,5 +80,10 @@ export interface BoardItem {
   span: number
 }
 
-/** 默认看板：时间(2) 欢迎(4) 今日统计(3) 收藏入口(3) / 便签待办(3) 公告轮播(6) */
+/**
+ * 默认看板，每行凑满 12 栅格：
+ * 欢迎(4) 时间(4) 收藏入口(4) / 便签待办(3) 公告轮播(9) /
+ * 今日统计(2) 经营指标(4) 销售构成(3) 转化漏斗(3) / 销售趋势(8) 订单流向(4) / 商品表现(8) 会员构成(4) /
+ * 下单时段(4) 门店对比(4) 利润构成(4) / 品类构成(4) 供应网络(4) 原料行情(4) / 目标达成(12)
+ */
 export const DEFAULT_BOARD: BoardItem[] = WIDGETS.map(widget => ({ key: widget.key, span: widget.defaultSpan }))

@@ -44,6 +44,14 @@ public interface ITenantAppService : IApplicationService
     Task<TenantDetailDto> InitializeDatabaseAsync(long id, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// 初始化租户管理员（建租户之后；库隔离租户在独立库初始化完成之后）
+    /// </summary>
+    /// <param name="input">管理员参数</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>租户详情</returns>
+    Task<TenantDetailDto> InitializeTenantAdminAsync(TenantAdminInitializeDto input, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// 删除租户（软删，要求租户已停用或暂停）
     /// </summary>
     /// <param name="id">租户主键</param>
@@ -59,6 +67,30 @@ public interface ITenantAppService : IApplicationService
     /// <param name="cancellationToken">取消令牌</param>
     /// <returns>租户成员详情</returns>
     Task<TenantMemberDetailDto> AddTenantMemberAsync(TenantMemberAddDto input, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 支持人员入驻：把平台账号以支持成员身份加入租户（平台）
+    /// </summary>
+    /// <param name="input">入驻参数</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>租户成员详情</returns>
+    Task<TenantMemberDetailDto> AddTenantSupportMemberAsync(TenantSupportMemberAddDto input, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 支持人员离场：撤销平台账号在租户的支持成员身份（平台）
+    /// </summary>
+    /// <param name="tenantId">租户主键</param>
+    /// <param name="memberId">支持成员关系主键</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    Task RemoveTenantSupportMemberAsync(long tenantId, long memberId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 所有权转移：把租户所有者身份转给该租户的另一名成员，原所有者改为管理员（平台）
+    /// </summary>
+    /// <param name="input">转移参数</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>接任所有者的成员关系</returns>
+    Task<TenantMemberDetailDto> TransferTenantOwnerAsync(TenantOwnerTransferDto input, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 邀请租户成员（落待接受邀请，被邀请人接受后生效）

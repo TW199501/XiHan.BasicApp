@@ -8,6 +8,7 @@ using XiHan.BasicApp.Saas.Application.Contracts;
 using XiHan.BasicApp.Saas.Application.Dtos;
 using XiHan.BasicApp.Saas.Application.Extensions;
 using XiHan.BasicApp.Saas.Application.Mappers;
+using XiHan.BasicApp.Saas.Domain.DomainServices;
 using XiHan.BasicApp.Saas.Domain.Entities;
 using XiHan.BasicApp.Saas.Domain.Permissions;
 using XiHan.BasicApp.Saas.Domain.Repositories;
@@ -16,6 +17,7 @@ using XiHan.Framework.Authorization.AspNetCore;
 using XiHan.Framework.Domain.Shared.Paging.Dtos;
 using XiHan.Framework.Domain.Shared.Paging.Enums;
 using XiHan.Framework.Domain.Shared.Paging.Models;
+using XiHan.Framework.MultiTenancy.Abstractions;
 
 namespace XiHan.BasicApp.Saas.Application.QueryServices;
 
@@ -37,15 +39,19 @@ public sealed class TenantMemberQueryService
     /// </summary>
     private readonly IUserRepository _userRepository;
 
+    private readonly ICurrentTenant _currentTenant;
+
     /// <summary>
     /// 构造函数
     /// </summary>
     public TenantMemberQueryService(
         ITenantUserRepository tenantUserRepository,
-        IUserRepository userRepository)
+        IUserRepository userRepository,
+        ICurrentTenant currentTenant)
     {
         _tenantUserRepository = tenantUserRepository;
         _userRepository = userRepository;
+        _currentTenant = currentTenant;
     }
 
     /// <summary>
@@ -61,7 +67,24 @@ public sealed class TenantMemberQueryService
         ArgumentNullException.ThrowIfNull(input);
         cancellationToken.ThrowIfCancellationRequested();
 
+        // 成员关系属于租户：租户只看本租户；平台不带租户时看平台自己的（0 号），带租户时切入该租户查看
+        var tenantId = ResolveMemberTenantId(input.TenantId);
+        using var tenantScope = _currentTenant.Change(tenantId);
         var request = BuildTenantMemberPageRequest(input);
+
+        // 关键字同时匹配成员显示名与账号信息（用户名 / 昵称 / 姓名 / 邮箱），先解析出命中的用户再按用户过滤
+        if (!string.IsNullOrWhiteSpace(input.Keyword))
+        {
+            var matchedUserIds = await _tenantUserRepository.SearchMemberUserIdsAsync(tenantId, input.Keyword, cancellationToken);
+            if (matchedUserIds.Count == 0)
+            {
+                return new PageResultDtoBase<TenantMemberListItemDto>(
+                    [],
+                    new PageResultMetadata(input.Page.PageIndex, input.Page.PageSize, 0));
+            }
+
+            request.Conditions.AddFilterIn((SysTenantUser member) => member.UserId, matchedUserIds.Cast<object>());
+        }
         var members = await _tenantUserRepository.GetPagedAsync(request, cancellationToken);
         var now = DateTimeOffset.UtcNow;
 
@@ -100,8 +123,27 @@ public sealed class TenantMemberQueryService
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        // 成员关系严格隔离：只取得到当前上下文的行
         var member = await _tenantUserRepository.GetByIdAsync(id, cancellationToken);
         return member is null ? null : TenantMemberApplicationMapper.ToDetailDto(member, DateTimeOffset.UtcNow);
+    }
+
+    /// <summary>
+    /// 确定要查看哪个租户的成员
+    /// </summary>
+    /// <param name="requestedTenantId">请求指定的租户（仅平台可指定）</param>
+    /// <returns>要查看的租户</returns>
+    private long ResolveMemberTenantId(long? requestedTenantId)
+    {
+        if (_currentTenant.IsPlatformOperation())
+        {
+            return requestedTenantId ?? 0;
+        }
+
+        var currentTenantId = _currentTenant.Id!.Value;
+        return requestedTenantId is null || requestedTenantId == currentTenantId
+            ? currentTenantId
+            : throw new InvalidOperationException("只能查看本租户的成员。");
     }
 
     /// <summary>
@@ -109,6 +151,7 @@ public sealed class TenantMemberQueryService
     /// </summary>
     /// <param name="input">查询条件</param>
     /// <returns>租户成员分页请求</returns>
+    /// <remarks>成员关系严格隔离，查询在要查看的租户上下文里执行，不必再按租户过滤。</remarks>
     private static BasicAppPRDto BuildTenantMemberPageRequest(TenantMemberPageQueryDto input)
     {
         var request = new BasicAppPRDto
@@ -116,22 +159,6 @@ public sealed class TenantMemberQueryService
             Page = input.Page,
             Conditions = new QueryConditions()
         };
-
-        // 必须显式按租户过滤：平台管理员没有租户上下文，全局租户过滤器在平台态放行全部，
-        // 少了这一刀，「租户详情 → 成员」会把所有租户的成员关系都捞出来。
-        if (input.TenantId.HasValue)
-        {
-            request.Conditions.AddFilter((SysTenantUser member) => member.TenantId, input.TenantId.Value);
-        }
-
-        if (!string.IsNullOrWhiteSpace(input.Keyword))
-        {
-            request.Conditions.SetKeyword<SysTenantUser>(
-                input.Keyword.Trim(),
-                member => member.DisplayName,
-                member => member.InviteRemark,
-                member => member.Remark);
-        }
 
         if (input.UserId.HasValue)
         {

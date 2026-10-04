@@ -339,6 +339,12 @@ public sealed class PermissionConditionDomainService
                 throw new InvalidOperationException("停用角色不能配置 ABAC 条件。");
             }
 
+            // 全局角色是各租户共用的模板：它的授权与授权条件只在平台维护
+            if (role.IsGlobal && !_currentTenant.IsPlatformOperation())
+            {
+                throw new InvalidOperationException("全局角色的授权条件只能在平台维护；需要调整请新建租户角色。");
+            }
+
             var permission = await _permissionRepository.GetByIdAsync(rolePermission.PermissionId, cancellationToken)
                 ?? throw new InvalidOperationException("权限不存在。");
             if (permission.Status != EnableStatus.Enabled)
@@ -418,11 +424,6 @@ public sealed class PermissionConditionDomainService
         if (tenantMember.Status != ValidityStatus.Valid)
         {
             throw new InvalidOperationException("无效租户成员不能配置 ABAC 条件。");
-        }
-
-        if (tenantMember.MemberType == TenantMemberType.PlatformAdmin && !_currentTenant.IsPlatformOperation())
-        {
-            throw new InvalidOperationException("平台管理员成员 ABAC 条件仅平台运维态可维护，请切换到平台运维后操作。");
         }
 
         if (tenantMember.EffectiveTime.HasValue && tenantMember.EffectiveTime.Value > now)

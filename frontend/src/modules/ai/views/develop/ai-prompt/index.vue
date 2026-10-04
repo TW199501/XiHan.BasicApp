@@ -67,7 +67,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 5,
     render: (row) => {
       const r = row as unknown as AiPromptListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: r.isEnabled ? 'success' : 'neutral' }, () => h(XhTagLabel, () => (r.isEnabled ? t('common.statuses.yes') : t('common.statuses.no'))))
+      return h(XhTagRoot, { variant: 'subtle', tone: r.isEnabled ? 'success' : 'neutral' }, () => h(XhTagLabel, () => (r.isEnabled ? t('common.statuses.yes') : t('common.statuses.no'))))
     },
   },
   {
@@ -84,14 +84,14 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 6,
     render: (row) => {
       const r = row as unknown as AiPromptListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: r.status === EnableStatus.Enabled ? 'success' : 'danger' }, () => h(XhTagLabel, () => getOptionLabel(statusEnumOptions.value, r.status)))
+      return h(XhTagRoot, { variant: 'subtle', tone: r.status === EnableStatus.Enabled ? 'success' : 'danger' }, () => h(XhTagLabel, () => getOptionLabel(statusEnumOptions.value, r.status)))
     },
   },
   { key: 'sort', title: t('common.fields.sort'), dataType: 'number', width: 80, sortable: true, order: 7 },
 ])
 
 const schema = computed<PageSchema>(() => ({
-  pageCode: 'develop.ai.prompt',
+  pageCode: 'ai_prompt',
   pageName: t('develop.ai_prompt.page_name'),
   rowKey: 'basicId',
   batchRemovable: true,
@@ -110,9 +110,9 @@ const schema = computed<PageSchema>(() => ({
     remove: id => aiPromptApi.delete(id),
   },
   actions: [
-    { key: 'create', title: t('develop.ai_prompt.add'), scope: 'page', type: 'primary', icon: 'lucide:plus' },
-    { key: 'edit', title: t('common.actions.edit'), scope: 'row', icon: 'lucide:pencil' },
-    { key: 'delete', title: t('common.actions.delete'), scope: 'row', type: 'error', icon: 'lucide:trash-2' },
+    { key: 'create', title: t('develop.ai_prompt.add'), scope: 'page', type: 'primary', icon: 'lucide:plus', permission: 'ai_prompt.create' },
+    { key: 'edit', title: t('common.actions.edit'), scope: 'row', icon: 'lucide:pencil', permission: 'ai_prompt.update' },
+    { key: 'delete', title: t('common.actions.delete'), scope: 'row', type: 'error', icon: 'lucide:trash-2', permission: 'ai_prompt.delete' },
   ],
 }))
 
@@ -150,7 +150,7 @@ function handleDelete(row: AiPromptListItemDto) {
         reload()
       }
       catch (error) {
-        toast.error((error as Error)?.message || t('common.messages.delete_failed'))
+        toast.danger((error as Error)?.message || t('common.messages.delete_failed'))
       }
     },
   })
@@ -187,7 +187,7 @@ async function handleEdit(row: AiPromptListItemDto) {
   try {
     const detail = await aiPromptApi.detail(row.basicId)
     if (!detail) {
-      toast.error(t('develop.ai_prompt.not_found'))
+      toast.danger(t('develop.ai_prompt.not_found'))
       return
     }
     editingStatus.value = detail.status
@@ -206,7 +206,7 @@ async function handleEdit(row: AiPromptListItemDto) {
     modalVisible.value = true
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('develop.ai_prompt.load_detail_failed'))
+    toast.danger((error as Error)?.message || t('develop.ai_prompt.load_detail_failed'))
   }
 }
 
@@ -271,7 +271,7 @@ async function handleSubmit() {
     reload()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('common.messages.save_failed'))
+    toast.danger((error as Error)?.message || t('common.messages.save_failed'))
   }
   finally {
     submitLoading.value = false
@@ -294,7 +294,7 @@ async function handleSubmit() {
         class="xh-edit-form-grid"
         @submit="handleSubmit"
       >
-        <XhFormFieldGroup value="promptCode">
+        <XhFormFieldGroup name="promptCode">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.ai_prompt.form_prompt_code') }}</XhFieldLabel>
             <XhFieldControl>
@@ -308,7 +308,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="promptName">
+        <XhFormFieldGroup name="promptName">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.ai_prompt.form_prompt_name') }}</XhFieldLabel>
             <XhFieldControl>
@@ -317,7 +317,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="category">
+        <XhFormFieldGroup name="category">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.ai_prompt.form_category') }}</XhFieldLabel>
             <XhFieldControl>
@@ -326,7 +326,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="version">
+        <XhFormFieldGroup name="version">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.ai_prompt.form_version') }}</XhFieldLabel>
             <XhFieldControl>
@@ -335,7 +335,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="sort">
+        <XhFormFieldGroup name="sort">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.ai_prompt.form_sort') }}</XhFieldLabel>
             <XhFieldControl>
@@ -344,7 +344,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="isEnabled">
+        <XhFormFieldGroup name="isEnabled">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.ai_prompt.form_is_enabled') }}</XhFieldLabel>
             <XhFieldControl>
@@ -353,7 +353,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup v-if="!form.basicId" value="status">
+        <XhFormFieldGroup v-if="!form.basicId" name="status">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('common.fields.status') }}</XhFieldLabel>
             <XhFieldControl>
@@ -362,7 +362,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="content" class="xh-span-2">
+        <XhFormFieldGroup name="content" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('develop.ai_prompt.form_content') }}</XhFieldLabel>
             <XhFieldControl>
@@ -377,7 +377,7 @@ async function handleSubmit() {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="remark" class="xh-span-2">
+        <XhFormFieldGroup name="remark" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('common.fields.remark') }}</XhFieldLabel>
             <XhFieldControl>

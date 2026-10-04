@@ -72,7 +72,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     searchPlaceholder: t('message.bot_config.columns.provider_placeholder'),
     width: 110,
     order: 3,
-    render: row => h(XhTagRoot, { variant: 'outline', tone: 'info' }, () => h(XhTagLabel, () => getOptionLabel(providerOptions.value, (row as unknown as BotConfigListItemDto).provider))),
+    render: row => h(XhTagRoot, { variant: 'subtle', tone: 'info' }, () => h(XhTagLabel, () => getOptionLabel(providerOptions.value, (row as unknown as BotConfigListItemDto).provider))),
   },
   {
     key: 'isDefault',
@@ -87,7 +87,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     render: (row) => {
       const isDefault = (row as unknown as BotConfigListItemDto).isDefault
       return isDefault
-        ? h(XhTagRoot, { variant: 'outline', tone: 'warning' }, () => h(XhTagLabel, () => t('message.bot_config.tag.default')))
+        ? h(XhTagRoot, { variant: 'subtle', tone: 'warning' }, () => h(XhTagLabel, () => t('message.bot_config.tag.default')))
         : h('span', { style: 'opacity:.45' }, '—')
     },
   },
@@ -103,7 +103,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 5,
     render: (row) => {
       const enabled = (row as unknown as BotConfigListItemDto).isEnabled
-      return h(XhTagRoot, { variant: 'outline', tone: enabled ? 'success' : 'danger' }, () => h(XhTagLabel, () => enabled ? t('message.bot_config.tag.enabled') : t('message.bot_config.tag.disabled')))
+      return h(XhTagRoot, { variant: 'subtle', tone: enabled ? 'success' : 'danger' }, () => h(XhTagLabel, () => enabled ? t('message.bot_config.tag.enabled') : t('message.bot_config.tag.disabled')))
     },
   },
   { key: 'sort', title: t('message.bot_config.columns.sort'), dataType: 'number', sortable: true, width: 80, order: 6 },
@@ -256,7 +256,7 @@ async function handleEdit(row: BotConfigListItemDto) {
     modalVisible.value = true
   }
   catch (e) {
-    toast.error((e as Error).message || t('message.bot_config.message.load_detail_failed'))
+    toast.danger((e as Error).message || t('message.bot_config.message.load_detail_failed'))
   }
 }
 
@@ -322,7 +322,7 @@ async function handleSubmit() {
     reloadList()
   }
   catch (e) {
-    toast.error((e as Error).message || t('message.bot_config.message.save_failed'))
+    toast.danger((e as Error).message || t('message.bot_config.message.save_failed'))
   }
   finally {
     submitLoading.value = false
@@ -346,7 +346,7 @@ function handleToggleStatus(row: BotConfigListItemDto) {
         reloadList()
       }
       catch (e) {
-        toast.error((e as Error).message || t('message.bot_config.message.status_update_failed'))
+        toast.danger((e as Error).message || t('message.bot_config.message.status_update_failed'))
       }
     },
   })
@@ -366,7 +366,7 @@ function handleSetDefault(row: BotConfigListItemDto) {
         reloadList()
       }
       catch (e) {
-        toast.error((e as Error).message || t('message.bot_config.message.set_default_failed'))
+        toast.danger((e as Error).message || t('message.bot_config.message.set_default_failed'))
       }
     },
   })
@@ -387,7 +387,7 @@ function handleDelete(row: BotConfigListItemDto) {
         reloadList()
       }
       catch (e) {
-        toast.error((e as Error).message || t('message.bot_config.message.delete_failed'))
+        toast.danger((e as Error).message || t('message.bot_config.message.delete_failed'))
       }
     },
   })
@@ -413,7 +413,7 @@ function handleDelete(row: BotConfigListItemDto) {
         class="xh-edit-form-grid"
         @submit="handleSubmit"
       >
-        <XhFormFieldGroup value="configCode">
+        <XhFormFieldGroup name="configCode">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.bot_config.form.config_code') }}</XhFieldLabel>
             <XhFieldControl>
@@ -427,7 +427,7 @@ function handleDelete(row: BotConfigListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="configName">
+        <XhFormFieldGroup name="configName">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.bot_config.form.config_name') }}</XhFieldLabel>
             <XhFieldControl>
@@ -436,7 +436,7 @@ function handleDelete(row: BotConfigListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="provider">
+        <XhFormFieldGroup name="provider">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.bot_config.form.provider') }}</XhFieldLabel>
             <XhFieldControl>
@@ -445,7 +445,7 @@ function handleDelete(row: BotConfigListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="sort">
+        <XhFormFieldGroup name="sort">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.bot_config.form.sort') }}</XhFieldLabel>
             <XhFieldControl>
@@ -454,7 +454,7 @@ function handleDelete(row: BotConfigListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="webhookUrl" class="xh-span-2">
+        <XhFormFieldGroup name="webhookUrl" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.bot_config.form.webhook_url') }}</XhFieldLabel>
             <XhFieldControl>
@@ -465,7 +465,7 @@ function handleDelete(row: BotConfigListItemDto) {
         </XhFormFieldGroup>
 
         <template v-if="!isWeCom">
-          <XhFormFieldGroup value="secret">
+          <XhFormFieldGroup name="secret">
             <XhFieldRoot>
               <XhFieldLabel>{{ t('message.bot_config.form.secret') }}</XhFieldLabel>
               <XhFieldControl>
@@ -479,7 +479,7 @@ function handleDelete(row: BotConfigListItemDto) {
               <XhFieldErrorText />
             </XhFieldRoot>
           </XhFormFieldGroup>
-          <XhFormFieldGroup value="keyword">
+          <XhFormFieldGroup name="keyword">
             <XhFieldRoot>
               <XhFieldLabel>{{ t('message.bot_config.form.keyword') }}</XhFieldLabel>
               <XhFieldControl>
@@ -491,7 +491,7 @@ function handleDelete(row: BotConfigListItemDto) {
         </template>
 
         <template v-if="!form.basicId">
-          <XhFormFieldGroup value="isEnabled">
+          <XhFormFieldGroup name="isEnabled">
             <XhFieldRoot>
               <XhFieldLabel>{{ t('message.bot_config.form.is_enabled') }}</XhFieldLabel>
               <XhFieldControl>
@@ -500,7 +500,7 @@ function handleDelete(row: BotConfigListItemDto) {
               <XhFieldErrorText />
             </XhFieldRoot>
           </XhFormFieldGroup>
-          <XhFormFieldGroup value="isDefault">
+          <XhFormFieldGroup name="isDefault">
             <XhFieldRoot>
               <XhFieldLabel>{{ t('message.bot_config.form.is_default') }}</XhFieldLabel>
               <XhFieldControl>
@@ -511,7 +511,7 @@ function handleDelete(row: BotConfigListItemDto) {
           </XhFormFieldGroup>
         </template>
 
-        <XhFormFieldGroup value="remark" class="xh-span-2">
+        <XhFormFieldGroup name="remark" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.bot_config.form.remark') }}</XhFieldLabel>
             <XhFieldControl>

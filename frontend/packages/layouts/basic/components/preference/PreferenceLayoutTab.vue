@@ -39,10 +39,17 @@ const tabbarStyleOptions = computed(() => [
   { label: t('preference.layout.tabbar.style_brisk'), value: 'brisk' },
 ])
 
+/** 偏好设置入口的位置：入口不能没有，故不给「隐藏」 */
 const preferencePositionOptions = computed(() => [
-  { label: t('preference.layout.widget.preference_position_auto'), value: 'auto' },
-  { label: t('preference.layout.widget.preference_position_header'), value: 'header' },
-  { label: t('preference.layout.widget.preference_position_floating'), value: 'floating' },
+  { label: t('preference.layout.widget.placement_auto'), value: 'auto' },
+  { label: t('preference.layout.widget.placement_header'), value: 'header' },
+  { label: t('preference.layout.widget.placement_floating'), value: 'floating' },
+])
+
+/** 顶栏工具的位置：与偏好设置入口同一套，另可隐藏 */
+const widgetPlacementOptions = computed(() => [
+  ...preferencePositionOptions.value,
+  { label: t('preference.layout.widget.placement_hidden'), value: 'hidden' },
 ])
 
 const layout = computed(() => appStore.layoutMode)
@@ -173,11 +180,11 @@ watch(() => appStore.sidebarCollapsed, (val) => {
       </div>
       <div class="pref-row" :class="{ 'opacity-50': sidebarDisabled }">
         <span>{{ t('preference.layout.sidebar.show') }}</span>
-        <XhSwitch v-model:checked="appStore.sidebarShow" :disabled="sidebarDisabled" />
+        <XhSwitch v-model:checked="appStore.sidebarShow" :disabled="sidebarDisabled" :aria-label="t('preference.layout.sidebar.show')" />
       </div>
       <div class="pref-row" :class="{ 'opacity-50': sidebarItemDisabled }">
         <span>{{ t('preference.layout.sidebar.collapse') }}</span>
-        <XhSwitch v-model:checked="appStore.sidebarCollapsed" :disabled="sidebarItemDisabled" />
+        <XhSwitch v-model:checked="appStore.sidebarCollapsed" :disabled="sidebarItemDisabled" :aria-label="t('preference.layout.sidebar.collapse')" />
       </div>
       <div class="pref-row" :class="{ 'opacity-50': sidebarExpandOnHoverDisabled }">
         <div class="flex items-center gap-1">
@@ -187,6 +194,7 @@ watch(() => appStore.sidebarCollapsed, (val) => {
         <XhSwitch
           v-model:checked="appStore.sidebarExpandOnHover"
           :disabled="sidebarExpandOnHoverDisabled"
+          :aria-label="t('preference.layout.sidebar.hover_expand')"
         />
       </div>
       <div class="pref-row" :class="{ 'opacity-50': sidebarCollapsedShowTitleDisabled }">
@@ -194,7 +202,7 @@ watch(() => appStore.sidebarCollapsed, (val) => {
           <span>{{ t('preference.layout.sidebar.collapsed_show_title') }}</span>
           <PrefTip :content="t('preference.layout.sidebar.collapsed_show_title_tip')" />
         </div>
-        <XhSwitch v-model:checked="appStore.sidebarCollapsedShowTitle" :disabled="sidebarCollapsedShowTitleDisabled" />
+        <XhSwitch v-model:checked="appStore.sidebarCollapsedShowTitle" :disabled="sidebarCollapsedShowTitleDisabled" :aria-label="t('preference.layout.sidebar.collapsed_show_title')" />
       </div>
       <div class="pref-row" :class="{ 'opacity-50': sidebarAutoActivateChildDisabled }">
         <div class="flex items-center gap-1">
@@ -204,6 +212,7 @@ watch(() => appStore.sidebarCollapsed, (val) => {
         <XhSwitch
           v-model:checked="appStore.sidebarAutoActivateChild"
           :disabled="sidebarAutoActivateChildDisabled"
+          :aria-label="t('preference.layout.sidebar.auto_activate_child')"
         />
       </div>
       <div class="pref-row" :class="{ 'opacity-50': sidebarItemDisabled }">
@@ -213,6 +222,7 @@ watch(() => appStore.sidebarCollapsed, (val) => {
             type="button"
             class="btn-toggle"
             :class="{ 'is-active': appStore.sidebarCollapseButton && !sidebarItemDisabled }"
+            :aria-pressed="appStore.sidebarCollapseButton"
             :disabled="sidebarItemDisabled"
             @click="!sidebarItemDisabled && (appStore.sidebarCollapseButton = !appStore.sidebarCollapseButton)"
           >
@@ -222,6 +232,7 @@ watch(() => appStore.sidebarCollapsed, (val) => {
             type="button"
             class="btn-toggle"
             :class="{ 'is-active': appStore.sidebarFixedButton && !sidebarItemDisabled }"
+            :aria-pressed="appStore.sidebarFixedButton"
             :disabled="sidebarItemDisabled"
             @click="!sidebarItemDisabled && (appStore.sidebarFixedButton = !appStore.sidebarFixedButton)"
           >
@@ -237,10 +248,10 @@ watch(() => appStore.sidebarCollapsed, (val) => {
             :min="180"
             :max="320"
             size="sm"
-            button-placement="both"
             class="pref-num pref-num--center"
             style="width: 130px"
             :disabled="sidebarItemDisabled"
+            :aria-label="t('preference.layout.sidebar.width')"
           />
           <span class="unit-label">px</span>
         </div>
@@ -254,14 +265,14 @@ watch(() => appStore.sidebarCollapsed, (val) => {
       </div>
       <div class="pref-row" :class="{ 'opacity-50': headerDisabled }">
         <span>{{ t('preference.layout.header.show') }}</span>
-        <XhSwitch v-model:checked="appStore.headerShow" :disabled="headerDisabled" />
+        <XhSwitch v-model:checked="appStore.headerShow" :disabled="headerDisabled" :aria-label="t('preference.layout.header.show')" />
       </div>
       <div class="pref-row" :class="{ 'opacity-50': headerItemDisabled }">
         <div class="flex items-center gap-1">
           <span>{{ t('preference.layout.header.mode') }}</span>
           <PrefTip :content="t('preference.layout.header.mode_tip')" />
         </div>
-        <XhToggleGroupRoot v-model:value="appStore.headerMode" :disabled="headerItemDisabled" size="sm">
+        <XhToggleGroupRoot v-model:value="appStore.headerMode" :disabled="headerItemDisabled" disallow-empty size="sm" :aria-label="t('preference.layout.header.mode')">
           <XhToggleGroupItem value="fixed">
             {{ t('preference.layout.header.mode_fixed') }}
           </XhToggleGroupItem>
@@ -272,7 +283,7 @@ watch(() => appStore.sidebarCollapsed, (val) => {
       </div>
       <div class="pref-row" :class="{ 'opacity-50': headerItemDisabled }">
         <span>{{ t('preference.layout.header.menu_align') }}</span>
-        <XhToggleGroupRoot v-model:value="appStore.headerMenuAlign" :disabled="headerItemDisabled" size="sm">
+        <XhToggleGroupRoot v-model:value="appStore.headerMenuAlign" :disabled="headerItemDisabled" disallow-empty size="sm" :aria-label="t('preference.layout.header.menu_align')">
           <XhToggleGroupItem value="start">
             {{ t('preference.layout.header.menu_align_left') }}
           </XhToggleGroupItem>
@@ -293,7 +304,7 @@ watch(() => appStore.sidebarCollapsed, (val) => {
       </div>
       <div class="pref-row" :class="{ 'opacity-50': navDisabled }">
         <span>{{ t('preference.layout.navigation.style') }}</span>
-        <XhToggleGroupRoot v-model:value="appStore.navigationStyle" :disabled="navDisabled" size="sm">
+        <XhToggleGroupRoot v-model:value="appStore.navigationStyle" :disabled="navDisabled" disallow-empty size="sm" :aria-label="t('preference.layout.navigation.style')">
           <XhToggleGroupItem value="rounded">
             {{ t('preference.layout.navigation.style_rounded') }}
           </XhToggleGroupItem>
@@ -307,14 +318,14 @@ watch(() => appStore.sidebarCollapsed, (val) => {
           <span>{{ t('preference.layout.navigation.split') }}</span>
           <PrefTip :content="t('preference.layout.navigation.split_tip')" />
         </div>
-        <XhSwitch v-model:checked="appStore.navigationSplit" :disabled="navSplitDisabled" />
+        <XhSwitch v-model:checked="appStore.navigationSplit" :disabled="navSplitDisabled" :aria-label="t('preference.layout.navigation.split')" />
       </div>
       <div class="pref-row" :class="{ 'opacity-50': navDisabled }">
         <div class="flex items-center gap-1">
           <span>{{ t('preference.layout.navigation.accordion') }}</span>
           <PrefTip :content="t('preference.layout.navigation.accordion_tip')" />
         </div>
-        <XhSwitch v-model:checked="appStore.navigationAccordion" :disabled="navDisabled" />
+        <XhSwitch v-model:checked="appStore.navigationAccordion" :disabled="navDisabled" :aria-label="t('preference.layout.navigation.accordion')" />
       </div>
     </section>
 
@@ -325,26 +336,26 @@ watch(() => appStore.sidebarCollapsed, (val) => {
       </div>
       <div class="pref-row" :class="{ 'opacity-50': breadcrumbDisabled }">
         <span>{{ t('preference.layout.breadcrumb.enabled') }}</span>
-        <XhSwitch v-model:checked="appStore.breadcrumbEnabled" :disabled="breadcrumbDisabled" />
+        <XhSwitch v-model:checked="appStore.breadcrumbEnabled" :disabled="breadcrumbDisabled" :aria-label="t('preference.layout.breadcrumb.enabled')" />
       </div>
       <div class="pref-row" :class="{ 'opacity-50': breadcrumbItemDisabled }">
         <div class="flex items-center gap-1">
           <span>{{ t('preference.layout.breadcrumb.hide_only_one') }}</span>
           <PrefTip :content="t('preference.layout.breadcrumb.hide_only_one_tip')" />
         </div>
-        <XhSwitch v-model:checked="appStore.breadcrumbHideOnlyOne" :disabled="breadcrumbItemDisabled" />
+        <XhSwitch v-model:checked="appStore.breadcrumbHideOnlyOne" :disabled="breadcrumbItemDisabled" :aria-label="t('preference.layout.breadcrumb.hide_only_one')" />
       </div>
       <div class="pref-row" :class="{ 'opacity-50': breadcrumbItemDisabled }">
         <span>{{ t('preference.layout.breadcrumb.show_icon') }}</span>
-        <XhSwitch v-model:checked="appStore.breadcrumbShowIcon" :disabled="breadcrumbItemDisabled" />
+        <XhSwitch v-model:checked="appStore.breadcrumbShowIcon" :disabled="breadcrumbItemDisabled" :aria-label="t('preference.layout.breadcrumb.show_icon')" />
       </div>
       <div class="pref-row" :class="{ 'opacity-50': breadcrumbShowHomeDisabled }">
         <span>{{ t('preference.layout.breadcrumb.show_home') }}</span>
-        <XhSwitch v-model:checked="appStore.breadcrumbShowHome" :disabled="breadcrumbShowHomeDisabled" />
+        <XhSwitch v-model:checked="appStore.breadcrumbShowHome" :disabled="breadcrumbShowHomeDisabled" :aria-label="t('preference.layout.breadcrumb.show_home')" />
       </div>
       <div class="pref-row" :class="{ 'opacity-50': breadcrumbItemDisabled }">
         <span>{{ t('preference.layout.breadcrumb.style') }}</span>
-        <XhToggleGroupRoot v-model:value="appStore.breadcrumbStyle" :disabled="breadcrumbItemDisabled" size="sm">
+        <XhToggleGroupRoot v-model:value="appStore.breadcrumbStyle" :disabled="breadcrumbItemDisabled" disallow-empty size="sm" :aria-label="t('preference.layout.breadcrumb.style')">
           <XhToggleGroupItem value="normal">
             {{ t('preference.layout.breadcrumb.style_normal') }}
           </XhToggleGroupItem>
@@ -362,21 +373,21 @@ watch(() => appStore.sidebarCollapsed, (val) => {
       </div>
       <div class="pref-row">
         <span>{{ t('preference.layout.tabbar.enabled') }}</span>
-        <XhSwitch v-model:checked="appStore.tabbarEnabled" />
+        <XhSwitch v-model:checked="appStore.tabbarEnabled" :aria-label="t('preference.layout.tabbar.enabled')" />
       </div>
       <div class="pref-row" :class="{ 'opacity-50': !appStore.tabbarEnabled }">
         <div class="flex items-center gap-1">
           <span>{{ t('preference.layout.tabbar.persist') }}</span>
           <PrefTip :content="t('preference.layout.tabbar.persist_tip')" />
         </div>
-        <XhSwitch v-model:checked="appStore.tabbarPersist" :disabled="!appStore.tabbarEnabled" />
+        <XhSwitch v-model:checked="appStore.tabbarPersist" :disabled="!appStore.tabbarEnabled" :aria-label="t('preference.layout.tabbar.persist')" />
       </div>
       <div class="pref-row" :class="{ 'opacity-50': !appStore.tabbarEnabled }">
         <div class="flex items-center gap-1">
           <span>{{ t('preference.layout.tabbar.visit_history') }}</span>
           <PrefTip :content="t('preference.layout.tabbar.visit_history_tip')" />
         </div>
-        <XhSwitch v-model:checked="appStore.tabbarVisitHistory" :disabled="!appStore.tabbarEnabled" />
+        <XhSwitch v-model:checked="appStore.tabbarVisitHistory" :disabled="!appStore.tabbarEnabled" :aria-label="t('preference.layout.tabbar.visit_history')" />
       </div>
       <div class="pref-row" :class="{ 'opacity-50': !appStore.tabbarEnabled }">
         <div class="flex items-center gap-1">
@@ -389,10 +400,10 @@ watch(() => appStore.sidebarCollapsed, (val) => {
             :min="0"
             :max="30"
             size="sm"
-            button-placement="both"
             class="pref-num pref-num--center"
             style="width: 120px"
             :disabled="!appStore.tabbarEnabled"
+            :aria-label="t('preference.layout.tabbar.max_count')"
           />
           <span class="unit-label">{{ t('preference.layout.tabbar.max_count_unit') }}</span>
         </div>
@@ -402,37 +413,37 @@ watch(() => appStore.sidebarCollapsed, (val) => {
           <span>{{ t('preference.layout.tabbar.draggable') }}</span>
           <PrefTip :content="t('preference.layout.tabbar.draggable_tip')" />
         </div>
-        <XhSwitch v-model:checked="appStore.tabbarDraggable" :disabled="!appStore.tabbarEnabled" />
+        <XhSwitch v-model:checked="appStore.tabbarDraggable" :disabled="!appStore.tabbarEnabled" :aria-label="t('preference.layout.tabbar.draggable')" />
       </div>
       <div class="pref-row" :class="{ 'opacity-50': !appStore.tabbarEnabled }">
         <div class="flex items-center gap-1">
           <span>{{ t('preference.layout.tabbar.scroll_response') }}</span>
           <PrefTip :content="t('preference.layout.tabbar.scroll_response_tip')" />
         </div>
-        <XhSwitch v-model:checked="appStore.tabbarScrollResponse" :disabled="!appStore.tabbarEnabled" />
+        <XhSwitch v-model:checked="appStore.tabbarScrollResponse" :disabled="!appStore.tabbarEnabled" :aria-label="t('preference.layout.tabbar.scroll_response')" />
       </div>
       <div class="pref-row" :class="{ 'opacity-50': !appStore.tabbarEnabled }">
         <div class="flex items-center gap-1">
           <span>{{ t('preference.layout.tabbar.middle_click_close') }}</span>
           <PrefTip :content="t('preference.layout.tabbar.middle_click_close_tip')" />
         </div>
-        <XhSwitch v-model:checked="appStore.tabbarMiddleClickClose" :disabled="!appStore.tabbarEnabled" />
+        <XhSwitch v-model:checked="appStore.tabbarMiddleClickClose" :disabled="!appStore.tabbarEnabled" :aria-label="t('preference.layout.tabbar.middle_click_close')" />
       </div>
       <div class="pref-row" :class="{ 'opacity-50': !appStore.tabbarEnabled }">
         <span>{{ t('preference.layout.tabbar.show_icon') }}</span>
-        <XhSwitch v-model:checked="appStore.tabbarShowIcon" :disabled="!appStore.tabbarEnabled" />
+        <XhSwitch v-model:checked="appStore.tabbarShowIcon" :disabled="!appStore.tabbarEnabled" :aria-label="t('preference.layout.tabbar.show_icon')" />
       </div>
       <div class="pref-row" :class="{ 'opacity-50': !appStore.tabbarEnabled }">
         <span>{{ t('preference.layout.tabbar.show_more') }}</span>
-        <XhSwitch v-model:checked="appStore.tabbarShowMore" :disabled="!appStore.tabbarEnabled" />
+        <XhSwitch v-model:checked="appStore.tabbarShowMore" :disabled="!appStore.tabbarEnabled" :aria-label="t('preference.layout.tabbar.show_more')" />
       </div>
       <div class="pref-row" :class="{ 'opacity-50': !appStore.tabbarEnabled }">
         <span>{{ t('preference.layout.tabbar.show_overview') }}</span>
-        <XhSwitch v-model:checked="appStore.tabbarShowOverview" :disabled="!appStore.tabbarEnabled" />
+        <XhSwitch v-model:checked="appStore.tabbarShowOverview" :disabled="!appStore.tabbarEnabled" :aria-label="t('preference.layout.tabbar.show_overview')" />
       </div>
       <div class="pref-row" :class="{ 'opacity-50': !appStore.tabbarEnabled }">
         <span>{{ t('preference.layout.tabbar.show_maximize') }}</span>
-        <XhSwitch v-model:checked="appStore.tabbarShowMaximize" :disabled="!appStore.tabbarEnabled" />
+        <XhSwitch v-model:checked="appStore.tabbarShowMaximize" :disabled="!appStore.tabbarEnabled" :aria-label="t('preference.layout.tabbar.show_maximize')" />
       </div>
       <div class="pref-row" :class="{ 'opacity-50': !appStore.tabbarEnabled }">
         <span>{{ t('preference.layout.tabbar.style') }}</span>
@@ -441,6 +452,7 @@ watch(() => appStore.sidebarCollapsed, (val) => {
           :options="tabbarStyleOptions"
           size="sm"
           style="width: 100px"
+          :aria-label="t('preference.layout.tabbar.style')"
           :disabled="!appStore.tabbarEnabled"
         />
       </div>
@@ -456,39 +468,69 @@ watch(() => appStore.sidebarCollapsed, (val) => {
           <span>{{ t('preference.layout.breadcrumb.nav_buttons') }}</span>
           <PrefTip :content="t('preference.layout.breadcrumb.nav_buttons_tip')" />
         </div>
-        <XhSwitch v-model:checked="appStore.breadcrumbNavButtons" />
+        <XhSwitch v-model:checked="appStore.breadcrumbNavButtons" :aria-label="t('preference.layout.breadcrumb.nav_buttons')" />
       </div>
       <div class="pref-row">
         <span>{{ t('preference.layout.widget.refresh') }}</span>
-        <XhSwitch v-model:checked="appStore.widgetRefresh" />
+        <XhSwitch v-model:checked="appStore.widgetRefresh" :aria-label="t('preference.layout.widget.refresh')" />
       </div>
       <div class="pref-row">
         <span>{{ t('preference.layout.widget.favorites') }}</span>
-        <XhSwitch v-model:checked="appStore.widgetFavorites" />
+        <XhSwitch v-model:checked="appStore.widgetFavorites" :aria-label="t('preference.layout.widget.favorites')" />
       </div>
       <div class="pref-row">
         <span>{{ t('preference.layout.widget.sidebar_toggle') }}</span>
-        <XhSwitch v-model:checked="appStore.widgetSidebarToggle" />
+        <XhSwitch v-model:checked="appStore.widgetSidebarToggle" :aria-label="t('preference.layout.widget.sidebar_toggle')" />
       </div>
       <div class="pref-row">
         <span>{{ t('preference.layout.widget.global_search') }}</span>
-        <XhSwitch v-model:checked="appStore.searchEnabled" />
+        <XSelect
+          v-model:value="appStore.widgetSearchPlacement"
+          :options="widgetPlacementOptions"
+          size="sm"
+          style="width: 110px"
+          :aria-label="t('preference.layout.widget.global_search')"
+        />
       </div>
       <div class="pref-row">
         <span>{{ t('preference.layout.widget.language_toggle') }}</span>
-        <XhSwitch v-model:checked="appStore.widgetLanguageToggle" />
+        <XSelect
+          v-model:value="appStore.widgetLanguagePlacement"
+          :options="widgetPlacementOptions"
+          size="sm"
+          style="width: 110px"
+          :aria-label="t('preference.layout.widget.language_toggle')"
+        />
       </div>
       <div class="pref-row">
         <span>{{ t('preference.layout.widget.timezone_toggle') }}</span>
-        <XhSwitch v-model:checked="appStore.widgetTimezone" />
+        <XSelect
+          v-model:value="appStore.widgetTimezonePlacement"
+          :options="widgetPlacementOptions"
+          size="sm"
+          style="width: 110px"
+          :aria-label="t('preference.layout.widget.timezone_toggle')"
+        />
       </div>
       <div class="pref-row">
         <span>{{ t('preference.layout.widget.theme_toggle') }}</span>
-        <XhSwitch v-model:checked="appStore.widgetThemeToggle" />
+        <XSelect
+          v-model:value="appStore.widgetThemePlacement"
+          :options="widgetPlacementOptions"
+          size="sm"
+          style="width: 110px"
+          :aria-label="t('preference.layout.widget.theme_toggle')"
+        />
       </div>
       <div class="pref-row">
         <span>{{ t('preference.layout.widget.fullscreen') }}</span>
-        <XhSwitch v-model:checked="appStore.widgetFullscreen" />
+        <XSelect
+          v-model:value="appStore.widgetFullscreenPlacement"
+          :options="widgetPlacementOptions"
+          size="sm"
+          style="width: 110px"
+          :aria-label="t('preference.layout.widget.fullscreen')"
+        />
       </div>
       <div class="pref-row">
         <span>{{ t('preference.layout.widget.preference_position') }}</span>
@@ -497,15 +539,16 @@ watch(() => appStore.sidebarCollapsed, (val) => {
           :options="preferencePositionOptions"
           size="sm"
           style="width: 110px"
+          :aria-label="t('preference.layout.widget.preference_position')"
         />
       </div>
       <div class="pref-row">
         <span>{{ t('preference.layout.widget.notification') }}</span>
-        <XhSwitch v-model:checked="appStore.widgetNotification" />
+        <XhSwitch v-model:checked="appStore.widgetNotification" :aria-label="t('preference.layout.widget.notification')" />
       </div>
       <div class="pref-row">
         <span>{{ t('preference.layout.widget.lock_screen') }}</span>
-        <XhSwitch v-model:checked="appStore.widgetLockScreen" />
+        <XhSwitch v-model:checked="appStore.widgetLockScreen" :aria-label="t('preference.layout.widget.lock_screen')" />
       </div>
     </section>
 
@@ -516,15 +559,15 @@ watch(() => appStore.sidebarCollapsed, (val) => {
       </div>
       <div class="pref-row">
         <span>{{ t('preference.layout.footer.show') }}</span>
-        <XhSwitch v-model:checked="appStore.footerEnable" />
+        <XhSwitch v-model:checked="appStore.footerEnable" :aria-label="t('preference.layout.footer.show')" />
       </div>
       <div class="pref-row" :class="{ 'opacity-50': !appStore.footerEnable }">
         <span>{{ t('preference.layout.footer.fixed') }}</span>
-        <XhSwitch v-model:checked="appStore.footerFixed" :disabled="!appStore.footerEnable" />
+        <XhSwitch v-model:checked="appStore.footerFixed" :disabled="!appStore.footerEnable" :aria-label="t('preference.layout.footer.fixed')" />
       </div>
       <div class="pref-row" :class="{ 'opacity-50': !appStore.footerEnable }">
         <span>{{ t('preference.layout.footer.show_dev_info') }}</span>
-        <XhSwitch v-model:checked="appStore.footerShowDevInfo" :disabled="!appStore.footerEnable" />
+        <XhSwitch v-model:checked="appStore.footerShowDevInfo" :disabled="!appStore.footerEnable" :aria-label="t('preference.layout.footer.show_dev_info')" />
       </div>
     </section>
 
@@ -535,7 +578,7 @@ watch(() => appStore.sidebarCollapsed, (val) => {
       </div>
       <div class="pref-row" :class="{ 'opacity-50': copyrightDisabled }">
         <span>{{ t('preference.layout.copyright.enabled') }}</span>
-        <XhSwitch v-model:checked="appStore.copyrightEnable" :disabled="copyrightDisabled" />
+        <XhSwitch v-model:checked="appStore.copyrightEnable" :disabled="copyrightDisabled" :aria-label="t('preference.layout.copyright.enabled')" />
       </div>
       <div class="pref-row" :class="{ 'opacity-50': copyrightItemDisabled }">
         <span>{{ t('preference.layout.copyright.name') }}</span>
@@ -545,6 +588,7 @@ watch(() => appStore.sidebarCollapsed, (val) => {
           style="width: 150px"
           class="pref-num pref-num--right"
           :disabled="copyrightItemDisabled"
+          :aria-label="t('preference.layout.copyright.name')"
         />
       </div>
       <div class="pref-row" :class="{ 'opacity-50': copyrightItemDisabled }">
@@ -555,6 +599,7 @@ watch(() => appStore.sidebarCollapsed, (val) => {
           style="width: 150px"
           class="pref-num pref-num--right"
           :disabled="copyrightItemDisabled"
+          :aria-label="t('preference.layout.copyright.site')"
         />
       </div>
       <div class="pref-row" :class="{ 'opacity-50': copyrightItemDisabled }">
@@ -566,6 +611,7 @@ watch(() => appStore.sidebarCollapsed, (val) => {
           class="pref-num pref-num--right"
           placeholder="2016"
           :disabled="copyrightItemDisabled"
+          :aria-label="t('preference.layout.copyright.start_date')"
         />
       </div>
       <div class="pref-row" :class="{ 'opacity-50': copyrightItemDisabled }">
@@ -577,6 +623,7 @@ watch(() => appStore.sidebarCollapsed, (val) => {
           class="pref-num pref-num--right"
           :placeholder="t('preference.layout.copyright.optional')"
           :disabled="copyrightItemDisabled"
+          :aria-label="t('preference.layout.copyright.icp')"
         />
       </div>
       <div class="pref-row" :class="{ 'opacity-50': copyrightItemDisabled }">
@@ -588,6 +635,7 @@ watch(() => appStore.sidebarCollapsed, (val) => {
           class="pref-num pref-num--right"
           :placeholder="t('preference.layout.copyright.optional')"
           :disabled="copyrightItemDisabled"
+          :aria-label="t('preference.layout.copyright.icp_url')"
         />
       </div>
     </section>
@@ -630,7 +678,10 @@ watch(() => appStore.sidebarCollapsed, (val) => {
   width: 100%;
   overflow: hidden;
   text-align: center;
-  transition: all var(--xh-motion-duration-enter) var(--xh-motion-ease-enter);
+  transition:
+    border-color var(--xh-motion-duration-enter) var(--xh-motion-ease-enter),
+    box-shadow var(--xh-motion-duration-enter) var(--xh-motion-ease-enter),
+    transform var(--xh-motion-duration-move) var(--xh-motion-ease-enter);
 }
 
 .layout-preset-card:hover {
@@ -677,12 +728,13 @@ watch(() => appStore.sidebarCollapsed, (val) => {
   font-weight: 500;
 }
 
-/* 数字输入框里的文字对齐：input 由组件库渲染，只能经 :deep 够到 */
+/* 输入框里的文字对齐：数字框减钮在前、加钮在后，数字居中夹在两钮之间；input 由组件库渲染，只能经 :deep 够到 */
 .pref-num--center :deep([data-scope='number-field'][data-part='input']) {
   text-align: center;
 }
 
-.pref-num--right :deep([data-scope='number-field'][data-part='input']) {
+.pref-num--right :deep([data-scope='number-field'][data-part='input']),
+.pref-num--right :deep([data-scope='text-field'][data-part='input']) {
   text-align: right;
 }
 </style>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import type { Tone } from '@xihan-ui/kernel'
+import type { Tone } from '@xihan-ui/core'
 import type { UserInboxItemDto } from '@/api'
-import { XhButton, XhEmptyStateDescription, XhEmptyStateIcon, XhEmptyStateRoot, XhEmptyStateTitle, XhFlex, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
+import { XhButton, XhButtonIndicator, XhButtonLabel, XhButtonPrefix, XhEmptyStateDescription, XhEmptyStateIndicator, XhEmptyStateRoot, XhEmptyStateTitle, XhFlex, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
@@ -134,7 +134,7 @@ async function loadNotifications() {
     syncHeaderStore(list)
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('workbench.inbox.load_failed'))
+    toast.danger((error as Error)?.message || t('workbench.inbox.load_failed'))
   }
   finally {
     loading.value = false
@@ -153,7 +153,7 @@ async function handleMarkRead(item: UserInboxItemDto) {
     notificationStore.markItemRead(item.basicId)
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('workbench.inbox.mark_read_failed'))
+    toast.danger((error as Error)?.message || t('workbench.inbox.mark_read_failed'))
   }
 }
 
@@ -167,7 +167,7 @@ async function handleConfirm(item: UserInboxItemDto) {
     notificationStore.markItemConfirmed(item.basicId)
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('workbench.inbox.confirm_failed'))
+    toast.danger((error as Error)?.message || t('workbench.inbox.confirm_failed'))
   }
 }
 
@@ -188,7 +188,7 @@ async function handleMarkAllRead() {
     notificationStore.markAllRead()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('workbench.inbox.mark_all_read_failed'))
+    toast.danger((error as Error)?.message || t('workbench.inbox.mark_all_read_failed'))
   }
 }
 
@@ -248,11 +248,13 @@ onMounted(loadNotifications)
           tone="brand"
           @click="handleMarkAllRead"
         >
-          <span><Icon icon="lucide:check-check" /></span>
-          {{ t('workbench.inbox.mark_all_read') }}
+          <XhButtonIndicator />
+          <XhButtonPrefix><Icon icon="lucide:check-check" /></XhButtonPrefix>
+          <XhButtonLabel>{{ t('workbench.inbox.mark_all_read') }}</XhButtonLabel>
         </XhButton>
-        <XhButton class="xh-icon-btn" :aria-label="t('workbench.inbox.refresh')" :loading="loading" size="sm" @click="loadNotifications">
-          <span><Icon icon="lucide:refresh-cw" /></span>
+        <XhButton icon-only variant="subtle" class="xh-icon-btn" :aria-label="t('workbench.inbox.refresh')" :loading="loading" size="sm" @click="loadNotifications">
+          <XhButtonIndicator />
+          <XhButtonPrefix><Icon icon="lucide:refresh-cw" /></XhButtonPrefix>
         </XhButton>
       </div>
     </div>
@@ -268,9 +270,9 @@ onMounted(loadNotifications)
     </div>
 
     <XhEmptyStateRoot v-else-if="visibleItems.length === 0" class="inbox-empty">
-      <XhEmptyStateIcon>
+      <XhEmptyStateIndicator>
         <Icon icon="lucide:inbox" width="28" height="28" />
-      </XhEmptyStateIcon>
+      </XhEmptyStateIndicator>
       <XhEmptyStateTitle>{{ t('common.no_data') }}</XhEmptyStateTitle>
       <XhEmptyStateDescription>{{ t('workbench.inbox.empty') }}</XhEmptyStateDescription>
     </XhEmptyStateRoot>
@@ -331,7 +333,7 @@ onMounted(loadNotifications)
           <XhButton
             v-if="item.notificationStatus === NotificationStatus.Unread"
             :aria-label="t('workbench.inbox.mark_read')"
-            data-circle
+            icon-only
             variant="ghost"
             size="sm"
             tone="brand"
@@ -342,7 +344,7 @@ onMounted(loadNotifications)
           <XhButton
             v-if="item.needConfirm && !item.confirmTime"
             :aria-label="t('workbench.inbox.confirm')"
-            data-circle
+            icon-only
             variant="ghost"
             size="sm"
             tone="warning"
@@ -353,7 +355,7 @@ onMounted(loadNotifications)
           <XhButton
             v-if="item.link"
             :aria-label="t('workbench.inbox.open_link')"
-            data-circle
+            icon-only
             variant="ghost"
             size="sm"
             @click="handleOpenLink(item)"

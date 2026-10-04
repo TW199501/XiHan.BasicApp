@@ -37,9 +37,6 @@ public sealed class EndpointAuthorizationCoverageTests
     private static readonly IReadOnlySet<string> SelfServiceEndpoints =
         new HashSet<string>(StringComparer.Ordinal)
         {
-            // AiAssistantQueryService（1）：聊天页助手选项，助手管理权限属后台配置，不用于门控普通用户使用助手
-            "AiAssistantQueryService.GetAvailableAsync",
-
             // AuthAppService（8）：当前会话自助，只读写调用者自身的登录态
             "AuthAppService.CreateOAuthBindTicketAsync",
             "AuthAppService.GetPermissionsAsync",
@@ -51,9 +48,9 @@ public sealed class EndpointAuthorizationCoverageTests
             "AuthAppService.SwitchTenantAsync",
             "AuthAppService.UnlockSessionAsync",
 
-            // ChatAssistantAppService（2）：当前用户与助手的会话，会话归属经 ChatDomainService 按 userId 解析
-            "ChatAssistantAppService.OpenConversationAsync",
-            "ChatAssistantAppService.ReplyAsync",
+            // DictQueryService（1）：字典是业务表单下拉的选项来源，使用者不一定持有字典管理权限，类级 Authorize 已门控；
+            // 只暴露下拉用得到的码、名、层级、默认与停用标记，不含项值、说明与扩展元数据，停用字典不暴露任何项
+            "DictQueryService.GetDictOptionsAsync",
 
             // EnumMetadataAppService（2）：全站字典标签的单一事实源，任何登录用户都要能取，类级 Authorize 已门控
             "EnumMetadataAppService.GetAllEnumsAsync",
@@ -76,9 +73,6 @@ public sealed class EndpointAuthorizationCoverageTests
 
             // ImportHistoryQueryService（1）：导入历史归属当前用户
             "ImportHistoryQueryService.GetMineAsync",
-
-            // MyFieldSecurityAppService（1）：下发当前主体的字段权限，边界在 IFieldSecurityService.ResolveAsync 内按调用者解析
-            "MyFieldSecurityAppService.GetMineAsync",
 
             // MyOAuthAppAppService（6）：自有 OAuth 应用，写路径经 GetOwnedOrThrowAsync 校验 CreatedId 为本人
             "MyOAuthAppAppService.CreateMyOAuthAppAsync",
@@ -296,7 +290,8 @@ public sealed class EndpointAuthorizationCoverageTests
     /// 按框架的动态 API 生成规则枚举全部被暴露为 HTTP 端点的方法。
     /// 类型判据与方法判据直接调用框架的 <see cref="TypeHelper"/>，确保与运行期生成的控制器同集合。
     /// </summary>
-    private static IReadOnlyList<(Type Service, MethodInfo Method)> EnumerateExposedEndpoints()
+    /// <remarks>操作日志归类测试复用同一份端点集合，模块登记守卫对两边同时生效。</remarks>
+    internal static IReadOnlyList<(Type Service, MethodInfo Method)> EnumerateExposedEndpoints()
     {
         return ModuleAssemblies
             .SelectMany(assembly => assembly.GetTypes())

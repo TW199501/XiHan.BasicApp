@@ -56,7 +56,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 2,
     render: (row) => {
       const hasToken = (row as unknown as TelegramBotListItemDto).hasToken
-      return h(XhTagRoot, { variant: 'outline', tone: hasToken ? 'success' : 'warning' }, () => h(XhTagLabel, () => hasToken ? t('message.telegram_bot.tag.token_configured') : t('message.telegram_bot.tag.token_missing')))
+      return h(XhTagRoot, { variant: 'subtle', tone: hasToken ? 'success' : 'warning' }, () => h(XhTagLabel, () => hasToken ? t('message.telegram_bot.tag.token_configured') : t('message.telegram_bot.tag.token_missing')))
     },
   },
   {
@@ -69,7 +69,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     render: (row) => {
       const enabled = (row as unknown as TelegramBotListItemDto).enableFallbackReply
       return enabled
-        ? h(XhTagRoot, { variant: 'outline', tone: 'info' }, () => h(XhTagLabel, () => t('message.telegram_bot.tag.fallback_on')))
+        ? h(XhTagRoot, { variant: 'subtle', tone: 'info' }, () => h(XhTagLabel, () => t('message.telegram_bot.tag.fallback_on')))
         : h('span', { style: 'opacity:.45' }, '—')
     },
   },
@@ -85,7 +85,7 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 4,
     render: (row) => {
       const enabled = (row as unknown as TelegramBotListItemDto).isEnabled
-      return h(XhTagRoot, { variant: 'outline', tone: enabled ? 'success' : 'danger' }, () => h(XhTagLabel, () => enabled ? t('message.telegram_bot.tag.enabled') : t('message.telegram_bot.tag.disabled')))
+      return h(XhTagRoot, { variant: 'subtle', tone: enabled ? 'success' : 'danger' }, () => h(XhTagLabel, () => enabled ? t('message.telegram_bot.tag.enabled') : t('message.telegram_bot.tag.disabled')))
     },
   },
   { key: 'sort', title: t('message.telegram_bot.columns.sort'), dataType: 'number', sortable: true, width: 80, order: 5 },
@@ -201,7 +201,7 @@ async function handleEdit(row: TelegramBotListItemDto) {
     modalVisible.value = true
   }
   catch (e) {
-    toast.error((e as Error).message || t('message.telegram_bot.message.load_detail_failed'))
+    toast.danger((e as Error).message || t('message.telegram_bot.message.load_detail_failed'))
   }
 }
 
@@ -276,7 +276,7 @@ async function handleSubmit() {
     reloadList()
   }
   catch (e) {
-    toast.error((e as Error).message || t('message.telegram_bot.message.save_failed'))
+    toast.danger((e as Error).message || t('message.telegram_bot.message.save_failed'))
   }
   finally {
     submitLoading.value = false
@@ -300,7 +300,7 @@ function handleToggleStatus(row: TelegramBotListItemDto) {
         reloadList()
       }
       catch (e) {
-        toast.error((e as Error).message || t('message.telegram_bot.message.status_update_failed'))
+        toast.danger((e as Error).message || t('message.telegram_bot.message.status_update_failed'))
       }
     },
   })
@@ -321,7 +321,7 @@ function handleDelete(row: TelegramBotListItemDto) {
         reloadList()
       }
       catch (e) {
-        toast.error((e as Error).message || t('message.telegram_bot.message.delete_failed'))
+        toast.danger((e as Error).message || t('message.telegram_bot.message.delete_failed'))
       }
     },
   })
@@ -347,7 +347,7 @@ function handleDelete(row: TelegramBotListItemDto) {
         class="xh-edit-form-grid"
         @submit="handleSubmit"
       >
-        <XhFormFieldGroup value="botName">
+        <XhFormFieldGroup name="botName">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.telegram_bot.form.bot_name') }}</XhFieldLabel>
             <XhFieldControl>
@@ -356,7 +356,7 @@ function handleDelete(row: TelegramBotListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="token">
+        <XhFormFieldGroup name="token">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.telegram_bot.form.token') }}</XhFieldLabel>
             <XhFieldControl>
@@ -370,7 +370,7 @@ function handleDelete(row: TelegramBotListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="adminUsers" class="xh-span-2">
+        <XhFormFieldGroup name="adminUsers" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.telegram_bot.form.admin_users') }}</XhFieldLabel>
             <XhFieldControl>
@@ -379,7 +379,7 @@ function handleDelete(row: TelegramBotListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="allowedGroupChatIds" class="xh-span-2">
+        <XhFormFieldGroup name="allowedGroupChatIds" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.telegram_bot.form.allowed_group_chat_ids') }}</XhFieldLabel>
             <XhFieldControl>
@@ -388,7 +388,7 @@ function handleDelete(row: TelegramBotListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="allowedCommands" class="xh-span-2">
+        <XhFormFieldGroup name="allowedCommands" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.telegram_bot.form.allowed_commands') }}</XhFieldLabel>
             <XhFieldControl>
@@ -397,7 +397,7 @@ function handleDelete(row: TelegramBotListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="enableFallbackReply">
+        <XhFormFieldGroup name="enableFallbackReply">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.telegram_bot.form.enable_fallback_reply') }}</XhFieldLabel>
             <XhFieldControl>
@@ -406,7 +406,7 @@ function handleDelete(row: TelegramBotListItemDto) {
             <XhFieldErrorText />
           </XhFieldRoot>
         </XhFormFieldGroup>
-        <XhFormFieldGroup value="sort">
+        <XhFormFieldGroup name="sort">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.telegram_bot.form.sort') }}</XhFieldLabel>
             <XhFieldControl>
@@ -417,7 +417,7 @@ function handleDelete(row: TelegramBotListItemDto) {
         </XhFormFieldGroup>
 
         <template v-if="!form.basicId">
-          <XhFormFieldGroup value="isEnabled">
+          <XhFormFieldGroup name="isEnabled">
             <XhFieldRoot>
               <XhFieldLabel>{{ t('message.telegram_bot.form.is_enabled') }}</XhFieldLabel>
               <XhFieldControl>
@@ -428,7 +428,7 @@ function handleDelete(row: TelegramBotListItemDto) {
           </XhFormFieldGroup>
         </template>
 
-        <XhFormFieldGroup value="remark" class="xh-span-2">
+        <XhFormFieldGroup name="remark" class="xh-span-2">
           <XhFieldRoot>
             <XhFieldLabel>{{ t('message.telegram_bot.form.remark') }}</XhFieldLabel>
             <XhFieldControl>

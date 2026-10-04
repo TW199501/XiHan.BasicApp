@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using XiHan.BasicApp.Saas.Domain.Entities;
+using XiHan.Framework.Domain.Shared.Paging.Dtos;
 
 namespace XiHan.BasicApp.Saas.Domain.Repositories;
 
@@ -20,27 +21,26 @@ public interface IUserRepository : ISaasAggregateRepository<SysUser>
     Task<SysUser?> GetByUserNameAsync(string userName, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// 根据当前租户和邮箱获取用户
+    /// 按邮箱定位账号（全平台范围）
     /// </summary>
     /// <remarks>
-    /// 经 CreateQueryable 的全局租户过滤（AOP）按当前租户上下文隔离。邮箱列为非唯一索引（IX_Em），存在重复时取首条匹配。
+    /// 邮箱是登录身份标识、全平台唯一（UX_Em），账号可能归属任意租户，显式跨租户查找。
     /// </remarks>
-    Task<SysUser?> GetByEmailAsync(string email, CancellationToken cancellationToken = default);
+    Task<SysUser?> GetByEmailGloballyAsync(string email, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// 根据当前租户和手机号码获取用户
+    /// 按手机号码定位账号（全平台范围）
     /// </summary>
     /// <remarks>
-    /// 经 CreateQueryable 的全局租户过滤（AOP）按当前租户上下文隔离，E.164 精确匹配；手机号码列为唯一索引（UX_Ph），至多一条匹配。
-    /// 需要平台范围查找时（如手机号登录尚未选定租户），须在当前租户上下文未设置（平台态）时调用本方法，做法同邮箱登录路径（<see cref="GetByEmailAsync"/> 在 AuthenticateEmailLoginAsync 中的用法）。
+    /// 手机号码是登录身份标识、全平台唯一（UX_Ph），E.164 精确匹配，账号可能归属任意租户，显式跨租户查找。
     /// </remarks>
     /// <param name="phone">E.164 手机号码</param>
     /// <param name="cancellationToken">取消令牌</param>
     /// <returns>用户；不存在返回 null</returns>
-    Task<SysUser?> GetByPhoneAsync(string phone, CancellationToken cancellationToken = default);
+    Task<SysUser?> GetByPhoneGloballyAsync(string phone, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// 检查当前租户下用户名是否存在
+    /// 检查当前上下文注册的账号里用户名是否已被占用（租户里连带平台账号一起比对）
     /// </summary>
     Task<bool> ExistsUserNameAsync(string userName, long? excludeUserId = null, CancellationToken cancellationToken = default);
 
@@ -100,4 +100,40 @@ public interface IUserRepository : ISaasAggregateRepository<SysUser>
     /// <param name="cancellationToken">取消令牌</param>
     /// <returns>用户列表（集合为空时返回空列表）</returns>
     Task<List<SysUser>> GetListByIdsIgnoreTenantAsync(IReadOnlyCollection<long> userIds, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 跨租户获取全部启用账号的主键
+    /// </summary>
+    /// <remarks>
+    /// 平台公告「全员」投递专用：面向全平台账号，只取主键，不读取任何租户业务数据。
+    /// </remarks>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>启用账号主键</returns>
+    Task<IReadOnlyList<long>> GetEnabledIdsIgnoreTenantAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 租户成员的账号分页：本租户已接受的成员（含注册在别处的外部成员），账号跨租户读取
+    /// </summary>
+    /// <param name="tenantId">租户主键</param>
+    /// <param name="request">分页请求</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>成员账号分页</returns>
+    Task<PageResultDtoBase<SysUser>> GetMemberAccountsPagedAsync(long tenantId, PageRequestDtoBase request, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 租户成员的账号：不是该租户已接受的成员时返回 null
+    /// </summary>
+    /// <param name="tenantId">租户主键</param>
+    /// <param name="userId">用户主键</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>成员账号</returns>
+    Task<SysUser?> GetMemberAccountAsync(long tenantId, long userId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 租户成员中启用账号的主键
+    /// </summary>
+    /// <param name="tenantId">租户主键</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>启用账号主键</returns>
+    Task<IReadOnlyList<long>> GetEnabledMemberAccountIdsAsync(long tenantId, CancellationToken cancellationToken = default);
 }

@@ -1,11 +1,13 @@
 import type { PageResult } from '../../types'
 import type {
+  TenantAdminInitializeDto,
   TenantCreateDto,
   TenantDetailDto,
   TenantListItemDto,
   TenantOverQuotaDto,
   TenantPageQueryDto,
   TenantStatusUpdateDto,
+  TenantSubscriptionDto,
   TenantSwitcherDto,
   TenantUpdateDto,
 } from './tenant.types'
@@ -30,10 +32,14 @@ export const tenantApi = {
     return tenantCommandApi.delete('Tenant', { id })
   },
   initializeDatabase(id: TenantDetailDto['basicId']) {
-    // 仅库隔离租户：建库 → 建表 → 基线种子。
+    // 仅库隔离租户：建库 → 建表 → 登记版本。
     // InitializeDatabaseAsync(long id)：简单类型参数被动态 API 推断为 query，POST 也不把 id 拼进路由段，
     // 故 id 走 query（同 export Cancel 模式），route 为 /Tenant/InitializeDatabase?id=
     return tenantCommandApi.post<TenantDetailDto>('InitializeDatabase', undefined, { params: { id } })
+  },
+  /** 初始化租户管理员：开通管理员账号与所有者（库隔离租户先初始化数据库） */
+  initializeTenantAdmin(input: TenantAdminInitializeDto) {
+    return tenantCommandApi.post<TenantDetailDto, TenantAdminInitializeDto>('InitializeTenantAdmin', input)
   },
   /** 已超出配额的租户清单：配额拦截只作用于新增，存量超限的租户需要主动查一次 */
   overQuotaTenants() {
@@ -41,6 +47,10 @@ export const tenantApi = {
   },
   myAvailableTenants() {
     return tenantQueryApi.get<TenantSwitcherDto[]>('MyAvailableTenants')
+  },
+  /** 租户侧：当前租户的订阅（版本、到期、席位与存储用量），只读 */
+  mySubscription() {
+    return tenantQueryApi.get<TenantSubscriptionDto>('MySubscription')
   },
   switchTenant(input: SwitchTenantParams) {
     return authCommandApi.post<LoginToken, SwitchTenantParams>('SwitchTenant', input)

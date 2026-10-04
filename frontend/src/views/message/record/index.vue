@@ -8,12 +8,12 @@ import type {
   SmsListItemDto,
 } from '@/api'
 import type { ListFieldSchema, PageSchema, SchemaActionPayload } from '~/components'
-import { XhDescriptionsItem, XhDescriptionsLabel, XhDescriptionsRoot, XhDescriptionsValue, XhDrawerCloseTrigger, XhDrawerContent, XhDrawerRoot, XhDrawerTitle, XhFlex, XhTabsContent, XhTabsList, XhTabsRoot, XhTabsTrigger, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
+import { XhDescriptionsItem, XhDescriptionsLabel, XhDescriptionsRoot, XhDescriptionsValue, XhDrawerCloseTrigger, XhDrawerContent, XhDrawerRoot, XhDrawerTitle, XhFlex, XhTabsContent, XhTabsIndicator, XhTabsList, XhTabsRoot, XhTabsTrigger, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
 import { computed, h, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { createPageRequest, EmailStatus, messageCenterApi, querySortsFromSchema, SmsStatus } from '@/api'
 import { EMAIL_STATUS_OPTIONS, EMAIL_TYPE_OPTIONS, SMS_STATUS_OPTIONS, SMS_TYPE_OPTIONS } from '@/constants'
-import { SchemaPage } from '~/components'
+import { actionConfirmText, SchemaPage } from '~/components'
 import { dialog, toast } from '~/composables'
 import { useEnumOptions } from '~/hooks'
 import { formatDate, getOptionLabel } from '~/utils'
@@ -115,7 +115,7 @@ const emailFields = computed<ListFieldSchema[]>(() => [
     order: 3,
     render: (row) => {
       const r = row as unknown as EmailListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: getMessageStatusTagType(r.emailStatus) }, () => h(XhTagLabel, () => getOptionLabel(emailStatusOptions.value, r.emailStatus)))
+      return h(XhTagRoot, { variant: 'subtle', tone: getMessageStatusTagType(r.emailStatus) }, () => h(XhTagLabel, () => getOptionLabel(emailStatusOptions.value, r.emailStatus)))
     },
   },
   {
@@ -126,7 +126,7 @@ const emailFields = computed<ListFieldSchema[]>(() => [
     order: 4,
     render: (row) => {
       const r = row as unknown as EmailListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: r.isHtml ? 'info' : 'neutral' }, () => h(XhTagLabel, () => formatFlag(r.isHtml)))
+      return h(XhTagRoot, { variant: 'subtle', tone: r.isHtml ? 'info' : 'neutral' }, () => h(XhTagLabel, () => formatFlag(r.isHtml)))
     },
   },
   { key: 'businessType', title: t('message.record.col_business_type'), dataType: 'string', searchable: true, sortable: true, searchPlaceholder: t('message.record.search_business_type_placeholder'), minWidth: 130, order: 5 },
@@ -139,7 +139,7 @@ const emailFields = computed<ListFieldSchema[]>(() => [
 ])
 
 const emailSchema = computed<PageSchema>(() => ({
-  pageCode: 'message.email',
+  pageCode: 'message.record.email',
   exportPermission: 'message.record.export',
   pageName: t('message.record.email_page_name'),
   rowKey: 'basicId',
@@ -165,8 +165,8 @@ const emailSchema = computed<PageSchema>(() => ({
   },
   actions: [
     { key: 'detail', title: t('message.record.action_detail'), scope: 'row', type: 'primary', icon: 'lucide:eye' },
-    { key: 'resend', title: t('message.record.action_resend'), scope: 'row', type: 'warning', icon: 'lucide:refresh-cw', visible: row => canResend((row as unknown as EmailListItemDto).emailStatus) },
-    { key: 'delete', title: t('message.record.action_delete'), scope: 'row', type: 'error', icon: 'lucide:trash-2' },
+    { key: 'resend', title: t('message.record.action_resend'), scope: 'row', type: 'warning', icon: 'lucide:refresh-cw', confirm: true, confirmText: row => actionConfirmText(t, t('message.record.action_resend'), (row as unknown as EmailListItemDto).subject), visible: row => canResend((row as unknown as EmailListItemDto).emailStatus), permission: 'message.record.resend' },
+    { key: 'delete', title: t('message.record.action_delete'), scope: 'row', type: 'error', icon: 'lucide:trash-2', permission: 'message.record.delete' },
   ],
 }))
 
@@ -196,7 +196,7 @@ async function openEmailDetail(row: EmailListItemDto) {
   }
   catch (error) {
     currentEmailDetail.value = null
-    toast.error((error as Error)?.message || t('message.record.msg_load_email_detail_failed'))
+    toast.danger((error as Error)?.message || t('message.record.msg_load_email_detail_failed'))
   }
   finally {
     detailLoading.value = false
@@ -210,7 +210,7 @@ async function resendEmail(row: EmailListItemDto) {
     void emailPageRef.value?.reload()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('message.record.msg_email_resend_failed'))
+    toast.danger((error as Error)?.message || t('message.record.msg_email_resend_failed'))
   }
 }
 
@@ -233,7 +233,7 @@ async function deleteEmail(row: EmailListItemDto) {
     void emailPageRef.value?.reload()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('message.record.msg_email_delete_failed'))
+    toast.danger((error as Error)?.message || t('message.record.msg_email_delete_failed'))
   }
 }
 
@@ -269,7 +269,7 @@ const smsFields = computed<ListFieldSchema[]>(() => [
     order: 3,
     render: (row) => {
       const r = row as unknown as SmsListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: getMessageStatusTagType(r.smsStatus) }, () => h(XhTagLabel, () => getOptionLabel(smsStatusOptions.value, r.smsStatus)))
+      return h(XhTagRoot, { variant: 'subtle', tone: getMessageStatusTagType(r.smsStatus) }, () => h(XhTagLabel, () => getOptionLabel(smsStatusOptions.value, r.smsStatus)))
     },
   },
   { key: 'businessType', title: t('message.record.col_business_type'), dataType: 'string', searchable: true, sortable: true, searchPlaceholder: t('message.record.search_business_type_placeholder'), minWidth: 130, order: 4 },
@@ -283,7 +283,7 @@ const smsFields = computed<ListFieldSchema[]>(() => [
 ])
 
 const smsSchema = computed<PageSchema>(() => ({
-  pageCode: 'message.sms',
+  pageCode: 'message.record.sms',
   exportPermission: 'message.record.export',
   pageName: t('message.record.sms_page_name'),
   rowKey: 'basicId',
@@ -310,8 +310,8 @@ const smsSchema = computed<PageSchema>(() => ({
   },
   actions: [
     { key: 'detail', title: t('message.record.action_detail'), scope: 'row', type: 'primary', icon: 'lucide:eye' },
-    { key: 'resend', title: t('message.record.action_resend'), scope: 'row', type: 'warning', icon: 'lucide:refresh-cw', visible: row => canResend((row as unknown as SmsListItemDto).smsStatus) },
-    { key: 'delete', title: t('message.record.action_delete'), scope: 'row', type: 'error', icon: 'lucide:trash-2' },
+    { key: 'resend', title: t('message.record.action_resend'), scope: 'row', type: 'warning', icon: 'lucide:refresh-cw', confirm: true, confirmText: row => actionConfirmText(t, t('message.record.action_resend'), (row as unknown as SmsListItemDto).templateCode || String((row as unknown as SmsListItemDto).basicId)), visible: row => canResend((row as unknown as SmsListItemDto).smsStatus), permission: 'message.record.resend' },
+    { key: 'delete', title: t('message.record.action_delete'), scope: 'row', type: 'error', icon: 'lucide:trash-2', permission: 'message.record.delete' },
   ],
 }))
 
@@ -341,7 +341,7 @@ async function openSmsDetail(row: SmsListItemDto) {
   }
   catch (error) {
     currentSmsDetail.value = null
-    toast.error((error as Error)?.message || t('message.record.msg_load_sms_detail_failed'))
+    toast.danger((error as Error)?.message || t('message.record.msg_load_sms_detail_failed'))
   }
   finally {
     detailLoading.value = false
@@ -355,7 +355,7 @@ async function resendSms(row: SmsListItemDto) {
     void smsPageRef.value?.reload()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('message.record.msg_sms_resend_failed'))
+    toast.danger((error as Error)?.message || t('message.record.msg_sms_resend_failed'))
   }
 }
 
@@ -378,7 +378,7 @@ async function deleteSms(row: SmsListItemDto) {
     void smsPageRef.value?.reload()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('message.record.msg_sms_delete_failed'))
+    toast.danger((error as Error)?.message || t('message.record.msg_sms_delete_failed'))
   }
 }
 </script>
@@ -394,6 +394,7 @@ async function deleteSms(row: SmsListItemDto) {
         <XhTabsTrigger value="sms">
           {{ t('message.record.tab_sms') }}
         </XhTabsTrigger>
+        <XhTabsIndicator />
       </XhTabsList>
       <XhTabsContent value="email">
         <SchemaPage ref="emailPageRef" :schema="emailSchema" @action="onEmailAction" />
@@ -411,7 +412,7 @@ async function deleteSms(row: SmsListItemDto) {
           {{ t('message.record.detail_loading') }}
         </XhFlex>
 
-        <XhDescriptionsRoot v-else-if="detailTab === 'email' && currentEmailDetail" :columns="1" bordered size="sm">
+        <XhDescriptionsRoot v-else-if="detailTab === 'email' && currentEmailDetail" :columns="1" variant="outline" size="sm">
           <XhDescriptionsItem>
             <XhDescriptionsLabel>{{ t('message.record.detail_subject') }}</XhDescriptionsLabel>
             <XhDescriptionsValue>
@@ -480,7 +481,7 @@ async function deleteSms(row: SmsListItemDto) {
           </XhDescriptionsItem>
         </XhDescriptionsRoot>
 
-        <XhDescriptionsRoot v-else-if="detailTab === 'sms' && currentSmsDetail" :columns="1" bordered size="sm">
+        <XhDescriptionsRoot v-else-if="detailTab === 'sms' && currentSmsDetail" :columns="1" variant="outline" size="sm">
           <XhDescriptionsItem>
             <XhDescriptionsLabel>{{ t('message.record.detail_provider') }}</XhDescriptionsLabel>
             <XhDescriptionsValue>

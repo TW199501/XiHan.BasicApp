@@ -31,14 +31,6 @@
     "cap": 7,
     "reason": "聊天面板几何：气泡、头像、输入区按固定像素排布"
   },
-  "packages/chat/integration/AppChatDrawer.vue": {
-    "cap": 3,
-    "reason": "聊天面板几何：气泡、头像、输入区按固定像素排布"
-  },
-  "packages/chat/integration/ChatHeaderButton.vue": {
-    "cap": 5,
-    "reason": "聊天面板几何：气泡、头像、输入区按固定像素排布"
-  },
   "packages/components/common/CodeEditor.vue": {
     "cap": 6,
     "reason": "站内自绘公共组件的排版刻度"
@@ -75,10 +67,6 @@
     "cap": 32,
     "reason": "站内自绘公共组件的排版刻度"
   },
-  "packages/components/common/PermissionGrantPanel.vue": {
-    "cap": 17,
-    "reason": "站内自绘公共组件的排版刻度"
-  },
   "packages/components/common/RichTextEditor.vue": {
     "cap": 9,
     "reason": "站内自绘公共组件的排版刻度"
@@ -91,16 +79,12 @@
     "cap": 1,
     "reason": "站内自绘公共组件的排版刻度"
   },
-  "packages/components/common/XInput.vue": {
-    "cap": 2,
-    "reason": "站内自绘公共组件的排版刻度"
-  },
   "packages/components/schema/SchemaImportDialog.vue": {
     "cap": 15,
     "reason": "表格与搜索面板的列宽、行高与工具条几何"
   },
   "packages/components/schema/SchemaPage.vue": {
-    "cap": 7,
+    "cap": 3,
     "reason": "表格与搜索面板的列宽、行高与工具条几何"
   },
   "packages/components/schema/SchemaPagination.vue": {
@@ -120,7 +104,7 @@
     "reason": "表格与搜索面板的列宽、行高与工具条几何"
   },
   "packages/components/schema/SchemaTablePanel.vue": {
-    "cap": 8,
+    "cap": 7,
     "reason": "表格与搜索面板的列宽、行高与工具条几何"
   },
   "packages/components/schema/SchemaTableSettings.vue": {
@@ -131,12 +115,8 @@
     "cap": 6,
     "reason": "设计层自持的排版刻度与布局尺寸，是本站像素基准本身"
   },
-  "packages/design/transition.css": {
-    "cap": 13,
-    "reason": "设计层自持的排版刻度与布局尺寸，是本站像素基准本身"
-  },
   "packages/design/ui.css": {
-    "cap": 28,
+    "cap": 18,
     "reason": "设计层自持的排版刻度与布局尺寸，是本站像素基准本身"
   },
   "packages/design/variables.css": {
@@ -144,7 +124,7 @@
     "reason": "设计层自持的排版刻度与布局尺寸，是本站像素基准本身"
   },
   "packages/iconify/IconPicker.vue": {
-    "cap": 15,
+    "cap": 13,
     "reason": "图标选择器的网格单元尺寸"
   },
   "packages/layouts/basic/components/AppBrand.vue": {
@@ -156,7 +136,7 @@
     "reason": "应用外壳几何：顶栏、侧栏、标签栏的固定高宽与内衬"
   },
   "packages/layouts/basic/components/AppGlobalSearch.vue": {
-    "cap": 42,
+    "cap": 36,
     "reason": "应用外壳几何：顶栏、侧栏、标签栏的固定高宽与内衬"
   },
   "packages/layouts/basic/components/AppPreferenceDrawer.vue": {
@@ -199,8 +179,12 @@
     "cap": 5,
     "reason": "应用外壳几何：顶栏、侧栏、标签栏的固定高宽与内衬"
   },
+  "packages/layouts/basic/components/header/HeaderSearchTrigger.vue": {
+    "cap": 6,
+    "reason": "应用外壳几何：顶栏、侧栏、标签栏的固定高宽与内衬"
+  },
   "packages/layouts/basic/components/header/HeaderTopMenu.vue": {
-    "cap": 7,
+    "cap": 5,
     "reason": "应用外壳几何：顶栏、侧栏、标签栏的固定高宽与内衬"
   },
   "packages/layouts/basic/components/header/HeaderTopMenuPanel.vue": {
@@ -217,10 +201,6 @@
   },
   "packages/layouts/basic/components/preference/PreferenceAppearanceTab.vue": {
     "cap": 29,
-    "reason": "偏好面板的预览缩略图：小图里的方块按绝对像素摆，跟随密度会糊"
-  },
-  "packages/layouts/basic/components/preference/PreferenceFab.vue": {
-    "cap": 6,
     "reason": "偏好面板的预览缩略图：小图里的方块按绝对像素摆，跟随密度会糊"
   },
   "packages/layouts/basic/components/preference/PreferenceLayoutTab.vue": {
@@ -276,7 +256,7 @@
     "reason": "个人中心卡片与统计块的排版刻度"
   },
   "packages/views/_core/profile/ProfileTabOAuth.vue": {
-    "cap": 14,
+    "cap": 11,
     "reason": "个人中心卡片与统计块的排版刻度"
   },
   "packages/views/_core/profile/ProfileTabSecurity.vue": {
@@ -328,7 +308,7 @@
     "reason": "代码生成器页面的排版刻度"
   },
   "src/modules/codegen/views/develop/code-gen/components/import-table-modal.vue": {
-    "cap": 8,
+    "cap": 6,
     "reason": "代码生成器页面的排版刻度"
   },
   "src/modules/codegen/views/develop/code-gen/components/preview-modal.vue": {
@@ -388,15 +368,15 @@
     "reason": "打印设计器：画布坐标、标尺与纸张刻度须为绝对像素"
   },
   "src/styles/admin-page.css": {
-    "cap": 15,
+    "cap": 8,
     "reason": "页面外壳的排版刻度"
   },
   "src/views/approval/constraint/index.vue": {
-    "cap": 20,
+    "cap": 18,
     "reason": "业务页面的排版刻度"
   },
   "src/views/file/library/index.vue": {
-    "cap": 18,
+    "cap": 13,
     "reason": "业务页面的排版刻度"
   },
   "src/views/identity/authorization/index.vue": {
@@ -408,15 +388,15 @@
     "reason": "业务页面的排版刻度"
   },
   "src/views/identity/permission/index.vue": {
-    "cap": 4,
+    "cap": 1,
     "reason": "业务页面的排版刻度"
   },
   "src/views/identity/role/index.vue": {
-    "cap": 14,
+    "cap": 3,
     "reason": "业务页面的排版刻度"
   },
   "src/views/identity/user/index.vue": {
-    "cap": 76,
+    "cap": 56,
     "reason": "业务页面的排版刻度"
   },
   "src/views/log/_components/LogDetailDrawer.vue": {
@@ -448,8 +428,8 @@
     "reason": "业务页面的排版刻度"
   },
   "src/views/setting/dict/index.vue": {
-    "cap": 25,
-    "reason": "业务页面的排版刻度"
+    "cap": 1,
+    "reason": "主从两栏的响应式断点"
   },
   "src/views/setting/job/index.vue": {
     "cap": 13,
@@ -468,11 +448,11 @@
     "reason": "业务页面的排版刻度"
   },
   "src/views/tenant/list/index.vue": {
-    "cap": 13,
+    "cap": 10,
     "reason": "业务页面的排版刻度"
   },
   "src/views/workbench/dashboard/components/AnnouncementWidget.vue": {
-    "cap": 28,
+    "cap": 12,
     "reason": "业务页面的排版刻度"
   },
   "src/views/workbench/dashboard/index.vue": {

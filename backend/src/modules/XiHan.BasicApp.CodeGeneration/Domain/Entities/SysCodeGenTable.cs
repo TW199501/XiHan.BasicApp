@@ -5,6 +5,7 @@ using SqlSugar;
 using XiHan.BasicApp.CodeGeneration.Domain.Enums;
 using XiHan.BasicApp.Core.Entities;
 using XiHan.BasicApp.Saas.Domain.Enums;
+using XiHan.Framework.Data.SqlSugar.Routing;
 
 namespace XiHan.BasicApp.CodeGeneration.Domain.Entities;
 
@@ -46,6 +47,7 @@ namespace XiHan.BasicApp.CodeGeneration.Domain.Entities;
 [SugarIndex("IX_{table}_ClNa", nameof(ClassName), OrderByType.Asc)]
 [SugarIndex("IX_{table}_MoNa", nameof(ModuleName), OrderByType.Asc)]
 [SugarIndex("IX_{table}_TeId_St", nameof(TenantId), OrderByType.Asc, nameof(Status), OrderByType.Asc)]
+[PlatformDataSource]
 public partial class SysCodeGenTable : BasicAppFullAuditedEntity
 {
     /// <summary>
@@ -124,12 +126,6 @@ public partial class SysCodeGenTable : BasicAppFullAuditedEntity
     /// </remarks>
     [SugarColumn(ColumnName = "Enabled_Actions", ColumnDescription = "包含操作", Length = 200, IsNullable = true)]
     public virtual string? EnabledActions { get; set; }
-
-    /// <summary>
-    /// 生成路径
-    /// </summary>
-    [SugarColumn(ColumnName = "Gen_Path", ColumnDescription = "生成路径", Length = 500, IsNullable = true)]
-    public virtual string? GenPath { get; set; }
 
     /// <summary>
     /// 父菜单ID

@@ -224,31 +224,34 @@ public sealed class SaasDomainPermissionConditionTests
     }
 
     /// <summary>
-    /// 平台管理员成员的直授权限条件仅平台运维态可维护，租户态必须拒绝（跨租户越权防线）。
+    /// 全局角色是各租户共用的模板：租户不能给它的授权配置 ABAC 条件；租户自己的角色可以。
     /// </summary>
     [Fact]
-    public async Task CreatePermissionCondition_PlatformAdminMemberInTenantContext_ShouldReject()
+    public async Task CreatePermissionCondition_GlobalRoleBindingInTenant_ShouldReject()
     {
-        var context = new ConditionTestContext(currentTenantId: 7);
-        context.SetupUsableUserPermission();
-        context.TenantMember.MemberType = TenantMemberType.PlatformAdmin;
+        var global = new ConditionTestContext(currentTenantId: 7);
+        global.SetupUsableRolePermission();
+        global.SetupNoExistingConditions();
+        var own = new ConditionTestContext(currentTenantId: 7);
+        own.SetupUsableRolePermission();
+        own.SetupNoExistingConditions();
+        own.Role.TenantId = 7;
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => context.Service.CreatePermissionConditionAsync(BuildCreateCommand(rolePermissionId: null, userPermissionId: 20)));
+            () => global.Service.CreatePermissionConditionAsync(BuildCreateCommand()));
+        var result = await own.Service.CreatePermissionConditionAsync(BuildCreateCommand());
 
-        Assert.Contains("仅平台运维态可维护", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("全局角色", exception.Message, StringComparison.Ordinal);
+        Assert.Equal(ConditionTestContext.SavedConditionId, result.ConditionId);
     }
 
     /// <summary>
-    /// 平台运维态（当前租户为空或 0）下允许维护平台管理员成员的直授条件。
+    /// 支持成员（平台人员入驻）的直授条件由所在租户维护：平台看不到也写不了租户的授权数据。
     /// </summary>
-    /// <param name="currentTenantId">当前租户上下文标识。</param>
-    [Theory]
-    [InlineData(null)]
-    [InlineData(0L)]
-    public async Task CreatePermissionCondition_PlatformAdminMemberInPlatformContext_ShouldPass(long? currentTenantId)
+    [Fact]
+    public async Task CreatePermissionCondition_SupportMemberInTenantContext_ShouldPass()
     {
-        var context = new ConditionTestContext(currentTenantId);
+        var context = new ConditionTestContext(currentTenantId: 7);
         context.SetupUsableUserPermission();
         context.SetupNoExistingConditions();
         context.TenantMember.MemberType = TenantMemberType.PlatformAdmin;

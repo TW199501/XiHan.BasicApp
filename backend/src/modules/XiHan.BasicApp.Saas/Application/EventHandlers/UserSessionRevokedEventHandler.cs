@@ -8,6 +8,7 @@ using XiHan.BasicApp.Saas.Domain.Entities;
 using XiHan.BasicApp.Saas.Domain.Events;
 using XiHan.BasicApp.Saas.Hubs;
 using XiHan.Framework.Data.SqlSugar.Clients;
+using XiHan.Framework.Data.SqlSugar.Extensions;
 using XiHan.Framework.EventBus.Abstractions.Local;
 using XiHan.Framework.Web.RealTime.Constants;
 using XiHan.Framework.Web.RealTime.Services;
@@ -137,19 +138,19 @@ public sealed class UserSessionRevokedEventHandler : ILocalEventHandler<UserSess
     {
         try
         {
-            var db = _clientResolver.GetCurrentClient();
             var now = DateTimeOffset.UtcNow;
             var sessionId = eventData.SessionId?.ToString() ?? eventData.UserSessionId;
 
-            // 查询用户信息以获取用户名
-            var user = await db.Queryable<SysUser>()
-                .Where(u => u.BasicId == eventData.UserId && u.TenantId == eventData.TenantId && !u.IsDeleted)
+            // 查询用户信息以获取用户名：会话在事件租户里，账号可能注册在别处（外部成员），按主键跨租户取
+            var user = await _clientResolver.GetClientForEntity<SysUser>().Queryable<SysUser>()
+                .ClearTenantFilter()
+                .Where(u => u.BasicId == eventData.UserId && !u.IsDeleted)
                 .Select(u => new { u.UserName })
                 .FirstAsync();
 
             // 设备指纹取自被撤销的会话行：撤销可能由后台流程触发，此时没有请求上下文与令牌可依
             var deviceId = eventData.SessionId.HasValue
-                ? await db.Queryable<SysUserSession>()
+                ? await _clientResolver.GetClientForEntity<SysUserSession>().Queryable<SysUserSession>()
                     .Where(session => session.BasicId == eventData.SessionId.Value)
                     .Select(session => session.DeviceId)
                     .FirstAsync()
@@ -171,7 +172,7 @@ public sealed class UserSessionRevokedEventHandler : ILocalEventHandler<UserSess
             };
 
             // SysLoginLog 是按月分表，使用 SplitTable 插入
-            await db.Insertable(log).SplitTable().ExecuteCommandAsync();
+            await _clientResolver.GetClientForEntity<SysLoginLog>().Insertable(log).SplitTable().ExecuteCommandAsync();
 
             _logger.LogDebug(
                 "[UserSessionRevoked] Login log written for user {UserId}, session {SessionId}",

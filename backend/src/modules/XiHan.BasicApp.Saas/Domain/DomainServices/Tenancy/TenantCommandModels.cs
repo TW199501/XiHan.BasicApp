@@ -28,6 +28,9 @@ public sealed record TenantCreateCommand(
 /// <summary>
 /// 租户更新命令
 /// </summary>
+/// <remarks>
+/// 不含隔离模式：数据按创建时的模式落库（字段隔离在平台库、库隔离在独立库），改模式等于迁移数据，不是改一个字段。
+/// </remarks>
 public sealed record TenantUpdateCommand(
     long BasicId,
     string TenantName,
@@ -35,7 +38,6 @@ public sealed record TenantUpdateCommand(
     string? Logo,
     string? Domain,
     long? EditionId,
-    TenantIsolationMode IsolationMode,
     DateTimeOffset? ExpirationTime,
     int? UserLimit,
     long? StorageLimit,
@@ -52,7 +54,6 @@ public sealed record TenantStatusChangeCommand(long BasicId, TenantStatus Tenant
 /// <summary>
 /// 租户成员添加命令
 /// </summary>
-/// <param name="TenantId">所属租户主键</param>
 /// <param name="UserId">用户主键</param>
 /// <param name="MemberType">成员类型</param>
 /// <param name="EffectiveTime">生效时间</param>
@@ -63,7 +64,6 @@ public sealed record TenantStatusChangeCommand(long BasicId, TenantStatus Tenant
 /// <param name="RequiresInvitation">是否走邀请流程（true 落待处理，false 直接生效）</param>
 /// <param name="OperatorUserId">操作人用户主键（邀请人）</param>
 public sealed record TenantMemberAddCommand(
-    long TenantId,
     long UserId,
     TenantMemberType MemberType,
     DateTimeOffset? EffectiveTime,
@@ -73,6 +73,24 @@ public sealed record TenantMemberAddCommand(
     string? Remark,
     bool RequiresInvitation,
     long? OperatorUserId);
+
+/// <summary>
+/// 支持人员入驻命令（平台把平台账号以支持成员身份加入指定租户）
+/// </summary>
+public sealed record TenantSupportMemberAddCommand(
+    long TenantId,
+    long UserId,
+    DateTimeOffset? EffectiveTime,
+    DateTimeOffset? ExpirationTime,
+    string? Remark,
+    long? OperatorUserId);
+
+/// <summary>
+/// 所有权转移命令（平台把租户所有者身份转给该租户的另一名成员）
+/// </summary>
+/// <param name="TenantId">租户主键</param>
+/// <param name="MemberId">接任所有者的成员关系主键</param>
+public sealed record TenantOwnerTransferCommand(long TenantId, long MemberId);
 
 /// <summary>
 /// 租户成员更新命令
@@ -105,3 +123,11 @@ public sealed record TenantCommandResult(SysTenant Tenant, DateTimeOffset Now);
 /// 租户成员命令结果
 /// </summary>
 public sealed record TenantMemberCommandResult(SysTenantUser Member, DateTimeOffset Now);
+
+/// <summary>
+/// 所有权转移结果
+/// </summary>
+/// <param name="PreviousOwner">卸任的所有者（已改为管理员）</param>
+/// <param name="NewOwner">接任的所有者</param>
+/// <param name="Now">操作时间</param>
+public sealed record TenantOwnerTransferResult(SysTenantUser PreviousOwner, SysTenantUser NewOwner, DateTimeOffset Now);

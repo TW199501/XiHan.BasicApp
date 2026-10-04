@@ -4,6 +4,7 @@
 using SqlSugar;
 using XiHan.BasicApp.Core.Entities;
 using XiHan.BasicApp.Saas.Domain.Enums;
+using XiHan.Framework.Data.SqlSugar.Routing;
 
 namespace XiHan.BasicApp.Saas.Domain.Entities;
 
@@ -49,6 +50,7 @@ namespace XiHan.BasicApp.Saas.Domain.Entities;
 [SugarIndex("IX_{table}_ReId", nameof(ResourceId), OrderByType.Asc)]
 [SugarIndex("IX_{table}_TeId_PeTy", nameof(TenantId), OrderByType.Asc, nameof(PermissionType), OrderByType.Asc)]
 [SugarIndex("IX_{table}_TeId_St", nameof(TenantId), OrderByType.Asc, nameof(Status), OrderByType.Asc)]
+[PlatformDataSource]
 public partial class SysPermission : BasicAppAggregateRoot
 {
     /// <summary>
@@ -99,6 +101,15 @@ public partial class SysPermission : BasicAppAggregateRoot
     /// </summary>
     [SugarColumn(ColumnName = "Tags", ColumnDescription = "权限标签", ColumnDataType = StaticConfig.CodeFirst_BigString, IsNullable = true)]
     public virtual string? Tags { get; set; }
+
+    /// <summary>
+    /// 作用侧（平台 / 租户 / 两侧）：决定权限在哪个上下文生效、能否进入套餐白名单与租户授权
+    /// </summary>
+    /// <remarks>
+    /// 没有默认值：定义权限时必须声明作用侧，未声明的在领域校验里直接拒绝，不静默落成两侧把平台能力放给租户。
+    /// </remarks>
+    [SugarColumn(ColumnName = "Side", ColumnDescription = "作用侧")]
+    public virtual PermissionSide Side { get; set; }
 
     /// <summary>
     /// 是否需要审计（操作此权限是否需要记录差异日志）

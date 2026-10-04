@@ -2,8 +2,9 @@
 import type { FormRules } from '@xihan-ui/headless'
 import type { CaptchaChallenge, LoginConfig, LoginResponse } from '~/types'
 
-import { XhButton, XhCheckbox, XhFieldControl, XhFieldRoot, XhFormFieldGroup, XhFormRoot, XhFormSubmitTrigger, XhPinInputInput, XhPinInputRoot, XhPopoverContent, XhPopoverPositioner, XhPopoverRoot, XhPopoverTrigger, XhSeparator } from '@xihan-ui/vue'
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { useElementSize } from '@vueuse/core'
+import { XhButton, XhButtonIndicator, XhButtonLabel, XhCheckbox, XhFieldControl, XhFieldLabel, XhFieldRoot, XhFormFieldGroup, XhFormRoot, XhFormSubmitTrigger, XhPinInputInput, XhPinInputRoot, XhPopoverContent, XhPopoverPositioner, XhPopoverRoot, XhPopoverTrigger, XhSeparator } from '@xihan-ui/vue'
+import { computed, nextTick, onMounted, ref, useTemplateRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { XInput } from '~/components'
@@ -11,6 +12,7 @@ import { toast } from '~/composables'
 import { useTheme } from '~/hooks'
 import { Icon } from '~/iconify'
 import { useAppContext, useAuthStore } from '~/stores'
+import { CAPTCHA_CODE_LENGTH } from '../shared/pin-code'
 import { useAuthFormInvalid } from './use-auth-form-invalid'
 
 defineOptions({ name: 'LoginPage' })
@@ -31,7 +33,9 @@ const loginConfig = ref<LoginConfig>({
 // ==================== 图形验证码 ====================
 
 const captcha = ref<CaptchaChallenge | null>(null)
-const captchaCode = ref('')
+/** 图形验证码的逐格值；提交时拼成串 */
+const captchaCode = ref<string[]>([])
+const captchaCodeStr = computed(() => captchaCode.value.join(''))
 const captchaLoading = ref(false)
 
 /** 拉取新验证码（页面加载、点击图片、验证码错误提示后调用） */
@@ -42,10 +46,10 @@ async function refreshCaptcha() {
   captchaLoading.value = true
   try {
     captcha.value = await apis.getCaptchaApi()
-    captchaCode.value = ''
+    captchaCode.value = []
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('page.login.captcha_load_failed'))
+    toast.danger((error as Error)?.message || t('page.login.captcha_load_failed'))
   }
   finally {
     captchaLoading.value = false
@@ -61,12 +65,20 @@ const selectedMethod = ref('')
 const twoFactorCode = ref<string[]>([])
 const codeSent = ref(false)
 const sendingCode = ref(false)
+/**
+ * 两步验证票据：三个阶段都重新提交同一个登录请求，而图形验证码一次性消费、首段过后即销毁；
+ * 服务端在首段通过图形码与密码后随挑战签发票据，后续阶段改带票据免图形码，登录完成后作废
+ */
+const twoFactorTicket = ref('')
+/** 服务端票据失效（不存在 / 过期 / 用户不匹配）的提示片段，对齐 AuthAppService.TwoFactorTicketExpiredMessage */
+const TWO_FACTOR_TICKET_EXPIRED_HINT = '两步验证已过期'
 
-const methodLabels: Record<string, string> = {
-  totp: '认证器（Authenticator）',
-  email: '邮箱验证码',
-  phone: '手机短信验证码',
-}
+// 键名对齐服务端 ResolveTwoFactorMethods 给出的方式标识：totp / email / phone
+const methodLabels = computed<Record<string, string>>(() => ({
+  totp: t('page.auth.two_factor_method_totp'),
+  email: t('page.auth.two_factor_method_email'),
+  phone: t('page.auth.two_factor_method_phone'),
+}))
 
 const methodIcons: Record<string, string> = {
   totp: 'lucide:smartphone',
@@ -108,11 +120,22 @@ const oauthProviderIcons: Record<string, string> = {
 
 const oauthProviders = computed(() => loginConfig.value.oAuthProviders ?? [])
 
-/** 一行放得下的渠道数；多出来的收进「更多」浮层，免得换行把卡片撑高 */
+/**
+ * 一行放得下的渠道数；多出来的收进「更多」浮层，免得换行把卡片撑高。
+ * 三颗带字钮加「更多」一行约 316 宽，手机窄栏（375 宽视口只剩 304）放不下时 flex 会把钮压到
+ * 比内容还窄、图标文字溢出钮外，这时按行宽退到两颗
+ */
 const OAUTH_INLINE_COUNT = 3
+const OAUTH_INLINE_COUNT_NARROW = 2
+const OAUTH_ROW_MIN_WIDTH = 320
 
-const inlineOauthProviders = computed(() => oauthProviders.value.slice(0, OAUTH_INLINE_COUNT))
-const moreOauthProviders = computed(() => oauthProviders.value.slice(OAUTH_INLINE_COUNT))
+const oauthRowRef = useTemplateRef('oauthRow')
+const { width: oauthRowWidth } = useElementSize(oauthRowRef)
+const oauthInlineCount = computed(() =>
+  oauthRowWidth.value >= OAUTH_ROW_MIN_WIDTH ? OAUTH_INLINE_COUNT : OAUTH_INLINE_COUNT_NARROW,
+)
+const inlineOauthProviders = computed(() => oauthProviders.value.slice(0, oauthInlineCount.value))
+const moreOauthProviders = computed(() => oauthProviders.value.slice(oauthInlineCount.value))
 const showMoreOauth = ref(false)
 
 function getOauthProviderIcon(name: string) {
@@ -136,22 +159,60 @@ onMounted(async () => {
 })
 
 function buildLoginParams() {
+  // 持票即为两步验证的后续阶段：只带票不带图形码（图形码已在首段消费销毁，再带必红）；
+  // 无票时才是凭据阶段，按配置携带图形码
+  const hasTicket = Boolean(twoFactorTicket.value)
+  const carryCaptcha = !hasTicket && loginConfig.value.captchaEnabled
   return {
     username: formData.value.username,
     password: formData.value.password,
-    captchaId: loginConfig.value.captchaEnabled ? captcha.value?.captchaId : undefined,
-    captchaCode: loginConfig.value.captchaEnabled ? captchaCode.value || undefined : undefined,
+    captchaId: carryCaptcha ? captcha.value?.captchaId : undefined,
+    captchaCode: carryCaptcha ? captchaCodeStr.value || undefined : undefined,
     twoFactorCode: tfStage.value === 'code-input' ? twoFactorCode.value.join('') : undefined,
     twoFactorMethod: selectedMethod.value || undefined,
+    twoFactorTicket: twoFactorTicket.value || undefined,
     deviceId: cachedDeviceId.value || undefined,
   }
 }
 
+/** 挑战响应随行票据时记下，后续阶段都凭它免图形码 */
+function rememberTwoFactorTicket(result: LoginResponse | null) {
+  if (result?.twoFactorTicket) {
+    twoFactorTicket.value = result.twoFactorTicket
+  }
+}
+
+/**
+ * 票据失效（不存在 / 过期 / 用户不匹配）：服务端要求重新登录，回到凭据阶段并换一枚新图形码。
+ * 返回是否已按票据失效处理，调用方据此跳过通用错误分支。
+ */
+function handleTicketExpired(message?: string) {
+  if (!message || !message.includes(TWO_FACTOR_TICKET_EXPIRED_HINT)) {
+    return false
+  }
+  tfStage.value = 'credentials'
+  twoFactorTicket.value = ''
+  twoFactorCode.value = []
+  availableMethods.value = []
+  selectedMethod.value = ''
+  codeSent.value = false
+  toast.danger(message)
+  void refreshCaptcha()
+  return true
+}
+
+/**
+ * 三个阶段的提交都汇到这里：credentials 的表单提交、code-input 的验证码输满自动提交 / Enter / 「验证并登录」。
+ * 入口先同步看 loginLoading：XhButton 的 loading 拦截读的是渲染期状态，首个 click 到重渲染之间的
+ * 第二次 click 仍能穿过，自动提交与 Enter 更不经过按钮；store 一进 login 就同步置位，这里读到即在途。
+ */
 async function onSubmit() {
+  if (authStore.loginLoading)
+    return
   try {
     if (tfStage.value === 'credentials') {
       // 图形验证码：提交前校验非空，避免白白消耗一次登录节流计数
-      if (loginConfig.value.captchaEnabled && (!captcha.value || !captchaCode.value.trim())) {
+      if (loginConfig.value.captchaEnabled && (!captcha.value || captchaCodeStr.value.length < CAPTCHA_CODE_LENGTH)) {
         toast.warning(t('page.login.captcha_required'))
         return
       }
@@ -163,7 +224,8 @@ async function onSubmit() {
       return
     }
 
-    // 服务端返回需要 2FA
+    // 服务端返回需要 2FA：先记票据，再决定下一阶段——唯一方式时会立刻发起第二段请求，届时必须已持票
+    rememberTwoFactorTicket(result)
     if (result.availableTwoFactorMethods?.length) {
       availableMethods.value = result.availableTwoFactorMethods
     }
@@ -190,11 +252,15 @@ async function onSubmit() {
       twoFactorCode.value = []
     }
     const error = err as { message?: string }
-    if (error?.message) {
-      toast.error(error.message)
+    if (handleTicketExpired(error?.message)) {
+      return
     }
-    // 验证码一次性消费：无论对错都已销毁，提示后立即换新码，避免反复撞已销毁的码
-    if (error?.message && error.message.includes('验证码')) {
+    if (error?.message) {
+      toast.danger(error.message)
+    }
+    // 图形验证码一次性消费：凭据阶段无论对错都已销毁，提示后立即换新码，避免反复撞已销毁的码；
+    // 持票的后续阶段不再消费图形码，两步验证码出错时不必换
+    if (tfStage.value === 'credentials' && error?.message && error.message.includes('验证码')) {
       void refreshCaptcha()
     }
   }
@@ -202,6 +268,9 @@ async function onSubmit() {
 
 /** 用户选好方式后，发起带 twoFactorMethod 的登录请求 */
 async function handleSelectMethod() {
+  // 「继续」钮的 loading 同样是渲染期才拦，在途时直接返回；sendingCode 在 await 之前同步置位
+  if (sendingCode.value || authStore.loginLoading)
+    return
   if (!selectedMethod.value) {
     toast.warning(t('page.auth.select_method_required'))
     return
@@ -218,6 +287,7 @@ async function handleSelectMethod() {
   sendingCode.value = true
   try {
     const result = await authStore.login(buildLoginParams(), redirect.value)
+    rememberTwoFactorTicket(result)
     if (result && result.twoFactorMethod) {
       codeSent.value = result.codeSent ?? false
       tfStage.value = 'code-input'
@@ -225,8 +295,11 @@ async function handleSelectMethod() {
   }
   catch (err: unknown) {
     const error = err as { message?: string }
+    if (handleTicketExpired(error?.message)) {
+      return
+    }
     if (error?.message) {
-      toast.error(error.message)
+      toast.danger(error.message)
     }
   }
   finally {
@@ -236,9 +309,12 @@ async function handleSelectMethod() {
 
 /** 重新发送验证码 */
 async function handleResendCode() {
+  if (sendingCode.value || authStore.loginLoading)
+    return
   sendingCode.value = true
   try {
     const result = await authStore.login(buildLoginParams(), redirect.value)
+    rememberTwoFactorTicket(result)
     if (result?.codeSent) {
       codeSent.value = true
       toast.success(t('page.auth.code_resent'))
@@ -246,8 +322,11 @@ async function handleResendCode() {
   }
   catch (err: unknown) {
     const error = err as { message?: string }
+    if (handleTicketExpired(error?.message)) {
+      return
+    }
     if (error?.message)
-      toast.error(error.message)
+      toast.danger(error.message)
   }
   finally {
     sendingCode.value = false
@@ -266,11 +345,6 @@ function handleBackToMethodSelect() {
   codeSent.value = false
 }
 
-function handleKeydown(e: KeyboardEvent) {
-  if (e.key === 'Enter')
-    onSubmit()
-}
-
 function goTo(path: string) {
   router.push(path)
 }
@@ -283,7 +357,7 @@ onMounted(async () => {
     }
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('page.auth.load_config_failed'))
+    toast.danger((error as Error)?.message || t('page.auth.load_config_failed'))
   }
 })
 const onAuthInvalid = useAuthFormInvalid()
@@ -307,17 +381,17 @@ const onAuthInvalid = useAuthFormInvalid()
             </h1>
           </div>
           <p
-            class="text-[15px] leading-7"
+            class="auth-body"
             :class="isDark ? 'text-gray-300' : 'text-[hsl(var(--muted-foreground))]'"
           >
             <template v-if="selectedMethod === 'totp'">
               {{ t('page.auth.two_factor_subtitle') }}
             </template>
             <template v-else-if="selectedMethod === 'email'">
-              验证码已发送至您的邮箱，请查收
+              {{ t('page.auth.two_factor_code_sent_email') }}
             </template>
             <template v-else-if="selectedMethod === 'phone'">
-              验证码已发送至您的手机，请查收
+              {{ t('page.auth.two_factor_code_sent_phone') }}
             </template>
           </p>
         </div>
@@ -327,7 +401,6 @@ const onAuthInvalid = useAuthFormInvalid()
             v-model:value="twoFactorCode"
             :length="6"
             otp
-            size="lg"
             @value-complete="(details: { value: string[] }) => handleOtpComplete(details.value)"
           >
             <!-- 格间距长在格子自己身上，这层包裹只负责排成一行 -->
@@ -336,34 +409,47 @@ const onAuthInvalid = useAuthFormInvalid()
             </div>
           </XhPinInputRoot>
           <p
-            class="mt-4 text-xs"
+            class="mt-4 auth-helper"
             :class="isDark ? 'text-gray-500' : 'text-[hsl(var(--muted-foreground))]'"
           >
-            {{ selectedMethod === 'totp' ? t('page.auth.two_factor_hint') : '请输入 6 位验证码' }}
+            {{ selectedMethod === 'totp' ? t('page.auth.two_factor_hint') : t('page.auth.two_factor_code_input_hint') }}
           </p>
         </div>
 
-        <XhFormSubmitTrigger class="auth-submit !mt-4" :disabled="authStore.loginLoading">
-          {{ t('page.auth.two_factor_verify') }}
-        </XhFormSubmitTrigger>
+        <!-- 这一阶段没有可校验的字段，验证码输满、Enter 与这颗钮都直接走 onSubmit，
+             不套 XhFormRoot：表单提交钮离开表单根会抛错、整颗钮不渲染 -->
+        <XhButton
+          variant="solid"
+          tone="brand"
+          full-width
+          :loading="authStore.loginLoading"
+          class="auth-submit !mt-4"
+          @click="onSubmit"
+        >
+          <XhButtonIndicator />
+          <XhButtonLabel>{{ t('page.auth.two_factor_verify') }}</XhButtonLabel>
+        </XhButton>
 
         <div class="flex gap-2 mt-3">
           <XhButton
             v-if="selectedMethod !== 'totp'"
-            class="!h-11 flex-1 !rounded-xl"
+            class="flex-1"
             variant="ghost"
+            size="lg"
             :loading="sendingCode"
             @click="handleResendCode"
           >
-            重新发送
+            <XhButtonIndicator />
+            <XhButtonLabel>{{ t('page.auth.two_factor_resend') }}</XhButtonLabel>
           </XhButton>
           <XhButton
             v-if="availableMethods.length > 1"
-            class="!h-11 flex-1 !rounded-xl"
+            class="flex-1"
             variant="ghost"
+            size="lg"
             @click="handleBackToMethodSelect"
           >
-            换种方式
+            {{ t('page.auth.two_factor_switch_method') }}
           </XhButton>
         </div>
       </div>
@@ -379,14 +465,14 @@ const onAuthInvalid = useAuthFormInvalid()
               <span :class="isDark ? 'text-blue-400' : 'text-[hsl(var(--primary))]'" style="display: inline-flex; font-size: 22px"><Icon icon="lucide:shield-check" /></span>
             </div>
             <h1 class="text-[28px] font-semibold leading-tight sm:text-[32px]">
-              选择验证方式
+              {{ t('page.auth.two_factor_select_title') }}
             </h1>
           </div>
           <p
-            class="text-[15px] leading-7"
+            class="auth-body"
             :class="isDark ? 'text-gray-300' : 'text-[hsl(var(--muted-foreground))]'"
           >
-            您的账号已开启两步验证，请选择一种方式进行身份验证
+            {{ t('page.auth.two_factor_select_subtitle') }}
           </p>
         </div>
 
@@ -406,7 +492,7 @@ const onAuthInvalid = useAuthFormInvalid()
                 ? 'text-[hsl(var(--primary))]'
                 : isDark ? 'text-gray-300' : 'text-[hsl(var(--muted-foreground))]'" style="display: inline-flex; font-size: 20px"
             ><Icon :icon="methodIcons[m] || 'lucide:shield-check'" /></span>
-            <span class="text-[15px]">{{ methodLabels[m] || m }}</span>
+            <span class="auth-body">{{ methodLabels[m] || m }}</span>
           </button>
         </div>
 
@@ -418,7 +504,8 @@ const onAuthInvalid = useAuthFormInvalid()
           class="auth-submit"
           @click="handleSelectMethod"
         >
-          继续
+          <XhButtonIndicator />
+          <XhButtonLabel>{{ t('page.auth.two_factor_continue') }}</XhButtonLabel>
         </XhButton>
       </div>
 
@@ -426,23 +513,29 @@ const onAuthInvalid = useAuthFormInvalid()
       <div v-else key="credentials">
         <div class="mb-8">
           <p
-            class="mt-3 text-[15px] leading-7"
+            class="mt-3 auth-body"
             :class="isDark ? 'text-gray-300' : 'text-[hsl(var(--muted-foreground))]'"
           >
             {{ t('page.auth.login_subtitle') }}
           </p>
         </div>
 
+        <!-- Enter 只走原生隐式提交这一条：字段里按 Enter 触发表单提交，经规则校验后才到 @submit。
+             原先另挂的 keydown 直接调 onSubmit 绕过了校验（用户名为空也发请求），且它一置 loading
+             就把提交钮禁掉，浏览器随后的隐式提交被压下，Enter 发出的恰是那次没校验的请求 -->
         <XhFormRoot
           v-model:values="formData"
           :rules="rules"
           validate-on="blur"
           @invalid="onAuthInvalid"
-          @keydown="handleKeydown"
           @submit="onSubmit"
         >
-          <XhFormFieldGroup value="username" class="!mb-6">
+          <!-- 字段靠占位文案表意，标签只留给读屏 -->
+          <XhFormFieldGroup name="username" class="!mb-6">
             <XhFieldRoot>
+              <XhFieldLabel class="sr-only">
+                {{ t('page.login.username') }}
+              </XhFieldLabel>
               <XhFieldControl>
                 <XInput
                   v-model:value="formData.username"
@@ -453,8 +546,11 @@ const onAuthInvalid = useAuthFormInvalid()
               </XhFieldControl>
             </XhFieldRoot>
           </XhFormFieldGroup>
-          <XhFormFieldGroup value="password" class="!mb-6">
+          <XhFormFieldGroup name="password" class="!mb-6">
             <XhFieldRoot>
+              <XhFieldLabel class="sr-only">
+                {{ t('page.login.password') }}
+              </XhFieldLabel>
               <XhFieldControl>
                 <XInput
                   v-model:value="formData.password"
@@ -466,21 +562,32 @@ const onAuthInvalid = useAuthFormInvalid()
               </XhFieldControl>
             </XhFieldRoot>
           </XhFormFieldGroup>
-          <XhFormFieldGroup v-if="loginConfig.captchaEnabled" value="captchaCode" class="!mb-6">
+          <XhFormFieldGroup v-if="loginConfig.captchaEnabled" name="captchaCode" class="!mb-6">
             <XhFieldRoot>
-              <!-- 布局层留在控件外面：唯一子节点若不是控件，会被组件库当成输入控件本体上妆 -->
-              <div class="flex items-center gap-3">
+              <XhFieldLabel class="sr-only">
+                {{ t('page.login.captcha_required') }}
+              </XhFieldLabel>
+              <!-- 布局层留在控件外面：唯一子节点若不是控件，会被组件库当成输入控件本体上妆。
+                   服务端签发的是四位纯数字（CaptchaService 走框架一次性验证码，只出 0-9），格子按 numeric 准入、
+                   弹数字键盘；不是一次性验证码，不开 otp，格子自带 autocomplete=off。
+                   格子取缺省档：正方格的缺省档与旁边 lg 档文本框、验证码图片同一个控件高度。
+                   与手机/邮箱登录的验证码行同一套排布：格子在左，验证码图靠右缘 -->
+              <div class="auth-code-row">
                 <XhFieldControl>
-                  <XInput
+                  <XhPinInputRoot
                     v-model:value="captchaCode"
-                    size="lg"
-                    :max-length="4"
-                    :placeholder="t('page.login.captcha_placeholder')"
-                    autocomplete="off"
-                  />
+                    :length="CAPTCHA_CODE_LENGTH"
+                    type="numeric"
+                  >
+                    <!-- 格间距长在格子自己身上，这层包裹只负责排成一行 -->
+                    <div style="display: flex">
+                      <XhPinInputInput v-for="i in CAPTCHA_CODE_LENGTH" :key="i" :index="i - 1" />
+                    </div>
+                  </XhPinInputRoot>
                 </XhFieldControl>
+                <!-- 尺寸与圆角见 .auth-captcha；底色只在图片未到时垫着 -->
                 <div
-                  class="flex justify-center items-center shrink-0 w-[120px] h-[40px] rounded-lg overflow-hidden"
+                  class="auth-captcha"
                   :class="isDark ? 'bg-white/10' : 'bg-[hsl(var(--muted)/0.15)]'"
                   :title="t('page.login.captcha_refresh_title')"
                   @click="refreshCaptcha"
@@ -489,7 +596,7 @@ const onAuthInvalid = useAuthFormInvalid()
                     v-if="captcha?.image"
                     :src="captcha.image"
                     :alt="t('page.login.captcha_refresh_title')"
-                    class="w-full h-full cursor-pointer select-none"
+                    class="select-none"
                     draggable="false"
                   >
                   <span v-else-if="captchaLoading" class="animate-spin" style="display: inline-flex; font-size: 18px"><Icon icon="lucide:loader-2" /></span>
@@ -497,8 +604,8 @@ const onAuthInvalid = useAuthFormInvalid()
               </div>
             </XhFieldRoot>
           </XhFormFieldGroup>
-          <div class="flex justify-between items-center mb-5 text-sm">
-            <XhCheckbox v-model:checked="rememberMe" size="sm">
+          <div class="flex justify-between items-center mb-5 auth-body">
+            <XhCheckbox v-model:checked="rememberMe">
               {{ t('page.login.remember_me') }}
             </XhCheckbox>
             <span class="cursor-pointer link-primary" @click="goTo('/auth/forget-password')">
@@ -506,13 +613,14 @@ const onAuthInvalid = useAuthFormInvalid()
             </span>
           </div>
 
-          <XhFormSubmitTrigger class="auth-submit" :disabled="authStore.loginLoading">
+          <!-- 在途由表单自己报：onSubmit 返回的 Promise 落定前提交钮带 data-loading、再按不重复提交 -->
+          <XhFormSubmitTrigger class="auth-submit">
             {{ t('page.login.login_btn') }}
           </XhFormSubmitTrigger>
         </XhFormRoot>
 
         <p
-          class="mt-6 text-sm text-center"
+          class="mt-6 auth-helper text-center"
           :class="isDark ? 'text-gray-500' : 'text-[hsl(var(--muted-foreground))]'"
         >
           {{ t('page.auth.no_account') }}
@@ -521,33 +629,42 @@ const onAuthInvalid = useAuthFormInvalid()
           </span>
         </p>
 
-        <!-- 分隔线是纯线条、没有插槽，中缝那句文案要自己摆 -->
-        <div v-if="oauthProviders.length > 0" class="flex gap-3 items-center my-6">
-          <XhSeparator class="flex-1" :class="isDark ? '!border-white/10' : '!border-[hsl(var(--border))]'" />
-          <span class="text-xs" :class="isDark ? 'text-gray-500' : 'text-[hsl(var(--muted-foreground))]'">
+        <!-- 带字分隔线：文案走默认插槽，库在两侧各画一段线；线由 background 画，颜色经 --xh-separator-color 给。
+             separator 角色的子节点对读屏是展示性的，名字另用 aria-label 给出 -->
+        <XhSeparator
+          v-if="oauthProviders.length > 0"
+          class="my-6"
+          :style="{ '--xh-separator-color': isDark ? 'rgb(255 255 255 / 10%)' : 'hsl(var(--border))' }"
+          :aria-label="t('page.auth.third_party_login')"
+        >
+          <span class="auth-caption" :class="isDark ? 'text-gray-500' : 'text-[hsl(var(--muted-foreground))]'">
             {{ t('page.auth.third_party_login') }}
           </span>
-          <XhSeparator class="flex-1" :class="isDark ? '!border-white/10' : '!border-[hsl(var(--border))]'" />
-        </div>
-        <div v-if="oauthProviders.length > 0" class="flex gap-3 justify-center items-center">
+        </XhSeparator>
+        <!-- 第三方渠道是次要入口，比表单控件低一档走 md：图标与文字都收小，高度与圆角仍由库的控件令牌给 -->
+        <div v-if="oauthProviders.length > 0" ref="oauthRow" class="flex gap-3 justify-center items-center">
           <XhButton
             v-for="provider in inlineOauthProviders"
             :key="provider.name"
             variant="subtle"
-            class="!h-10 !rounded-xl !px-4 !text-sm"
+            size="md"
             @click="handleOAuthLogin(provider)"
           >
             <Icon :icon="getOauthProviderIcon(provider.name)" width="16" />
             {{ provider.displayName }}
           </XhButton>
 
-          <!-- 触发器本身就是那颗按钮：浮层触发器渲染成 button，不能再往里套一颗 -->
+          <!-- as-child：浮层触发器缺省渲染成 button，这里借用 XhButton 本体，好与同排渠道钮同款同档 -->
           <XhPopoverRoot v-if="moreOauthProviders.length > 0" v-model:open="showMoreOauth" placement="top">
-            <XhPopoverTrigger
-              class="oauth-more-trigger !h-10 !w-10 !rounded-xl"
-              :aria-label="t('page.auth.third_party_more')"
-            >
-              <Icon icon="lucide:ellipsis" width="16" />
+            <XhPopoverTrigger as-child>
+              <XhButton
+                variant="subtle"
+                size="md"
+                icon-only
+                :aria-label="t('page.auth.third_party_more')"
+              >
+                <Icon icon="lucide:ellipsis" width="16" />
+              </XhButton>
             </XhPopoverTrigger>
             <XhPopoverPositioner>
               <XhPopoverContent :aria-label="t('page.auth.third_party_more')">
@@ -556,7 +673,8 @@ const onAuthInvalid = useAuthFormInvalid()
                     v-for="provider in moreOauthProviders"
                     :key="provider.name"
                     variant="subtle"
-                    class="!h-10 !rounded-xl !px-4 !text-sm !justify-start"
+                    size="md"
+                    class="!justify-start"
                     @click="handleOAuthLogin(provider)"
                   >
                     <Icon :icon="getOauthProviderIcon(provider.name)" width="16" />
@@ -573,30 +691,6 @@ const onAuthInvalid = useAuthFormInvalid()
 </template>
 
 <style scoped>
-/* 「更多渠道」触发器：浮层触发器自己就是 button，套不了 XhButton，只能照 subtle 变体补皮。
-   尺寸走和旁边那几颗同一串工具类（!h-10 !w-10 !rounded-xl）——那是带 !important 的，
-   本作用域样式压不过它，两处各写一份迟早对不齐，所以这里只管观感不管尺寸。
-   边框留 1px 透明，与按钮同样的 border-box 盒模型 */
-.oauth-more-trigger {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: var(--xh-stroke-thin) solid transparent;
-  background: var(--xh-bg-subtle);
-  color: var(--xh-fg-default);
-  cursor: pointer;
-  transition: background-color var(--xh-motion-duration-micro) var(--xh-motion-ease-enter);
-}
-
-.oauth-more-trigger:hover {
-  background: var(--xh-bg-subtle-hover);
-}
-
-.oauth-more-trigger:active {
-  background: var(--xh-bg-subtle-active);
-}
-
 /* 收进浮层的渠道排两列，条目左对齐便于扫读 */
 .oauth-more-grid {
   display: grid;

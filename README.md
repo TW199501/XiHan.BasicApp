@@ -4,9 +4,9 @@
 
 <h1>XiHan.BasicApp</h1>
 
-<p><b>A beautifully crafted general-purpose admin kernel built on .NET and Vue</b></p>
+<p><b>A beautifully crafted general-purpose admin kernel built on XiHan.Framework and XiHan.UI</b></p>
 
-<p>A .NET 10 backend on <a href="https://github.com/XiHanFun/XiHan.Framework">XiHan.Framework</a>, a Vue 3 frontend on <a href="https://github.com/XiHanFun/XiHan.UI">XiHan.UI</a><br/>Multi-tenancy · RBAC with data scopes and field masking · Code generation · Realtime</p>
+<p>A .NET backend on <a href="https://github.com/XiHanFun/XiHan.Framework">XiHan.Framework</a>, a Vue frontend on <a href="https://github.com/XiHanFun/XiHan.UI">XiHan.UI</a><br/>Multi-tenancy · RBAC with data scopes and field masking · Code generation · Realtime</p>
 
 <p><b>English</b> | <a href="./README_cn.md">简体中文</a></p>
 
@@ -18,12 +18,12 @@
 
 
 <p>
-  <img alt=".NET" src="https://img.shields.io/badge/.NET-10.0-512BD4?style=flat-square&logo=dotnet&logoColor=white" />
-  <a href="https://github.com/XiHanFun/XiHan.Framework"><img alt="XiHan.Framework" src="https://img.shields.io/badge/XiHan.Framework-4.0.0-6f42c1?style=flat-square" /></a>
-  <img alt="Vue" src="https://img.shields.io/badge/Vue-3.5-4FC08D?style=flat-square&logo=vuedotjs&logoColor=white" />
-  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-6.0-3178C6?style=flat-square&logo=typescript&logoColor=white" />
-  <img alt="Vite" src="https://img.shields.io/badge/Vite-8-646CFF?style=flat-square&logo=vite&logoColor=white" />
-  <img alt="Tailwind CSS" src="https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white" />
+  <img alt=".NET" src="https://img.shields.io/badge/.NET-512BD4?style=flat-square&logo=dotnet&logoColor=white" />
+  <a href="https://github.com/XiHanFun/XiHan.Framework"><img alt="XiHan.Framework" src="https://img.shields.io/badge/XiHan.Framework-6f42c1?style=flat-square" /></a>
+  <img alt="Vue" src="https://img.shields.io/badge/Vue-4FC08D?style=flat-square&logo=vuedotjs&logoColor=white" />
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white" />
+  <img alt="Vite" src="https://img.shields.io/badge/Vite-646CFF?style=flat-square&logo=vite&logoColor=white" />
+  <img alt="Tailwind CSS" src="https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white" />
   <a href="https://www.nuget.org/packages?q=XiHan.BasicApp"><img alt="NuGet" src="https://img.shields.io/nuget/v/XiHan.BasicApp.Core?style=flat-square&logo=nuget&logoColor=white&label=NuGet&color=004880" /></a>
 </p>
 
@@ -46,13 +46,13 @@
 </p>
 
 
-<img src="./assets/login.png" alt="Sign in" />
+<img src="./assets/preview/login.png" alt="Sign in" />
 
 </div>
 
 ## Introduction
 
-XiHan.BasicApp is a decoupled frontend/backend system. The backend follows DDD layering — writes go through application services, reads through query services — and application services are exposed directly as REST endpoints by the dynamic API convention. The frontend is Vue 3 + TypeScript + XiHan.UI, and the backend .NET 10 + XiHan.Framework. Identity, permissions, tenancy and auditing are built in, so it works both as the starting point for an admin project and as a reference for full-stack .NET + Vue practice. XiHan.BasicApp is the application layer of the XiHanFun open-source ecosystem, which spans foundation, components and applications.
+XiHan.BasicApp is a decoupled frontend/backend system. The backend follows DDD layering — writes go through application services, reads through query services — and application services are exposed directly as REST endpoints by the dynamic API convention. The frontend is Vue + TypeScript + XiHan.UI, and the backend .NET + XiHan.Framework. Identity, permissions, tenancy and auditing are built in, so it works both as the starting point for an admin project and as a reference for full-stack .NET + Vue practice. XiHan.BasicApp is the basic application of the XiHanFun open-source ecosystem.
 
 ## Documentation
 
@@ -66,99 +66,228 @@ XiHan.BasicApp is a decoupled frontend/backend system. The backend follows DDD l
 
 <table>
   <tr>
-    <td align="center"><img src="./assets/tenant-select.png" /><br/>Tenant selection</td>
-    <td align="center"><img src="./assets/user-management.png" /><br/>User management</td>
+    <td align="center" width="50%"><a href="./assets/preview/dashboard.png"><img src="./assets/preview/dashboard.png" alt="Dashboard" /></a><br/>Dashboard</td>
+    <td align="center" width="50%"><a href="./assets/preview/user.png"><img src="./assets/preview/user.png" alt="User management" /></a><br/>User management</td>
   </tr>
   <tr>
-    <td align="center"><img src="./assets/user-management-dark.png" /><br/>User management (dark)</td>
-    <td align="center"><img src="./assets/server-monitor.png" /><br/>Server monitoring</td>
+    <td align="center" width="50%"><a href="./assets/preview/log-trace.png"><img src="./assets/preview/log-trace.png" alt="Log tracing" /></a><br/>Log tracing</td>
+    <td align="center" width="50%"><a href="./assets/preview/printing.png"><img src="./assets/preview/printing.png" alt="Print templates" /></a><br/>Print templates</td>
   </tr>
   <tr>
-    <td align="center"><img src="./assets/preference-settings.png" /><br/>Preferences</td>
-    <td align="center"><img src="./assets/operation-log.png" /><br/>Operation log</td>
+    <td align="center" width="50%"><a href="./assets/preview/control-center.png"><img src="./assets/preview/control-center.png" alt="Control center" /></a><br/>Control center</td>
+    <td align="center" width="50%"><a href="./assets/preview/login.png"><img src="./assets/preview/login.png" alt="Authentication" /></a><br/>Authentication</td>
   </tr>
   <tr>
-    <td align="center"><img src="./assets/log-traceability.png" /><br/>Log traceability</td>
-    <td align="center"><img src="./assets/about.png" /><br/>About</td>
+    <td align="center" width="50%"><a href="./assets/preview/profile.png"><img src="./assets/preview/profile.png" alt="Personal center" /></a><br/>Personal center</td>
+    <td align="center" width="50%"><a href="./assets/preview/profile-security.png"><img src="./assets/preview/profile-security.png" alt="Personal security settings" /></a><br/>Personal security settings</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/online-user.png"><img src="./assets/preview/online-user.png" alt="Online users" /></a><br/>Online users</td>
+    <td align="center" width="50%"><a href="./assets/preview/role.png"><img src="./assets/preview/role.png" alt="Role management" /></a><br/>Role management</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/org.png"><img src="./assets/preview/org.png" alt="Organizations" /></a><br/>Organizations</td>
+    <td align="center" width="50%"><a href="./assets/preview/position.png"><img src="./assets/preview/position.png" alt="Positions" /></a><br/>Positions</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/permission.png"><img src="./assets/preview/permission.png" alt="Permissions" /></a><br/>Permissions</td>
+    <td align="center" width="50%"><a href="./assets/preview/menu.png"><img src="./assets/preview/menu.png" alt="Menus" /></a><br/>Menus</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/field-security.png"><img src="./assets/preview/field-security.png" alt="Field security" /></a><br/>Field security</td>
+    <td align="center" width="50%"><a href="./assets/preview/authorization.png"><img src="./assets/preview/authorization.png" alt="Permission requests and delegation" /></a><br/>Permission requests and delegation</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/review.png"><img src="./assets/preview/review.png" alt="Approval center" /></a><br/>Approval center</td>
+    <td align="center" width="50%"><a href="./assets/preview/constraint.png"><img src="./assets/preview/constraint.png" alt="Approval constraints" /></a><br/>Approval constraints</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/tenant.png"><img src="./assets/preview/tenant.png" alt="Tenant management" /></a><br/>Tenant management</td>
+    <td align="center" width="50%"><a href="./assets/preview/tenant-members.png"><img src="./assets/preview/tenant-members.png" alt="Tenant members and support access" /></a><br/>Tenant members and support access</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/edition.png"><img src="./assets/preview/edition.png" alt="Tenant editions" /></a><br/>Tenant editions</td>
+    <td align="center" width="50%"><a href="./assets/preview/subscription.png"><img src="./assets/preview/subscription.png" alt="My subscription" /></a><br/>My subscription</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/notification.png"><img src="./assets/preview/notification.png" alt="Announcements" /></a><br/>Announcements</td>
+    <td align="center" width="50%"><a href="./assets/preview/inbox.png"><img src="./assets/preview/inbox.png" alt="My inbox" /></a><br/>My inbox</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/message-template.png"><img src="./assets/preview/message-template.png" alt="Message templates" /></a><br/>Message templates</td>
+    <td align="center" width="50%"><a href="./assets/preview/message-record.png"><img src="./assets/preview/message-record.png" alt="Email and SMS records" /></a><br/>Email and SMS records</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/chat.png"><img src="./assets/preview/chat.png" alt="Online chat" /></a><br/>Online chat</td>
+    <td align="center" width="50%"><a href="./assets/preview/chat-audit.png"><img src="./assets/preview/chat-audit.png" alt="Chat audit" /></a><br/>Chat audit</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/file-library.png"><img src="./assets/preview/file-library.png" alt="Files" /></a><br/>Files</td>
+    <td align="center" width="50%"><a href="./assets/preview/file-storage.png"><img src="./assets/preview/file-storage.png" alt="Storage configuration" /></a><br/>Storage configuration</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/export-center.png"><img src="./assets/preview/export-center.png" alt="Export center" /></a><br/>Export center</td>
+    <td align="center" width="50%"><a href="./assets/preview/dict.png"><img src="./assets/preview/dict.png" alt="Dictionaries" /></a><br/>Dictionaries</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/config.png"><img src="./assets/preview/config.png" alt="Parameters" /></a><br/>Parameters</td>
+    <td align="center" width="50%"><a href="./assets/preview/numbering.png"><img src="./assets/preview/numbering.png" alt="Business numbering" /></a><br/>Business numbering</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/job.png"><img src="./assets/preview/job.png" alt="Scheduled jobs" /></a><br/>Scheduled jobs</td>
+    <td align="center" width="50%"><a href="./assets/preview/cache.png"><img src="./assets/preview/cache.png" alt="Cache management" /></a><br/>Cache management</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/server.png"><img src="./assets/preview/server.png" alt="Server monitoring" /></a><br/>Server monitoring</td>
+    <td align="center" width="50%"><a href="./assets/preview/version.png"><img src="./assets/preview/version.png" alt="Version management" /></a><br/>Version management</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/email-config.png"><img src="./assets/preview/email-config.png" alt="Email configuration" /></a><br/>Email configuration</td>
+    <td align="center" width="50%"><a href="./assets/preview/sms-config.png"><img src="./assets/preview/sms-config.png" alt="SMS configuration" /></a><br/>SMS configuration</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/bot-config.png"><img src="./assets/preview/bot-config.png" alt="Webhook bots" /></a><br/>Webhook bots</td>
+    <td align="center" width="50%"><a href="./assets/preview/telegram-bot.png"><img src="./assets/preview/telegram-bot.png" alt="Telegram bots" /></a><br/>Telegram bots</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/openapi-app.png"><img src="./assets/preview/openapi-app.png" alt="Application management" /></a><br/>Application management</td>
+    <td align="center" width="50%"><a href="./assets/preview/openapi-credentials.png"><img src="./assets/preview/openapi-credentials.png" alt="OpenAPI credentials" /></a><br/>OpenAPI credentials</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/log-access.png"><img src="./assets/preview/log-access.png" alt="Access logs" /></a><br/>Access logs</td>
+    <td align="center" width="50%"><a href="./assets/preview/log-api.png"><img src="./assets/preview/log-api.png" alt="OpenAPI logs" /></a><br/>OpenAPI logs</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/log-operation.png"><img src="./assets/preview/log-operation.png" alt="Operation logs" /></a><br/>Operation logs</td>
+    <td align="center" width="50%"><a href="./assets/preview/log-login.png"><img src="./assets/preview/log-login.png" alt="Login logs" /></a><br/>Login logs</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/log-exception.png"><img src="./assets/preview/log-exception.png" alt="Exception logs" /></a><br/>Exception logs</td>
+    <td align="center" width="50%"><a href="./assets/preview/log-diff.png"><img src="./assets/preview/log-diff.png" alt="Data change logs" /></a><br/>Data change logs</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/log-permission.png"><img src="./assets/preview/log-permission.png" alt="Permission change logs" /></a><br/>Permission change logs</td>
+    <td align="center" width="50%"><a href="./assets/preview/log-trace-timeline.png"><img src="./assets/preview/log-trace-timeline.png" alt="Correlated log timeline" /></a><br/>Correlated log timeline</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/log-migration.png"><img src="./assets/preview/log-migration.png" alt="Migration history" /></a><br/>Migration history</td>
+    <td align="center" width="50%"><a href="./assets/preview/codegen.png"><img src="./assets/preview/codegen.png" alt="Code generation" /></a><br/>Code generation</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/ai-provider.png"><img src="./assets/preview/ai-provider.png" alt="AI providers" /></a><br/>AI providers</td>
+    <td align="center" width="50%"><a href="./assets/preview/ai-prompt.png"><img src="./assets/preview/ai-prompt.png" alt="AI prompts" /></a><br/>AI prompts</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/knowledge.png"><img src="./assets/preview/knowledge.png" alt="Knowledge base" /></a><br/>Knowledge base</td>
+    <td align="center" width="50%"><a href="./assets/preview/ai-assistant.png"><img src="./assets/preview/ai-assistant.png" alt="AI assistants" /></a><br/>AI assistants</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/workflow-definition.png"><img src="./assets/preview/workflow-definition.png" alt="Workflow definitions" /></a><br/>Workflow definitions</td>
+    <td align="center" width="50%"><a href="./assets/preview/workflow-json.png"><img src="./assets/preview/workflow-json.png" alt="Workflow JSON editor" /></a><br/>Workflow JSON editor</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/workflow-instance.png"><img src="./assets/preview/workflow-instance.png" alt="Workflow instances" /></a><br/>Workflow instances</td>
+    <td align="center" width="50%"><a href="./assets/preview/workflow-todo.png"><img src="./assets/preview/workflow-todo.png" alt="My workflow tasks" /></a><br/>My workflow tasks</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/preferences.png"><img src="./assets/preview/preferences.png" alt="Preferences" /></a><br/>Preferences</td>
+    <td align="center" width="50%"><a href="./assets/preview/schema-page.png"><img src="./assets/preview/schema-page.png" alt="Advanced lists" /></a><br/>Advanced lists</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/editors.png"><img src="./assets/preview/editors.png" alt="Content editors" /></a><br/>Content editors</td>
+    <td align="center" width="50%"><a href="./assets/preview/editor-json.png"><img src="./assets/preview/editor-json.png" alt="JSON editor" /></a><br/>JSON editor</td>
+  </tr>
+  <tr>
+    <td align="center" width="50%"><a href="./assets/preview/editor-rich-text.png"><img src="./assets/preview/editor-rich-text.png" alt="Rich text editor" /></a><br/>Rich text editor</td>
+    <td align="center" width="50%"><a href="./assets/preview/navigation.png"><img src="./assets/preview/navigation.png" alt="Global navigation" /></a><br/>Global navigation</td>
   </tr>
 </table>
 
-
-
-Mobile:
-
-<img src="./assets/mobile.png" />
-
 ## Features
 
-**Identity and authentication**
+### Workspace and identity
 
-- User, role, department and menu management
-- JWT with two tokens (access 120 minutes + refresh 7 days), multi-device sign-in and session management
-- Multiple sign-in methods: password, email / SMS code, 2FA (TOTP / email / SMS, combinable as flags)
-- Eight first-party OAuth providers built in — GitHub, Gitee, Google, QQ, WeChat, WeCom, DingTalk, Lark — enabled by configuration
-- Sign-in protection: first-party SVG captcha (single-use, can be turned off), throttling on both account+IP and IP alone, failure lockout, forced password change after signing in with the default password
-- PBKDF2 password hashing (OWASP-recommended iterations); one-time codes are destroyed on consumption and compared in constant time
+- **Dashboard**: Customize widgets, charts, announcements and pending work, and save a personal dashboard layout.
+- **Control center**: Choose a tenant or enter platform administration from one workspace selector.
+- **Authentication**: Sign in with a password, phone or email codes, external providers and two-factor authentication, with CAPTCHA, throttling and account lockout.
+- **Personal center**: Maintain profile and security settings, linked accounts, devices, notification preferences, tenant memberships and usage statistics.
+- **User management**: Search and maintain users, status, roles, departments, direct grants and data scopes; lock accounts, reset passwords, impersonate users and revoke sessions.
+- **Online users**: Inspect active sessions, clients and live connections, and search users or revoke individual sessions.
+- **Role management**: Manage roles, inheritance and members, batch membership changes, menu and operation grants, and data scopes.
+- **Organizations**: Manage department trees, leaders, child departments and members, including positions, employee numbers, job levels and join dates.
+- **Positions**: Maintain position names, codes, order and enabled state for department membership assignments.
+- **Permissions**: Manage permission codes, modules, resources, operations, API paths, HTTP methods, platform or tenant scope and audit requirements.
+- **Menus**: Maintain directory, menu and button trees with component paths, icons, order, visibility, caching, external links and permission bindings.
+- **Field security**: Configure field read, write and masking policies for entities and authorization targets.
+- **Permission requests and delegation**: Approve, reject or withdraw access requests, and delegate roles or permissions within a time window with revocation.
+- **Approval center**: Inspect approval items, status and processing history, and approve, reject or withdraw requests.
+- **Approval constraints**: Configure separation-of-duty, exclusion, cardinality and conditional rules, their targets and violation handling.
 
-**Permissions**
+### Tenants and messaging
 
-- Three-segment permission codes `module:resource:action`; the super administrator wildcard is `*`
-- Role hierarchy through a closure table, five data scopes (self / own department / department and children / all / custom), six field-masking strategies
-- Static separation of duties: mutually exclusive roles and cardinality constraints, evaluated per constraint group
-- Permission requests with approval, revocable temporary delegation, and a change audit trail
+- **Tenant management**: Manage status, editions, expiration and quotas, initialize databases and administrators, and manage memberships, support access and ownership transfer.
+- **Tenant editions**: Configure prices, billing periods, user and storage quotas, and permission allowlists for tenant features.
+- **My subscription**: View the current tenant edition, subscription period, user and storage usage, quotas and entitlements.
+- **Announcements**: Publish targeted notices to users, roles or departments, configure presentation and mandatory reading, and inspect read statistics.
+- **My inbox**: Read notification details, filter pending messages, and mark individual or all messages as read or confirmed.
+- **Message templates**: Maintain variable-based email, SMS, in-app and bot templates, including tenant overrides.
+- **Email and SMS records**: Inspect recipients, content and delivery results, and resend failed email or SMS messages.
+- **Online chat**: Use direct, group, department and AI assistant conversations with real-time messages and unread state.
+- **Chat audit**: Search conversations and messages, inspect members and message details, and review conversation content.
 
-**Multi-tenancy**
+### Files and system management
 
-- Column-level isolation by default with `TenantId=0` reserved for global data; per-tenant databases are also supported
-- Globally unique email sign-in that routes the user by membership (console / workbench / tenant picker), with tenant switching at any time
-- Platform-mode operations for super administrators, who can step into any tenant
-- Runtime gating by tenant edition allowlist; onboarding creates the administrator, roles and grants in one go; downgrading reclaims grants that fall outside the allowlist
+- **Files**: Upload, search, download and preview files, maintain metadata and archive state, and manage storage copies and the primary location.
+- **Storage configuration**: Configure local, S3, OSS, COS and MinIO storage channels, status and a default provider.
+- **Export center**: Track asynchronous exports, download CSV or XLSX results, cancel pending tasks and delete records.
+- **Dictionaries**: Maintain linked dictionary categories and items, codes, values, defaults, order and status for shared search and form options.
+- **Parameters**: Maintain platform and tenant parameters, search groups and status, and inspect or edit configuration values.
+- **Business numbering**: Configure prefixes, dates, sequence width, reset periods and time zones, preview formats, perform guarded resets and inspect allocation history.
+- **Scheduled jobs**: Configure Cron and interval jobs, status, immediate runs and retry policies, and inspect execution logs.
+- **Cache management**: Search cache keys or patterns, inspect grouped keys and values, edit values and clear individual or multiple entries.
+- **Server monitoring**: Inspect CPU, memory, disks, network, GPU, motherboard and runtime information.
+- **Version management**: Inspect the current release, version notes, database migration information and upgrade state.
+- **Email configuration**: Maintain email channels and server settings, enabled state and the default configuration.
+- **SMS configuration**: Maintain SMS providers, delivery settings, enabled state and a default channel.
+- **Webhook bots**: Configure DingTalk, Feishu and WeCom Webhook channels, status and a default notification bot.
+- **Telegram bots**: Maintain connection settings and status for multiple Telegram Bot instances.
+- **Application management**: Register OAuth2 / OIDC clients with client types, grant types, redirect URIs, status and secrets.
+- **OpenAPI credentials**: Manage personal OpenAPI credentials and rotate keys for signed API calls.
 
-**Audit logging**
+### Logs and audit
 
-- Six independent log streams: access, API, operation, exception, sign-in and entity change
-- Automatic masking before persistence (passwords, tokens, secrets, ID numbers and more, with a counter-example allowlist to avoid over-masking); entity changes distinguish create / update / delete / restore
-- Traceability timeline: aggregate across log types by trace ID, username, session, IP or user ID
+- **Access logs**: Inspect request paths, methods, status, duration and client details, and open related traces.
+- **OpenAPI logs**: Inspect OpenAPI calls, signature authorization results, request and response details, and related traces.
+- **Operation logs**: Inspect business operations, outcomes, duration, descriptions, client details and related traces.
+- **Login logs**: Inspect successful and failed logins, logout and impersonation events, client and IP details.
+- **Exception logs**: Search exception types, messages and locations, and inspect stack traces and related requests.
+- **Data change logs**: Inspect entity creation, updates, deletion and restoration with before-and-after field differences and traces.
+- **Permission change logs**: Inspect role, user and permission grant changes, affected targets and related traces.
+- **Log tracing**: Correlate log types by TraceId, user, session or IP, then analyze timelines, flow diagrams and time distributions.
+- **Migration history**: Inspect database upgrade script history, versions, execution status, duration and errors.
 
-**Code generation**
+### Development and optional modules
 
-- Single-table, tree and master-detail modes: entities, DTOs, APIs and frontend pages in one shot
-- Native Scriban templates embedded into the assembly, each with a manual variant; menu permissions, permission seeds, page descriptors and seeders are generated alongside
-- Download as a zip or write to disk; writing to disk is off by default and requires an explicit absolute-path allowlist root, with fail-closed path traversal checks
+- **Code generation**: Manage data sources, tables, fields and templates; preview and generate single-table, tree and master-detail stacks, download output and inspect history.
+- **AI providers**: Configure endpoints and models, securely store keys, test connections and choose a default provider.
+- **AI prompts**: Maintain prompt codes, content and status for reusable conversation and business templates.
+- **Knowledge base**: Ingest documents, build or rebuild vector indexes, and query tenant-isolated knowledge with source references.
+- **AI assistants**: Configure assistant identities, models and prompts, choose a default and connect assistants to chat.
+- **Workflow definitions**: Design nodes and edges, maintain draft, published, disabled and archived definitions, manage versions and start workflows.
+- **Workflow instances**: Inspect execution and nodes, suspend, resume, cancel, terminate or retry instances, and send workflow signals.
+- **My workflow tasks**: Process human tasks with approval, rejection, transfer and additional signers, and track completion.
+- **Print templates**: Design text, tables, images and barcodes with paper and data-source settings, sample data, zoom, JSON inspection, preview and printing.
 
-**AI**
+### Shared user experience
 
-- Provider onboarding and API-key custody (encrypted at rest with DataProtection; chat and embedding models are configurable)
-- Prompt library stored in the database, able to override the framework defaults
-- Knowledge-base RAG: document ingestion and vector search (Qdrant), isolated per tenant, keeping the raw content so indexes can be rebuilt
-- Registered skills automatically become chat tools and MCP tools; knowledge retrieval ships built in, and business skills join by implementing `IAiSkill`
-- Configurable assistants, bridged into the chat page
-
-**Platform**
-
-- Dynamic APIs: application services are exposed through `[DynamicApi]` with no controller boilerplate, and Scalar documentation is generated automatically
-- One source of truth for menus: the backend `PageRegistry` registers menu, route, component path, permission code and i18n key together
-- Distributed caching end to end (authorization snapshots, edition gating, menus, settings, dictionaries) with precise invalidation on write paths
-- Request tracing; two SignalR hubs (notifications and chat)
-- Message center: email / SMS / in-app notification templates, overridable per tenant
-- Open platform: a built-in OAuth2 / OIDC provider (third-party app registration, user consent) and per-user OpenAPI credentials with signed calls
-- Server monitoring (motherboard / CPU / memory / disk / GPU / network / runtime), cache key lookup and pattern-based clearing
-- Multi-backend file storage (local / Aliyun OSS / Tencent COS / MinIO), database-backed scheduled jobs, review workflow, i18n (Chinese / English)
-- Export center: async tasks with CSV and XLSX writers on a delayed queue
-
-**Frontend experience**
-
-- Schema-driven list pages: search, table and export generated from configuration, with column settings, density switching, advanced search, saved personal views, row hover previews, tree mode and column resizing
-- Permission-, tenant- and preference-aware: pages, fields and actions filtered by permission code with field masking; column and search preferences sync to the backend and stay consistent across devices
-- Dynamic-island feedback, tabbed pages, favorites, command-palette global search
-- Message center: top banner, sign-in dialog, notification center, with forced reading and role/department targeting
-- Preference center: light/dark theme, brand color, layout style and density, synced to the cloud
-- Rich text (Tiptap) and markdown editors, visual cron builder, JSON editor/viewer, code editor
-- Lock screen, watermark, time zone switching, export center
+- **Preferences**: Configure themes, colors, layouts, density, watermarks and interaction preferences with cloud synchronization.
+- **Advanced lists**: Use combined search, saved views, column settings, multi-column sorting, density, trees, quick previews and exports.
+- **Content editors**: Edit rich text, Markdown, code and JSON, and configure Cron expressions visually.
+- **Global navigation**: Use tabs, favorites, global search, notification and task feedback, languages, time zones and screen locking.
 
 ## Tech Stack
 
-Backend: .NET 10 with XiHan.Framework 4.0.0 (SqlSugar, Redis, SignalR, Serilog and Scalar all arrive through the framework). Frontend: Vue 3 + TypeScript + Vite 8 + XiHan.UI + Pinia + Tailwind CSS 4.
+Backend: .NET with XiHan.Framework (SqlSugar, Redis, SignalR, Serilog and Scalar all arrive through the framework). Frontend: Vue + TypeScript + Vite + XiHan.UI + Pinia + Tailwind CSS.
 
 Item-by-item lists live in the [backend](./backend/README.md#dependency-footprint) and [frontend](./frontend/README.md#stack) engineering notes.
 
@@ -191,7 +320,7 @@ The system splits into a framework layer, a module layer and the host applicatio
 | Project | Description | Removable |
 | --- | --- | --- |
 | `XiHan.BasicApp.Core` | Application base composing the non-web framework modules and shared conventions | No |
-| `XiHan.BasicApp.Web.Core` | Web base composing six framework web modules, provides the maintenance-mode middleware | No |
+| `XiHan.BasicApp.Web.Core` | Web base composing the framework web modules, provides the maintenance-mode middleware | No |
 | `XiHan.BasicApp.Saas` | Platform governance: users / roles / permissions / menus / departments / tenants / settings / dictionaries / files / notifications / approvals / logs / jobs | No |
 | `XiHan.BasicApp.CodeGeneration` | Code generation: data sources / schema import / template configuration / full-stack output | Yes |
 | `XiHan.BasicApp.AI` | AI: providers and key custody / prompt library / knowledge-base RAG / skills as MCP tools / chat assistant | Yes (the assistant bridge depends on Chat) |
@@ -202,18 +331,19 @@ The system splits into a framework layer, a module layer and the host applicatio
 
 ```text
 XiHan.BasicApp/
-├── backend/                 # backend (.NET 10)
+├── backend/                 # backend (.NET)
 │   ├── src/
 │   │   ├── framework/       #   Core / Web.Core base capabilities
-│   │   ├── modules/         #   Saas + five optional modules (CodeGen/AI/Workflow/Printing/Chat)
+│   │   ├── modules/         #   Saas + optional modules (CodeGen/AI/Workflow/Printing/Chat)
 │   │   └── main/            #   WebHost startup entry
 │   ├── props/               #   shared MSBuild properties
 │   ├── scripts/             #   version bump and cleanup scripts
 │   └── test/                #   test projects
-├── frontend/                # frontend (Vue 3 + XiHan.UI)
+├── frontend/                # frontend (Vue + XiHan.UI)
 │   ├── src/                 #   application sources (src/modules/ mirrors the optional backend modules)
 │   └── packages/            #   internal packages
-└── assets/                  # README assets
+└── assets/                  # Branding and README assets
+    └── preview/             # Feature screenshots and manifest
 ```
 
 ### Removing Optional Modules
@@ -273,7 +403,9 @@ pnpm dev
 
 ### Default Account
 
-The initial super administrator is `superadmin` with the password `SuperAdmin@123`. Override it through `Saas:Seed:SuperAdminPassword` (environment variable `Saas__Seed__SuperAdminPassword`). Always override it in production, and change it right after the first sign-in.
+The initial super administrator is `superadmin` with the password `SuperAdmin@123` (written by the seed; the account is flagged as needing its own password change). In production, change it right after the first sign-in and consider turning on forced password change in the "Password settings" parameter.
+
+The development configuration turns on demo data (`Saas:Seed:EnableDemoData`): demo tenants and accounts covering every edition, tenant status, member type, data scope and account state, all with the password `Demo@123`. See [Introduction: seed data](docs/backend/introduction.md#演示数据) for the list.
 
 ## Ecosystem
 

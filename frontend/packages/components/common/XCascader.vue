@@ -1,4 +1,5 @@
 <script lang="ts" setup>
+import type { Size } from '@xihan-ui/core'
 import type { CascaderNode } from '@xihan-ui/headless'
 import type { TreeSelectOption } from '~/types'
 import {
@@ -8,6 +9,7 @@ import {
   XhCascaderControl,
   XhCascaderIndicator,
   XhCascaderItem,
+  XhCascaderItemIndicator,
   XhCascaderItemText,
   XhCascaderPositioner,
   XhCascaderRoot,
@@ -26,13 +28,17 @@ defineOptions({ name: 'XCascader', inheritAttrs: false })
 const props = withDefaults(defineProps<{
   options?: TreeSelectOption[]
   placeholder?: string
+  /** 不写时随外层 Field / Form 的 disabled 走；写了以本处为准 */
   disabled?: boolean
   clearable?: boolean
+  /** 与表单里的其它字段同一档：缺省 sm，与 XInput / XSelect 一致 */
+  size?: Size
 }>(), {
   options: () => [],
   placeholder: undefined,
-  disabled: false,
+  disabled: undefined,
   clearable: false,
+  size: 'sm',
 })
 
 // 字段挂来的 id 与 aria-* 转交给触发器，见 control-attrs.ts
@@ -84,13 +90,16 @@ function onValueChange(details: { value: readonly string[] | readonly (readonly 
     :style="attrs.style"
     :collection="collection"
     :value="pathValue"
+    :placeholder="placeholder"
     :disabled="disabled"
+    :size="size"
     @value-change="onValueChange"
   >
     <!-- 视觉盒在 Control 上；清空钮是 Trigger 的兄弟，塞进去会变成按钮套按钮、且点它会冒泡把浮层打开 -->
     <XhCascaderControl>
       <XhCascaderTrigger v-bind="controlAttrs">
-        <XhCascaderValueText :placeholder="placeholder" />
+        <!-- 占位写在根上：无选中时由值文本显示 -->
+        <XhCascaderValueText />
         <XhCascaderIndicator />
       </XhCascaderTrigger>
       <XhCascaderClearTrigger v-if="clearable" />
@@ -106,9 +115,10 @@ function onValueChange(details: { value: readonly string[] | readonly (readonly 
             v-for="node in column.items"
             :key="node.value"
             :value="node.value"
-            :level="column.level"
           >
             <XhCascaderItemText>{{ node.label }}</XhCascaderItemText>
+            <!-- 行尾选中标记：不写内容，对号由组件库按条目状态画 -->
+            <XhCascaderItemIndicator />
           </XhCascaderItem>
         </XhCascaderColumn>
       </XhCascaderContent>

@@ -1,15 +1,16 @@
 <script lang="ts" setup>
+import type { ComponentPublicInstance } from 'vue'
 import type { LayoutRouteRecord } from '../contracts'
 import type { AppDropdownOption, AppMenuOption } from '~/types'
 
 import { computed, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { toast } from '~/composables'
+import { toast, useIsMobile } from '~/composables'
 import { useTheme } from '~/hooks'
 import { Icon } from '~/iconify'
 import { useAppContext, useAppStore, useAuthStore, useLayoutBridgeStore, useNotificationStore, useUserStore } from '~/stores'
 import { NotificationStatus } from '~/types/enums'
-import { useEffectiveLayoutMode, useLayoutMenuDomain, usePreferenceEntry } from '../composables'
+import { useEffectiveLayoutMode, useHeaderSqueeze, useLayoutMenuDomain, useWidgetPlacement } from '../composables'
 import HeaderNav from './header/HeaderNav.vue'
 import HeaderToolbar from './header/HeaderToolbar.vue'
 import HeaderTopMenu from './header/HeaderTopMenu.vue'
@@ -31,6 +32,8 @@ const layoutBridgeStore = useLayoutBridgeStore()
 const notificationStore = useNotificationStore()
 const appContext = useAppContext()
 const { t, te } = useI18n()
+// 小屏（<768）不放后退 / 前进：手机浏览器与系统手势自带，省下的位置留给右上角的账号入口
+const { isMobile } = useIsMobile()
 const { isDark, toggleThemeWithTransition } = useTheme()
 const showImpersonationDialog = ref(false)
 const {
@@ -45,8 +48,18 @@ const {
   openExternalIfMatch,
 } = useLayoutMenuDomain()
 
-// 偏好设置入口可见性：头部按钮与悬浮 FAB 互斥（auto 模式窄屏走 FAB，头部按钮隐藏）
-const { showHeaderButton: showPreferencesInHeader } = usePreferenceEntry()
+// 偏好设置入口与顶栏工具一样按位置落到顶栏或悬浮组，二者互斥
+const widgetPlacement = useWidgetPlacement()
+const showPreferencesInHeader = computed(() => widgetPlacement.preference.value === 'header')
+
+// 顶栏挤不下时先把命令面板收成图标钮，再把「自动」的工具从左往右依次让到悬浮组，面包屑最后才截断：
+// 量的是右侧工具区所在的这一行
+const toolbarRef = ref<ComponentPublicInstance | null>(null)
+const breadcrumbRef = ref<HTMLElement | null>(null)
+const menuAreaRef = ref<HTMLElement | null>(null)
+const toolbarEl = computed(() => toolbarRef.value?.$el as HTMLElement | undefined)
+const headerRowEl = computed(() => toolbarEl.value?.parentElement)
+useHeaderSqueeze(headerRowEl, toolbarEl, breadcrumbRef, menuAreaRef)
 
 const hasBack = ref(false)
 const hasForward = ref(false)
@@ -70,6 +83,42 @@ const showTopMenu = computed(
   () => isTopNavLayout.value || isMixedNavLayout.value || isHeaderMixedLayout.value,
 )
 const showBreadcrumb = computed(() => !showTopMenu.value && appStore.breadcrumbEnabled)
+
+/**
+ * 顶栏空间先给横向菜单：菜单一行装不下就把命令面板收成图标钮，让出它那一截宽度。
+ * 展开与收起用同一把尺量，避免来回抖动——收起后要再展开，富余量必须够放回展开态与图标态的差值。
+ */
+const SEARCH_ICON_WIDTH = 32
+const SEARCH_RESTORE_SPARE = 8
+const searchCompact = ref(false)
+/** 展开态比图标态多占的宽度：收起前量一次记住（文案随语言变，不能写死） */
+const searchExpandedGain = ref(0)
+
+function onTopMenuFitChange(metrics: { content: number, available: number }) {
+  // 窄屏（<lg）横向菜单整条不显示，没有要让的对象，命令面板照常铺开
+  if (metrics.available <= 0) {
+    searchCompact.value = false
+    return
+  }
+  if (!searchCompact.value) {
+    const trigger = document.querySelector<HTMLElement>('header .search-trigger')
+    if (trigger) {
+      searchExpandedGain.value = Math.max(trigger.offsetWidth - SEARCH_ICON_WIDTH, 0)
+    }
+    searchCompact.value = metrics.content > metrics.available
+    return
+  }
+  if (metrics.available - metrics.content >= searchExpandedGain.value + SEARCH_RESTORE_SPARE) {
+    searchCompact.value = false
+  }
+}
+
+// 换到没有横向菜单的布局：命令面板恢复完整形态
+watch(showTopMenu, (value) => {
+  if (!value) {
+    searchCompact.value = false
+  }
+})
 
 const isSplitMode = computed(
   () => (appStore.navigationSplit && isMixedNavLayout.value) || isHeaderMixedLayout.value,
@@ -157,22 +206,22 @@ const shortcutKbdStyle = [
   'white-space:nowrap',
 ].join(';')
 
+/** 当前上下文的显示名：平台或租户名；应用没注册控制中心（没有租户切换概念）时不展示 */
+const contextLabel = computed(() => {
+  if (!appContext.shellRoutes.controlCenter || !userStore.userInfo) {
+    return null
+  }
+  return userStore.userInfo.isPlatform ? t('header.context.platform') : (userStore.userInfo.tenantName || null)
+})
+
 const userOptions = computed<AppDropdownOption[]>(() => [
-  // 个人中心 / 控制中心的路由由应用注册（appContext.shellRoutes）；未配置则不展示该项，
-  // 免得留一个点了没反应的死菜单
+  // 个人中心的路由由应用注册（appContext.shellRoutes）；未配置则不展示该项，免得留一个点了没反应的死菜单。
+  // 控制中心（切换租户 / 进入平台）不在这里：顶栏的上下文切换按钮就是它的入口
   ...(appContext.shellRoutes.profile
     ? [{
         label: t('header.user.profile'),
         key: 'profile',
         icon: () => h(Icon, { icon: 'lucide:user' }),
-      }]
-    : []),
-  ...(appContext.shellRoutes.controlCenter
-    ? [{
-        // 控制中心：切换租户 / 进入平台管理（独立公共页，不进标签栏）。标签复用 menu.control_center，与路由名、页面标题同源
-        label: t('menu.control_center'),
-        key: 'control-center',
-        icon: () => h(Icon, { icon: 'lucide:building-2' }),
       }]
     : []),
   // 能否发起模仿由服务端判定后随用户信息下发；模仿态下服务端恒返回 false，此时只出「退出模仿」
@@ -241,7 +290,7 @@ async function handleUserAction(key: string) {
       await authStore.stopImpersonation()
     }
     catch (error) {
-      toast.error((error as Error)?.message || t('header.impersonation.stop_failed'))
+      toast.danger((error as Error)?.message || t('header.impersonation.stop_failed'))
     }
     return
   }
@@ -429,8 +478,8 @@ watch(() => route.fullPath, () => {
 </script>
 
 <template>
-  <!-- Back / Forward buttons -->
-  <template v-if="appStore.breadcrumbNavButtons">
+  <!-- Back / Forward buttons（小屏隐藏） -->
+  <template v-if="appStore.breadcrumbNavButtons && !isMobile">
     <XihanIconButton
       class="my-0 rounded-md"
       :tooltip="t('header.toolbar.nav_back')"
@@ -459,35 +508,42 @@ watch(() => route.fullPath, () => {
     <Icon icon="lucide:refresh-cw" class="size-4" />
   </XihanIconButton>
 
-  <!-- Breadcrumb -->
-  <div v-if="showBreadcrumb" class="hidden flex-center lg:block">
+  <!-- Breadcrumb：允许被压缩（min-w-0），但顶栏挤压时排在最后让：命令面板收成图标、「自动」的工具让到悬浮组之后，
+       才由 HeaderNav 单行截断，不折成两行 -->
+  <div v-if="showBreadcrumb" ref="breadcrumbRef" class="hidden min-w-0 lg:block">
     <HeaderNav
       :app-store="appStore"
       :breadcrumbs="breadcrumbs"
       @breadcrumb-select="handleBreadcrumbSelect"
-      @home-click="router.push('/')"
     />
   </div>
 
-  <!-- Menu area -->
-  <div :class="`menu-align-${appStore.headerMenuAlign}`" class="flex flex-1 items-center min-w-0">
-    <div v-if="showTopMenu" class="hidden items-center min-w-0 xihan-top-menu lg:flex">
+  <!-- Menu area：弹性区，放得下时多出来的宽度都在它身上，顶栏挤压按它量空档 -->
+  <div ref="menuAreaRef" class="flex flex-1 items-center min-w-0">
+    <!-- 菜单铺满整条空档：排得下时按对齐方式摆，排不下时在里面横向滚动 -->
+    <div v-if="showTopMenu" class="hidden min-w-0 flex-1 items-center xihan-top-menu lg:flex">
       <HeaderTopMenu
         :options="topMenuOptions"
         :active-key="topMenuActive"
+        :align="appStore.headerMenuAlign"
         @select="handleTopMenuSelect"
+        @fit-change="onTopMenuFitChange"
       />
     </div>
   </div>
 
   <!-- Right toolbar widgets -->
   <HeaderToolbar
+    ref="toolbarRef"
     :app-store="appStore"
     :user-store="userStore"
     :is-dark="isDark"
     :is-fullscreen="isFullscreen"
     :show-preferences-in-header="showPreferencesInHeader"
+    :search-compact="searchCompact || widgetPlacement.searchSqueezed.value"
     :user-options="userOptions"
+    :context-label="contextLabel"
+    :context-is-platform="userStore.userInfo?.isPlatform ?? false"
     :notification-all-items="notificationStore.allItems"
     :notification-mentioned-items="notificationStore.mentionedItems"
     :notification-unread-all="notificationStore.unreadAll"
@@ -508,17 +564,3 @@ watch(() => route.fullPath, () => {
   <!-- 模仿登录：由用户菜单打开，选中目标即以其身份重建会话 -->
   <ImpersonationDialog v-model:show="showImpersonationDialog" />
 </template>
-
-<style>
-.menu-align-start {
-  justify-content: flex-start;
-}
-
-.menu-align-center {
-  justify-content: center;
-}
-
-.menu-align-end {
-  justify-content: flex-end;
-}
-</style>

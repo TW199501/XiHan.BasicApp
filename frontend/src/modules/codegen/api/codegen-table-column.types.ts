@@ -23,6 +23,8 @@ export interface CodeGenTableColumnListItemDto extends BasicDto {
   isIdentity: boolean
   isNullable: boolean
   isRequired: boolean
+  /** 唯一：生成租户内唯一索引，新增与更新时查重 */
+  isUnique: boolean
   isList: boolean
   isInsert: boolean
   isEdit: boolean
@@ -33,6 +35,10 @@ export interface CodeGenTableColumnListItemDto extends BasicDto {
   dictCode?: string | null
   enumTypeName?: string | null
   constValues?: string | null
+  /** 关联的表配置主键（关联表 / 关联树时生效） */
+  relationTableId?: ApiId | null
+  /** 关联显示列（目标表列名；关联树留空取其名称列） */
+  relationLabelColumn?: string | null
   sort: number
   status: EnableStatus
 }
@@ -46,6 +52,8 @@ export interface CodeGenTableColumnUpdateDto extends BasicDto {
   cSharpProperty?: string | null
   tsType?: string | null
   isRequired: boolean
+  /** 唯一：生成租户内唯一索引，新增与更新时查重 */
+  isUnique: boolean
   isList: boolean
   isInsert: boolean
   isEdit: boolean
@@ -56,6 +64,10 @@ export interface CodeGenTableColumnUpdateDto extends BasicDto {
   dictCode?: string | null
   enumTypeName?: string | null
   constValues?: string | null
+  /** 关联的表配置主键（关联表 / 关联树时生效） */
+  relationTableId?: ApiId | null
+  /** 关联显示列（目标表列名；关联树留空取其名称列） */
+  relationLabelColumn?: string | null
   defaultValue?: string | null
   regexPattern?: string | null
   validationMessage?: string | null

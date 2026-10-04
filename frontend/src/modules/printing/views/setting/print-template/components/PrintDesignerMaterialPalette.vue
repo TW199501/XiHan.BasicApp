@@ -121,13 +121,13 @@ function getFieldIcon(kind: PrintFieldKind): string {
     <div class="palette-heading">
       <h2>{{ t('setting.print_template.palette_title') }}</h2>
       <div class="history-actions">
-        <XhButton class="xh-icon-btn" variant="ghost" size="sm" :title="t('setting.print_template.undo')" @click="emit('undo')">
+        <XhButton class="xh-icon-btn" variant="ghost" size="sm" icon-only :title="t('setting.print_template.undo')" :aria-label="t('setting.print_template.undo')" @click="emit('undo')">
           <span><Icon icon="tabler:arrow-back-up" /></span>
         </XhButton>
-        <XhButton class="xh-icon-btn" variant="ghost" size="sm" :title="t('setting.print_template.redo')" @click="emit('redo')">
+        <XhButton class="xh-icon-btn" variant="ghost" size="sm" icon-only :title="t('setting.print_template.redo')" :aria-label="t('setting.print_template.redo')" @click="emit('redo')">
           <span><Icon icon="tabler:arrow-forward-up" /></span>
         </XhButton>
-        <XhButton class="xh-icon-btn" variant="ghost" size="sm" tone="warning" :title="t('setting.print_template.clear')" @click="emit('clear')">
+        <XhButton class="xh-icon-btn" variant="ghost" size="sm" tone="warning" icon-only :title="t('setting.print_template.clear')" :aria-label="t('setting.print_template.clear')" @click="emit('clear')">
           <span><Icon icon="tabler:trash" /></span>
         </XhButton>
       </div>
@@ -318,8 +318,8 @@ function getFieldIcon(kind: PrintFieldKind): string {
 }
 
 .data-source-summary:focus-visible {
-  outline: 2px solid rgba(32, 128, 240, 0.45);
-  outline-offset: -2px;
+  outline: var(--xh-ring-width) solid var(--xh-ring-focus);
+  outline-offset: var(--xh-ring-offset);
 }
 
 .data-source-icon {
@@ -362,7 +362,7 @@ function getFieldIcon(kind: PrintFieldKind): string {
 .data-source-chevron {
   flex: none;
   color: #64748b;
-  transition: transform var(--xh-motion-duration-enter) var(--xh-motion-ease-enter);
+  transition: transform var(--xh-motion-duration-expand) var(--xh-motion-ease-enter);
 }
 
 .data-source-chevron--expanded {
@@ -399,7 +399,7 @@ function getFieldIcon(kind: PrintFieldKind): string {
   cursor: move;
   transition:
     background-color var(--xh-motion-duration-micro) var(--xh-motion-ease-enter),
-    transform var(--xh-motion-duration-micro) var(--xh-motion-ease-enter);
+    transform var(--xh-motion-duration-nudge) var(--xh-motion-ease-enter);
 }
 
 .material-item:hover,
@@ -408,8 +408,8 @@ function getFieldIcon(kind: PrintFieldKind): string {
 }
 
 .material-item:focus-visible {
-  outline: 2px solid rgba(32, 128, 240, 0.5);
-  outline-offset: 1px;
+  outline: var(--xh-ring-width) solid var(--xh-ring-focus);
+  outline-offset: var(--xh-ring-offset);
 }
 
 .material-item:active {

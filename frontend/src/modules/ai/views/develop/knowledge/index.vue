@@ -8,7 +8,8 @@ import type {
   PageResult,
 } from '@/api'
 import type { ListFieldSchema, PageSchema, SchemaActionPayload } from '~/components'
-import { XhButton, XhCardBody, XhCardHeader, XhCardRoot, XhEmptyStateDescription, XhEmptyStateIcon, XhEmptyStateRoot, XhEmptyStateTitle, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFlex, XhFormFieldGroup, XhFormRoot, XhSwitch, XhTabsContent, XhTabsList, XhTabsRoot, XhTabsTrigger, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
+import { isComposingEvent } from '@xihan-ui/core'
+import { XhButton, XhButtonIndicator, XhButtonLabel, XhCardContent, XhCardHeader, XhCardRoot, XhEmptyStateDescription, XhEmptyStateIndicator, XhEmptyStateRoot, XhEmptyStateTitle, XhFieldControl, XhFieldErrorText, XhFieldLabel, XhFieldRoot, XhFlex, XhFormFieldGroup, XhFormRoot, XhSwitch, XhTabsContent, XhTabsIndicator, XhTabsList, XhTabsRoot, XhTabsTrigger, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
 import { computed, h, ref, useId } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
@@ -78,14 +79,14 @@ const fields = computed<ListFieldSchema[]>(() => [
     order: 5,
     render: (row) => {
       const r = row as unknown as KnowledgeListItemDto
-      return h(XhTagRoot, { variant: 'outline', tone: statusTagType(r.status) }, () => h(XhTagLabel, () => getOptionLabel(KNOWLEDGE_INDEX_STATUS_OPTIONS, r.status)))
+      return h(XhTagRoot, { variant: 'subtle', tone: statusTagType(r.status) }, () => h(XhTagLabel, () => getOptionLabel(KNOWLEDGE_INDEX_STATUS_OPTIONS, r.status)))
     },
   },
   { key: 'createdTime', title: t('common.fields.created_time'), dataType: 'datetime', minWidth: 170, sortable: true, order: 6 },
 ])
 
 const schema = computed<PageSchema>(() => ({
-  pageCode: 'develop.ai.knowledge',
+  pageCode: 'knowledge_base',
   pageName: t('develop.knowledge.tabs.documents'),
   rowKey: 'basicId',
   batchRemovable: true,
@@ -104,9 +105,9 @@ const schema = computed<PageSchema>(() => ({
     remove: id => knowledgeApi.delete(id),
   },
   actions: [
-    { key: 'create', title: t('develop.knowledge.add'), scope: 'page', type: 'primary', icon: 'lucide:plus' },
-    { key: 'reindex', title: t('develop.knowledge.action_reindex'), scope: 'row', type: 'info', icon: 'lucide:refresh-cw' },
-    { key: 'delete', title: t('common.actions.delete'), scope: 'row', type: 'error', icon: 'lucide:trash-2' },
+    { key: 'create', title: t('develop.knowledge.add'), scope: 'page', type: 'primary', icon: 'lucide:plus', permission: 'knowledge_base.create' },
+    { key: 'reindex', title: t('develop.knowledge.action_reindex'), scope: 'row', type: 'info', icon: 'lucide:refresh-cw', permission: 'knowledge_base.update' },
+    { key: 'delete', title: t('common.actions.delete'), scope: 'row', type: 'error', icon: 'lucide:trash-2', permission: 'knowledge_base.delete' },
   ],
 }))
 
@@ -143,7 +144,7 @@ function handleReindex(row: KnowledgeListItemDto) {
         reload()
       }
       catch (error) {
-        toast.error((error as Error)?.message || t('develop.knowledge.reindex_failed'))
+        toast.danger((error as Error)?.message || t('develop.knowledge.reindex_failed'))
       }
     },
   })
@@ -164,7 +165,7 @@ function handleDelete(row: KnowledgeListItemDto) {
         reload()
       }
       catch (error) {
-        toast.error((error as Error)?.message || t('common.messages.delete_failed'))
+        toast.danger((error as Error)?.message || t('common.messages.delete_failed'))
       }
     },
   })
@@ -220,7 +221,7 @@ function onFileSelected(event: Event) {
       form.value.title = file.name
     }
   }
-  reader.onerror = () => toast.error(t('develop.knowledge.file_read_failed'))
+  reader.onerror = () => toast.danger(t('develop.knowledge.file_read_failed'))
   reader.readAsText(file)
   // 允许再次选同一文件
   target.value = ''
@@ -247,7 +248,7 @@ async function handleSubmit() {
     }
     const result = await knowledgeApi.ingest(input)
     if (result.status === KnowledgeIndexStatus.Failed) {
-      toast.error(t('develop.knowledge.ingest_index_failed', { msg: result.errorMessage || '' }))
+      toast.danger(t('develop.knowledge.ingest_index_failed', { msg: result.errorMessage || '' }))
     }
     else {
       toast.success(t('develop.knowledge.ingest_success', { count: result.chunkCount }))
@@ -256,7 +257,7 @@ async function handleSubmit() {
     reload()
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('develop.knowledge.ingest_failed'))
+    toast.danger((error as Error)?.message || t('develop.knowledge.ingest_failed'))
   }
   finally {
     submitLoading.value = false
@@ -291,11 +292,19 @@ async function handleQuery() {
     hasQueried.value = true
   }
   catch (error) {
-    toast.error((error as Error)?.message || t('develop.knowledge.query_failed'))
+    toast.danger((error as Error)?.message || t('develop.knowledge.query_failed'))
   }
   finally {
     queryLoading.value = false
   }
+}
+
+/** 问题框里回车即检索、Shift+Enter 换行；输入法组合中的回车是在候选框里选词，不拦 */
+function onQueryKeydown(event: KeyboardEvent) {
+  if (isComposingEvent(event))
+    return
+  event.preventDefault()
+  void handleQuery()
 }
 </script>
 
@@ -310,6 +319,7 @@ async function handleQuery() {
         <XhTabsTrigger value="playground">
           {{ t('develop.knowledge.tabs.playground') }}
         </XhTabsTrigger>
+        <XhTabsIndicator />
       </XhTabsList>
       <XhTabsContent value="documents">
         <SchemaPage ref="schemaPageRef" :schema="schema" @action="onAction">
@@ -327,7 +337,7 @@ async function handleQuery() {
               class="xh-edit-form-grid"
               @submit="handleSubmit"
             >
-              <XhFormFieldGroup value="title">
+              <XhFormFieldGroup name="title">
                 <XhFieldRoot>
                   <XhFieldLabel>{{ t('develop.knowledge.form_title') }}</XhFieldLabel>
                   <XhFieldControl>
@@ -336,7 +346,7 @@ async function handleQuery() {
                   <XhFieldErrorText />
                 </XhFieldRoot>
               </XhFormFieldGroup>
-              <XhFormFieldGroup value="embeddingProviderCode">
+              <XhFormFieldGroup name="embeddingProviderCode">
                 <XhFieldRoot>
                   <XhFieldLabel>{{ t('develop.knowledge.form_provider') }}</XhFieldLabel>
                   <XhFieldControl>
@@ -345,12 +355,12 @@ async function handleQuery() {
                   <XhFieldErrorText />
                 </XhFieldRoot>
               </XhFormFieldGroup>
-              <XhFormFieldGroup value="text" class="xh-span-2">
+              <XhFormFieldGroup name="text" class="xh-span-2">
                 <XhFieldRoot>
                   <XhFieldLabel>{{ t('develop.knowledge.form_text') }}</XhFieldLabel>
                   <div class="knowledge__text">
                     <XhFlex class="knowledge__text-bar" justify="between">
-                      <XhButton size="sm" @click="triggerFilePicker">
+                      <XhButton variant="subtle" size="sm" @click="triggerFilePicker">
                         {{ t('develop.knowledge.form_pick_file') }}
                       </XhButton>
                       <span v-if="form.source" class="knowledge__source">{{ form.source }}</span>
@@ -368,7 +378,7 @@ async function handleQuery() {
                   <XhFieldErrorText />
                 </XhFieldRoot>
               </XhFormFieldGroup>
-              <XhFormFieldGroup value="remark" class="xh-span-2">
+              <XhFormFieldGroup name="remark" class="xh-span-2">
                 <XhFieldRoot>
                   <XhFieldLabel>{{ t('common.fields.remark') }}</XhFieldLabel>
                   <XhFieldControl>
@@ -384,7 +394,7 @@ async function handleQuery() {
       <XhTabsContent value="playground">
         <div class="playground">
           <XhCardRoot variant="ghost">
-            <XhCardBody>
+            <XhCardContent>
               <XhFormRoot validate-on="blur">
                 <XhFieldRoot>
                   <XhFieldLabel>{{ t('develop.knowledge.query_label') }}</XhFieldLabel>
@@ -394,7 +404,7 @@ async function handleQuery() {
                       :placeholder="t('develop.knowledge.query_placeholder')"
                       :rows="3"
                       type="textarea"
-                      @keydown.enter.exact.prevent="handleQuery"
+                      @keydown.enter.exact="onQueryKeydown"
                     />
                   </XhFieldControl>
                   <XhFieldErrorText />
@@ -421,20 +431,21 @@ async function handleQuery() {
                     </XhFieldControl>
                     <XhFieldErrorText />
                   </XhFieldRoot>
-                  <XhButton :loading="queryLoading" tone="brand" @click="handleQuery">
-                    {{ t('develop.knowledge.query_submit') }}
+                  <XhButton variant="subtle" size="sm" :loading="queryLoading" tone="brand" @click="handleQuery">
+                    <XhButtonIndicator />
+                    <XhButtonLabel>{{ t('develop.knowledge.query_submit') }}</XhButtonLabel>
                   </XhButton>
                 </XhFlex>
               </XhFormRoot>
-            </XhCardBody>
+            </XhCardContent>
           </XhCardRoot>
 
           <XhCardRoot v-if="answerText" variant="ghost" class="playground__answer">
-            <XhCardBody>
+            <XhCardContent>
               <div class="playground__answer-text">
                 {{ answerText }}
               </div>
-            </XhCardBody>
+            </XhCardContent>
           </XhCardRoot>
 
           <div v-if="citations.length > 0" class="playground__citations">
@@ -457,18 +468,18 @@ async function handleQuery() {
                   </XhTagRoot>
                 </XhFlex>
               </XhCardHeader>
-              <XhCardBody>
+              <XhCardContent>
                 <div class="playground__citation-text">
                   {{ citation.text }}
                 </div>
-              </XhCardBody>
+              </XhCardContent>
             </XhCardRoot>
           </div>
 
           <XhEmptyStateRoot v-if="hasQueried && citations.length === 0" class="playground__empty">
-            <XhEmptyStateIcon>
+            <XhEmptyStateIndicator>
               <Icon icon="lucide:search-x" width="28" />
-            </XhEmptyStateIcon>
+            </XhEmptyStateIndicator>
             <XhEmptyStateTitle>{{ t('develop.knowledge.no_result_title') }}</XhEmptyStateTitle>
             <XhEmptyStateDescription>{{ t('develop.knowledge.no_result') }}</XhEmptyStateDescription>
           </XhEmptyStateRoot>
