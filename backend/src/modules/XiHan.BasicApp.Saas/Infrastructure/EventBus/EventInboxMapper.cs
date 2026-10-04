@@ -65,7 +65,7 @@ public static class EventInboxMapper
         return value.Kind switch
         {
             DateTimeKind.Utc => new DateTimeOffset(value, TimeSpan.Zero),
-            DateTimeKind.Local => new DateTimeOffset(value),
+            DateTimeKind.Local => new DateTimeOffset(value.ToUniversalTime(), TimeSpan.Zero),
             _ => new DateTimeOffset(DateTime.SpecifyKind(value, DateTimeKind.Utc), TimeSpan.Zero)
         };
     }

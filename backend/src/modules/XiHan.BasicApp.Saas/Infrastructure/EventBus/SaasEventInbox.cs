@@ -70,8 +70,13 @@ public class SaasEventInbox : IEventInbox
             {
                 await client.Insertable(entity).ExecuteCommandAsync();
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex)
             {
+                if (!client.Ado.IsNoTran())
+                {
+                    throw;
+                }
+
                 var duplicated = await client.Queryable<SysEventInbox>().AnyAsync(item => item.DedupKey == dedupKey);
                 if (!duplicated)
                 {
@@ -273,7 +278,7 @@ public class SaasEventInbox : IEventInbox
             }
 
             return await client.Queryable<SysEventInbox>()
-                .Where(item => item.ClaimToken == claimToken)
+                .Where(item => candidateIds.Contains(item.BasicId) && item.ClaimToken == claimToken)
                 .OrderBy(item => item.CreatedTime)
                 .ToListAsync(cancellationToken);
         }

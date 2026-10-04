@@ -87,6 +87,20 @@ public sealed class EventBoxMapperTests : IDisposable
     }
 
     /// <summary>
+    /// 本地时间按同一时刻转为零偏移的 UTC 时间
+    /// </summary>
+    [Fact]
+    public void Inbox_LocalCreatedTime_StoredAsUtcOffset()
+    {
+        var local = new DateTime(2026, 10, 4, 8, 30, 0, DateTimeKind.Local);
+
+        var entity = EventInboxMapper.ToEntity(new IncomingEventInfo(Guid.NewGuid(), "msg-local", "order.created", [1], local));
+
+        Assert.Equal(TimeSpan.Zero, entity.CreatedTime.Offset);
+        Assert.Equal(local.ToUniversalTime(), entity.CreatedTime.UtcDateTime);
+    }
+
+    /// <summary>
     /// 释放测试上下文
     /// </summary>
     public void Dispose()

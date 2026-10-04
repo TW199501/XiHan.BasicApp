@@ -203,7 +203,7 @@ public class SaasEventOutbox : IEventOutbox
             }
 
             return await client.Queryable<SysEventOutbox>()
-                .Where(item => item.ClaimToken == claimToken)
+                .Where(item => candidateIds.Contains(item.BasicId) && item.ClaimToken == claimToken)
                 .OrderBy(item => item.CreatedTime)
                 .ToListAsync(cancellationToken);
         }

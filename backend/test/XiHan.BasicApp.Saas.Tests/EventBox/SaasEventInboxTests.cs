@@ -29,6 +29,26 @@ public sealed class SaasEventInboxTests : IDisposable
     }
 
     /// <summary>
+    /// 事务内重复入箱时直接抛出原始插入异常，不再做去重查询
+    /// </summary>
+    [Fact]
+    public async Task Enqueue_DuplicateInsideTransaction_ThrowsOriginalException()
+    {
+        var inbox = _context.CreateInbox();
+        await inbox.EnqueueAsync(NewEvent("msg-x"));
+
+        _context.Client.Ado.BeginTran();
+        try
+        {
+            await Assert.ThrowsAnyAsync<Exception>(() => inbox.EnqueueAsync(NewEvent("msg-x")));
+        }
+        finally
+        {
+            _context.Client.Ado.RollbackTran();
+        }
+    }
+
+    /// <summary>
     /// 入箱后可按消息标识查到
     /// </summary>
     [Fact]
