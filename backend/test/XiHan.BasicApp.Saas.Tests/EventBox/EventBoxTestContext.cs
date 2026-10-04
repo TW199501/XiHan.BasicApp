@@ -1,6 +1,7 @@
 // Copyright (c) 2021-Present XiHanFun and contributors.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using SqlSugar;
 using XiHan.BasicApp.Saas.Domain.Entities;
@@ -61,6 +62,14 @@ internal sealed class EventBoxTestContext : IDisposable
     public SaasEventOutbox CreateOutbox(SaasEventBoxOptions? options = null)
     {
         return new SaasEventOutbox(Resolver, Tenant, Options.Create(options ?? new SaasEventBoxOptions()), Clock);
+    }
+
+    /// <summary>
+    /// 建立接到测试库的收件箱
+    /// </summary>
+    public SaasEventInbox CreateInbox(SaasEventBoxOptions? options = null)
+    {
+        return new SaasEventInbox(Resolver, Tenant, Options.Create(options ?? new SaasEventBoxOptions()), NullLogger<SaasEventInbox>.Instance, Clock);
     }
 
     /// <summary>
