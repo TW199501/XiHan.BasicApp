@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using XiHan.BasicApp.Saas.Application.Authorization;
@@ -16,6 +17,7 @@ using XiHan.BasicApp.Saas.Domain.Entities;
 using XiHan.BasicApp.Saas.Domain.Numbering;
 using XiHan.BasicApp.Saas.Domain.Repositories;
 using XiHan.BasicApp.Saas.Infrastructure.Auth;
+using XiHan.BasicApp.Saas.Infrastructure.EventBus;
 using XiHan.BasicApp.Saas.Infrastructure.Exporting;
 using XiHan.BasicApp.Saas.Infrastructure.Upgrade;
 using XiHan.BasicApp.Saas.Infrastructure.Logging;
@@ -41,6 +43,8 @@ using XiHan.Framework.Bot.WeCom.Abstractions;
 using XiHan.Framework.Data.Extensions.DependencyInjection;
 using XiHan.Framework.Data.SqlSugar.Initializers;
 using XiHan.Framework.Data.SqlSugar.Tenanting;
+using XiHan.Framework.EventBus.Abstractions.Distributed;
+using XiHan.Framework.EventBus.Distributed;
 using XiHan.Framework.EventBus.Local;
 using XiHan.Framework.Messaging.Abstractions;
 using XiHan.Framework.Security.Services;
@@ -484,6 +488,43 @@ public static class ServiceCollectionExtensions
 
         // 注册动态任务执行器（桥接 SysTask.TaskClass/TaskMethod 反射模型，同时实现 IJobWorker）
         services.AddTransient<DynamicJobWorker>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// 添加 SaaS 事件收发件箱持久化
+    /// </summary>
+    /// <remarks>
+    /// 以 SqlSugar 收发件箱替换框架默认的进程内实现，并设为分布式事件总线的默认收发件箱。
+    /// 配置节：<c>Saas:EventBus:Box</c>。
+    /// </remarks>
+    /// <param name="services">服务集合</param>
+    /// <param name="configuration">配置</param>
+    /// <returns>服务集合</returns>
+    public static IServiceCollection AddSaasEventBoxes(this IServiceCollection services, IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        services.AddOptions<SaasEventBoxOptions>()
+            .Bind(configuration.GetSection(SaasEventBoxOptions.SectionName))
+            .Validate(
+                options => options.ClaimTimeout > TimeSpan.Zero && options.InboxRetentionPeriod > TimeSpan.Zero,
+                "事件收发件箱配置无效：ClaimTimeout 与 InboxRetentionPeriod 必须大于零。")
+            .ValidateOnStart();
+
+        services.Configure<XiHanDistributedEventBusOptions>(options =>
+        {
+            options.Outboxes.Configure(config => config.ImplementationType = typeof(SaasEventOutbox));
+            options.Inboxes.Configure(config => config.ImplementationType = typeof(SaasEventInbox));
+        });
+
+        services.TryAddScoped<SaasEventOutbox>();
+        services.Replace(ServiceDescriptor.Scoped<IEventOutbox, SaasEventOutbox>());
+
+        services.TryAddScoped<SaasEventInbox>();
+        services.Replace(ServiceDescriptor.Scoped<IEventInbox, SaasEventInbox>());
 
         return services;
     }

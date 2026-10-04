@@ -98,6 +98,15 @@ public sealed class OrderNumberService(INumberGenerator numberGenerator)
 
 真实发号也可调用受 `saas:numbering:generate` 保护的 Dynamic API。管理页面只提供规则管理、格式预览、安全重置和发号记录查看，不提供真实发号按钮。
 
+## 事件收发件箱
+
+- 表 `Sys_Event_Outbox`、`Sys_Event_Inbox` 只建在平台主库，由 SqlSugar 实现的 `SaasEventOutbox`、`SaasEventInbox` 读写，替换框架默认的进程内收发件箱，并设为分布式事件总线的默认收发件箱。
+- 配置节 `Saas:EventBus:Box`：`ClaimTimeout`（领取超时，默认 5 分钟）、`InboxRetentionPeriod`（收件箱保留期，默认 7 天），两者都必须大于零，否则启动校验失败。
+- 多实例部署时，以条件更新加领取令牌互斥领取待发送事件。
+- 数据库隔离模式的租户发布分布式事件时，入箱会被拒绝。
+- 使用 XiHan.Framework 4.6.1 时，以默认的 `onUnitOfWorkComplete: true` 发布的分布式事件在提交后直接发送，不经过发件箱；只有在进行中的工作单元内以 `PublishAsync(..., onUnitOfWorkComplete: false)` 发布的事件，才会在同一事务内写入发件箱。
+- 不支持 `filter` 参数。
+
 ## 架构与职责
 
 - `Application`：应用服务、DTO、查询、映射与 Dynamic API。
