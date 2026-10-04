@@ -107,6 +107,13 @@ public sealed class OrderNumberService(INumberGenerator numberGenerator)
 - 使用 XiHan.Framework 4.6.1 时，以默认的 `onUnitOfWorkComplete: true` 发布的分布式事件在提交后直接发送，不经过发件箱；只有在进行中的工作单元内以 `PublishAsync(..., onUnitOfWorkComplete: false)` 发布的事件，才会在同一事务内写入发件箱。
 - 不支持 `filter` 参数。
 
+## 接口幂等存储
+
+- 表 `Sys_Idempotency_Record` 只建在平台主库，由 `SaasIdempotencyStore` 读写，替换 Web.Core 的进程内 `DefaultIdempotencyStore`；记录键摘要 `Key_Hash` 上有唯一索引，同一键的并发取得由数据库串行化。
+- 取得、释放、标记不确定与清理使用独立连接立即提交；完成写入登记到当前工作单元，事务型工作单元内与业务同一事务提交或回滚。
+- 配置节沿用 `BasicApp:Web:Idempotency`；`MaxKeyLength` 不能超过 128（幂等键列长度），否则启动校验失败。
+- 请求路径超过 512 字符时截断写入端点列。
+
 ## 架构与职责
 
 - `Application`：应用服务、DTO、查询、映射与 Dynamic API。
