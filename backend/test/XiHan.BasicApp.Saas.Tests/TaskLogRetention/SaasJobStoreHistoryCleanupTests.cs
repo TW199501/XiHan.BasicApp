@@ -36,10 +36,10 @@ public sealed class SaasJobStoreHistoryCleanupTests : IDisposable
     }
 
     /// <summary>
-    /// 创建时间晚于截止时间的行保留（删除条件为严格小于）
+    /// 创建时间晚于截止时间的行保留
     /// </summary>
     [Fact]
-    public async Task CleanupHistory_KeepsRowAtCutoff()
+    public async Task CleanupHistory_KeepsRowNewerThanCutoff()
     {
         _database.Insert(DateTimeOffset.UtcNow.AddDays(-29));
 
