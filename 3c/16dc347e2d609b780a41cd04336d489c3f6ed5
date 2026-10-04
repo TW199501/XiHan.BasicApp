@@ -1,0 +1,32 @@
+backend/src/framework/XiHan.BasicApp.Web.Core/Idempotency/IIdempotencyResponseProcessor.cs
+  h_be8240d2cfaa4b 1-24
+backend/src/framework/XiHan.BasicApp.Web.Core/Idempotency/IdempotencyCompletionFilter.cs
+  h_be8240d2cfaa4b 17-18,26,36,42,63-70
+backend/src/framework/XiHan.BasicApp.Web.Core/README.md
+  h_be8240d2cfaa4b 71-73
+backend/src/modules/XiHan.BasicApp.Saas/Application/Services/Authorization/FieldSecurityIdempotencyResponseProcessor.cs
+  h_be8240d2cfaa4b 1-26
+backend/src/modules/XiHan.BasicApp.Saas/Application/Services/Authorization/FieldSecurityResponseFilter.cs
+  h_be8240d2cfaa4b 4,19-20,29-43,51-52
+backend/src/modules/XiHan.BasicApp.Saas/Application/Services/Authorization/IFieldSecurityService.cs
+  h_be8240d2cfaa4b 57
+backend/src/modules/XiHan.BasicApp.Saas/Extensions/ServiceCollectionExtensions.cs
+  h_be8240d2cfaa4b 538-539,556
+backend/src/modules/XiHan.BasicApp.Saas/README.md
+  h_be8240d2cfaa4b 117
+backend/test/XiHan.BasicApp.Saas.Tests/Idempotency/IdempotencyFieldSecurityTests.cs
+  h_be8240d2cfaa4b 1-251
+backend/test/XiHan.BasicApp.Web.Core.Tests/Idempotency/IdempotencyCompletionFilterTests.cs
+  h_be8240d2cfaa4b 160-284,351-353,356,398
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "3c16dc347e2d609b780a41cd04336d489c3f6ed5",
+  "prompts": {},
+  "humans": {
+    "h_be8240d2cfaa4b": {
+      "author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
