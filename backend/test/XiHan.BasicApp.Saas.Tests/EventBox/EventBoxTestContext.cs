@@ -1,8 +1,10 @@
 // Copyright (c) 2021-Present XiHanFun and contributors.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
+using Microsoft.Extensions.Options;
 using SqlSugar;
 using XiHan.BasicApp.Saas.Domain.Entities;
+using XiHan.BasicApp.Saas.Infrastructure.EventBus;
 using XiHan.Framework.Data.SqlSugar.Clients;
 using XiHan.Framework.MultiTenancy.Abstractions;
 
@@ -52,6 +54,14 @@ internal sealed class EventBoxTestContext : IDisposable
     /// 手动时钟
     /// </summary>
     public ManualTimeProvider Clock { get; }
+
+    /// <summary>
+    /// 建立接到测试库的发件箱
+    /// </summary>
+    public SaasEventOutbox CreateOutbox(SaasEventBoxOptions? options = null)
+    {
+        return new SaasEventOutbox(Resolver, Tenant, Options.Create(options ?? new SaasEventBoxOptions()), Clock);
+    }
 
     /// <summary>
     /// 释放连接并删除临时库文件
