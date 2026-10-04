@@ -3,6 +3,7 @@
 
 using SqlSugar;
 using XiHan.Framework.Data.SqlSugar.Entities;
+using XiHan.Framework.Data.SqlSugar.Routing;
 
 namespace XiHan.BasicApp.Saas.Domain.Entities;
 
@@ -15,6 +16,7 @@ namespace XiHan.BasicApp.Saas.Domain.Entities;
 [SugarTable(TableName = "Sys_Event_Inbox", TableDescription = "分布式事件收件箱表")]
 [SugarIndex("UX_{table}_DeKe", nameof(DedupKey), OrderByType.Asc, true)]
 [SugarIndex("IX_{table}_St_CrTi", nameof(Status), OrderByType.Asc, nameof(CreatedTime), OrderByType.Asc)]
+[PlatformDataSource]
 public class SysEventInbox : SugarEntity<Guid>
 {
     /// <summary>
