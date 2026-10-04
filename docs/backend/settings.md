@@ -70,7 +70,7 @@
 | `saas.auth.impersonation` | JSON | `sessionMinutes` 模仿会话分钟数（按 1~480 归一）；`notifyTarget` 是否通知被模仿者 |
 | `saas.bot.telegram` | JSON | Telegram 机器人平台设置：总开关、Webhook 地址与路由前缀、刷新与缓存周期、兜底回复、网络 |
 | `saas.bot.telegram.webhook-secret-token` | 加密文本 | Webhook 模式必填的密钥令牌，单列是为了加密存储 |
-| `saas.log.retention-days` | 数字 | 7 类分表日志的保留天数，缺省 180 |
+| `saas.log.retention-days` | 数字 | 8 类分表日志（含任务执行历史）的保留天数，缺省 180 |
 | `chat.policy` | JSON | `retentionDays` 聊天消息保留天数（缺省 365）；`sensitiveWords` 敏感词数组 |
 
 种子只补缺的参数、对齐名称与说明等元数据，配置值只在为空时写入初始值，运营改过的值与启停状态不动。

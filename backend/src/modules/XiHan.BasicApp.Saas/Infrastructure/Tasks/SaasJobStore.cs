@@ -269,8 +269,11 @@ public sealed class SaasJobStore : IJobStore
     }
 
     /// <summary>
-    /// 清理过期的历史记录
+    /// 清理过期的历史记录：按分表字段 CreatedTime 早于截止时间条件删除各月分表中的行
     /// </summary>
+    /// <remarks>
+    /// 只删除当前租户上下文可见的行：有租户上下文时为该租户的行，无租户上下文时为平台的行。
+    /// </remarks>
     /// <param name="retentionDays">保留天数</param>
     public async Task CleanupHistoryAsync(int retentionDays)
     {
@@ -287,21 +290,15 @@ public sealed class SaasJobStore : IJobStore
         var clientResolver = scope.ServiceProvider.GetRequiredService<ISqlSugarClientResolver>();
         var db = clientResolver.GetClientForEntity<SysTaskLog>();
 
-        // SqlSugar 分表删除：先跨分表查询待删除记录，再按记录逐一删除（分表删除不支持 Where 条件直接批删）
-        var expiredLogs = await db.Queryable<SysTaskLog>()
-            .SplitTable()
-            .Where(log => log.StartTime < cutoffDate)
-            .ToListAsync();
+        // 按 CreatedTime 条件删除各月分表中早于截止时间的行，只命中实际存在的月表
+        var deleted = await db.Deleteable<SysTaskLog>()
+            .Where(log => log.CreatedTime < cutoffDate)
+            .SplitTable(tabs => tabs)
+            .ExecuteCommandAsync();
 
-        if (expiredLogs.Count > 0)
+        if (deleted > 0)
         {
-            // 逐条删除以兼容分表
-            foreach (var log in expiredLogs)
-            {
-                await db.Deleteable(log).SplitTable().ExecuteCommandAsync();
-            }
-
-            _logger.LogInformation("已清理 {Count} 条过期的任务历史记录", expiredLogs.Count);
+            _logger.LogInformation("已清理 {Count} 条过期的任务历史记录", deleted);
         }
     }
 
