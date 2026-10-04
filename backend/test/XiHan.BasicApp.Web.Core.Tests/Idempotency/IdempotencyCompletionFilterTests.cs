@@ -157,6 +157,131 @@ public class IdempotencyCompletionFilterTests
         Assert.True(run.TransactionApi.Committed);
     }
 
+    /// <summary>
+    /// 注册的响应处理器先于快照处理结果值，快照保存处理后的值
+    /// </summary>
+    [Fact]
+    public async Task Processor_ProcessesValueBeforeSnapshot()
+    {
+        var processor = new MaskingProcessor();
+        await using var fixture = new CompletionFixture(processors: [processor]);
+        var value = new MutableOrder { OrderNo = 1, Secret = "RAW-SECRET" };
+
+        var run = await fixture.ExecuteChainAsync(new ObjectResult(value));
+
+        Assert.Same(value, processor.ProcessedValue);
+        Assert.NotNull(processor.ProcessedHttpContext);
+        Assert.Equal("***", value.Secret);
+        var replay = await fixture.Store.TryAcquireAsync(run.Execution!.Key, "fp", isTransactional: true);
+        Assert.Equal(IdempotencyAcquireStatus.Replay, replay.Status);
+        var body = Encoding.UTF8.GetString(replay.Response!.Body!);
+        Assert.Equal("""{"orderNo":1,"secret":"***"}""", body);
+        Assert.DoesNotContain("RAW-SECRET", body, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// 多个响应处理器按注册顺序依次执行
+    /// </summary>
+    [Fact]
+    public async Task Processors_RunInRegistrationOrder()
+    {
+        var calls = new List<string>();
+        await using var fixture = new CompletionFixture(processors: [new RecordingProcessor("a", calls), new RecordingProcessor("b", calls)]);
+
+        await fixture.ExecuteChainAsync(new ObjectResult(new MutableOrder { OrderNo = 1, Secret = "S" }));
+
+        Assert.Equal(["a", "b"], calls);
+    }
+
+    /// <summary>
+    /// 结果值为空或为非对象结果时不调用响应处理器
+    /// </summary>
+    [Fact]
+    public async Task Processor_NotCalledForNullValueOrNonObjectResult()
+    {
+        var processor = new MaskingProcessor();
+        await using var fixture = new CompletionFixture(processors: [processor]);
+
+        var nullRun = await fixture.ExecuteChainAsync(new ObjectResult(null));
+        await using var statusFixture = new CompletionFixture(processors: [processor]);
+        await statusFixture.ExecuteChainAsync(new StatusCodeResult(204));
+
+        Assert.Null(processor.ProcessedValue);
+        Assert.True(nullRun.Execution!.IsCompleted);
+    }
+
+    /// <summary>
+    /// 响应处理器失败时异常外抛，不写入完成，业务事务不提交
+    /// </summary>
+    [Fact]
+    public async Task ProcessorFailure_RollsBackBusinessTransaction()
+    {
+        await using var fixture = new CompletionFixture(processors: [new ThrowingProcessor()]);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => fixture.ExecuteChainAsync(new ObjectResult(new MutableOrder { OrderNo = 1, Secret = "S" })));
+
+        Assert.False(fixture.Store.CompleteCalled);
+        Assert.NotNull(fixture.LastTransactionApi);
+        Assert.False(fixture.LastTransactionApi.Committed);
+        Assert.True(fixture.LastTransactionApi.RolledBack);
+    }
+
+    /// <summary>
+    /// 可变的订单结果
+    /// </summary>
+    private sealed class MutableOrder
+    {
+        public int OrderNo { get; set; }
+
+        public string? Secret { get; set; }
+    }
+
+    /// <summary>
+    /// 把 Secret 改为星号并记录调用参数的处理器
+    /// </summary>
+    private sealed class MaskingProcessor : IIdempotencyResponseProcessor
+    {
+        public object? ProcessedValue { get; private set; }
+
+        public HttpContext? ProcessedHttpContext { get; private set; }
+
+        public Task ProcessAsync(HttpContext httpContext, object value, CancellationToken cancellationToken = default)
+        {
+            ProcessedHttpContext = httpContext;
+            ProcessedValue = value;
+            if (value is MutableOrder order)
+            {
+                order.Secret = "***";
+            }
+
+            return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>
+    /// 记录调用顺序的处理器
+    /// </summary>
+    private sealed class RecordingProcessor(string name, List<string> calls) : IIdempotencyResponseProcessor
+    {
+        public Task ProcessAsync(HttpContext httpContext, object value, CancellationToken cancellationToken = default)
+        {
+            calls.Add(name);
+            return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>
+    /// 总是抛出异常的处理器
+    /// </summary>
+    private sealed class ThrowingProcessor : IIdempotencyResponseProcessor
+    {
+        public Task ProcessAsync(HttpContext httpContext, object value, CancellationToken cancellationToken = default)
+        {
+            throw new InvalidOperationException("响应处理失败");
+        }
+    }
+
     private sealed record ChainRun(IdempotencyExecution? Execution, RecordingTransactionApi TransactionApi);
 
     /// <summary>
@@ -223,9 +348,12 @@ public class IdempotencyCompletionFilterTests
     {
         private readonly IdempotencyFilterTestContext _context;
 
-        public CompletionFixture(Action<IdempotencyOptions>? configure = null)
+        private readonly IReadOnlyList<IIdempotencyResponseProcessor> _processors;
+
+        public CompletionFixture(Action<IdempotencyOptions>? configure = null, IReadOnlyList<IIdempotencyResponseProcessor>? processors = null)
         {
             _context = new IdempotencyFilterTestContext(configure);
+            _processors = processors ?? [];
             Store = new RecordingIdempotencyStore(_context.Store, _context.Provider.GetRequiredService<IAmbientUnitOfWork>());
         }
 
@@ -267,6 +395,7 @@ public class IdempotencyCompletionFilterTests
                 Store,
                 Microsoft.Extensions.Options.Options.Create(_context.Options),
                 Microsoft.Extensions.Options.Options.Create(jsonOptions),
+                _processors,
                 NullLogger<IdempotencyCompletionFilter>.Instance);
             var unitOfWorkFilter = new XiHanUnitOfWorkFilter(provider.GetRequiredService<IUnitOfWorkManager>());
             var ambient = provider.GetRequiredService<IAmbientUnitOfWork>();

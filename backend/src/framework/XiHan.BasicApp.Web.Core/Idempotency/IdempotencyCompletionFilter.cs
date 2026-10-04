@@ -14,7 +14,8 @@ namespace XiHan.BasicApp.Web.Core.Idempotency;
 /// WebApi Action 幂等完成过滤器（内层）
 /// </summary>
 /// <remarks>
-/// 注册在工作单元过滤器之内、最贴近动作：动作正常返回后把结果序列化为快照并写入完成，
+/// 注册在工作单元过滤器之内、最贴近动作：动作正常返回后先经 <see cref="IIdempotencyResponseProcessor"/> 处理结果值，
+/// 再把结果序列化为快照并写入完成，
 /// 事务型工作单元内与业务同一事务提交；写入失败时异常向外传播，工作单元不提交。
 /// </remarks>
 public class IdempotencyCompletionFilter : IAsyncActionFilter
@@ -22,6 +23,7 @@ public class IdempotencyCompletionFilter : IAsyncActionFilter
     private readonly IIdempotencyStore _store;
     private readonly IdempotencyOptions _options;
     private readonly JsonSerializerOptions _serializerOptions;
+    private readonly IIdempotencyResponseProcessor[] _processors;
     private readonly ILogger<IdempotencyCompletionFilter> _logger;
 
     /// <summary>
@@ -31,11 +33,13 @@ public class IdempotencyCompletionFilter : IAsyncActionFilter
         IIdempotencyStore store,
         IOptions<IdempotencyOptions> options,
         IOptions<JsonOptions> jsonOptions,
+        IEnumerable<IIdempotencyResponseProcessor> processors,
         ILogger<IdempotencyCompletionFilter> logger)
     {
         _store = store;
         _options = options.Value;
         _serializerOptions = jsonOptions.Value.JsonSerializerOptions;
+        _processors = processors.ToArray();
         _logger = logger;
     }
 
@@ -54,6 +58,14 @@ public class IdempotencyCompletionFilter : IAsyncActionFilter
         if (executedContext.Exception is not null)
         {
             return;
+        }
+
+        if (executedContext.Result is ObjectResult { Value: { } value } && value is not Stream)
+        {
+            foreach (var processor in _processors)
+            {
+                await processor.ProcessAsync(context.HttpContext, value, CancellationToken.None);
+            }
         }
 
         if (!TryCreateSnapshot(executedContext.Result, out var response))

@@ -535,7 +535,8 @@ public static class ServiceCollectionExtensions
     /// 添加 SaaS 接口幂等数据库存储
     /// </summary>
     /// <remarks>
-    /// 以 <see cref="SaasIdempotencyStore"/> 替换默认的进程内存储，并在启动时校验幂等键最大长度不超过记录列长度。
+    /// 以 <see cref="SaasIdempotencyStore"/> 替换默认的进程内存储，并在启动时校验幂等键最大长度不超过记录列长度；
+    /// 注册 <see cref="FieldSecurityIdempotencyResponseProcessor"/>，快照保存前按字段安全规则打码。
     /// </remarks>
     /// <param name="services">服务集合</param>
     /// <param name="configuration">配置</param>
@@ -552,6 +553,7 @@ public static class ServiceCollectionExtensions
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddScoped<SaasIdempotencyStore>();
         services.Replace(ServiceDescriptor.Scoped<IIdempotencyStore, SaasIdempotencyStore>());
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IIdempotencyResponseProcessor, FieldSecurityIdempotencyResponseProcessor>());
 
         return services;
     }

@@ -114,6 +114,7 @@ public sealed class OrderNumberService(INumberGenerator numberGenerator)
 - 配置节沿用 `BasicApp:Web:Idempotency`；`MaxKeyLength` 不能超过 128（幂等键列长度），否则启动校验失败。
 - 请求路径超过 512 字符时截断写入端点列。
 - 响应体为空（null）时，记录的快照列保持为空，不写入占位内容。
+- 注册 `FieldSecurityIdempotencyResponseProcessor`：快照保存前按当前用户的字段安全规则就地打码，并标记该结果值已打码，`FieldSecurityResponseFilter` 对同一实例不再打码；首次响应只打码一次，快照与重播都是打码后的内容。
 
 ## 架构与职责
 
