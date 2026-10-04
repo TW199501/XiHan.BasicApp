@@ -17,10 +17,10 @@ namespace XiHan.BasicApp.Saas.Tests.EventBox;
 /// </summary>
 internal sealed class EventBoxTestContext : IDisposable
 {
-    private readonly SqliteConnection _keepAlive;
+    private readonly SqliteConnection? _keepAlive;
 
     /// <summary>
-    /// 建库并建立收发件箱表
+    /// 建立共享内存 SQLite 库并建立收发件箱表
     /// </summary>
     public EventBoxTestContext()
     {
@@ -36,6 +36,18 @@ internal sealed class EventBoxTestContext : IDisposable
         });
         Client.CodeFirst.InitTables<SysEventOutbox, SysEventInbox>();
 
+        Tenant = new FakeCurrentTenant();
+        Resolver = new TestClientResolver(Client, Tenant);
+        Clock = new ManualTimeProvider(new DateTimeOffset(2026, 10, 4, 0, 0, 0, TimeSpan.Zero));
+    }
+
+    /// <summary>
+    /// 接到外部提供的客户端，收发件箱表由调用方建立
+    /// </summary>
+    /// <param name="client">测试连接</param>
+    public EventBoxTestContext(SqlSugarClient client)
+    {
+        Client = client;
         Tenant = new FakeCurrentTenant();
         Resolver = new TestClientResolver(Client, Tenant);
         Clock = new ManualTimeProvider(new DateTimeOffset(2026, 10, 4, 0, 0, 0, TimeSpan.Zero));
@@ -78,12 +90,27 @@ internal sealed class EventBoxTestContext : IDisposable
     }
 
     /// <summary>
+    /// 建立连到同一测试库的另一个客户端
+    /// </summary>
+    public SqlSugarClient CreateSideClient()
+    {
+        var config = Client.CurrentConnectionConfig;
+        return new SqlSugarClient(new ConnectionConfig
+        {
+            ConnectionString = config.ConnectionString,
+            DbType = config.DbType,
+            IsAutoCloseConnection = true,
+            ConfigureExternalServices = config.ConfigureExternalServices
+        });
+    }
+
+    /// <summary>
     /// 释放客户端与保活连接，内存库随之销毁
     /// </summary>
     public void Dispose()
     {
         Client.Dispose();
-        _keepAlive.Dispose();
+        _keepAlive?.Dispose();
     }
 }
 

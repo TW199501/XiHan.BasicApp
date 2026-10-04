@@ -101,6 +101,52 @@ public sealed class SaasEventInboxTests : IDisposable
     }
 
     /// <summary>
+    /// 查询候选与条件更新之间记录被其他实例领走时，不返回也不覆盖这些记录
+    /// </summary>
+    [Fact]
+    public async Task Claim_WhenRowsTakenBetweenSelectAndUpdate_DoesNotReturnThem()
+    {
+        var box = _context.CreateInbox();
+        for (var i = 0; i < 3; i++)
+        {
+            await box.EnqueueAsync(NewEvent($"race-{i}"));
+        }
+
+        using var other = _context.CreateSideClient();
+        var takenAt = _context.Clock.GetUtcNow();
+        var interleaved = false;
+        _context.Client.Aop.OnLogExecuting = (sql, _) =>
+        {
+            if (interleaved
+                || !sql.StartsWith("UPDATE", StringComparison.OrdinalIgnoreCase)
+                || !sql.Contains("Sys_Event_Inbox", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            interleaved = true;
+            other.Updateable<SysEventInbox>()
+                .SetColumns(item => new SysEventInbox
+                {
+                    Status = SysEventInbox.StatusClaimed,
+                    ClaimToken = "other",
+                    ClaimTime = takenAt
+                })
+                .Where(item => item.Status == SysEventInbox.StatusPending)
+                .ExecuteCommand();
+        };
+
+        var claimed = await box.GetWaitingEventsAsync(10);
+        _context.Client.Aop.OnLogExecuting = null;
+
+        Assert.True(interleaved);
+        Assert.Empty(claimed);
+        var tokens = await _context.Client.Queryable<SysEventInbox>().Select(item => item.ClaimToken).ToListAsync();
+        Assert.Equal(3, tokens.Count);
+        Assert.All(tokens, token => Assert.Equal("other", token));
+    }
+
+    /// <summary>
     /// 超过领取超时的记录可被重新领取
     /// </summary>
     [Fact]
