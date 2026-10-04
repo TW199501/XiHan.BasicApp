@@ -77,14 +77,29 @@ public class SaasEventInbox : IEventInbox
                     throw;
                 }
 
-                var duplicated = await client.Queryable<SysEventInbox>().AnyAsync(item => item.DedupKey == dedupKey);
-                if (!duplicated)
+                if (!await IsDuplicatedAsync(client, dedupKey))
                 {
                     throw;
                 }
 
                 _logger.LogDebug(ex, "收件箱已存在去重键为 {DedupKey} 的记录，本次入箱已忽略。", dedupKey);
             }
+        }
+    }
+
+    /// <summary>
+    /// 查询去重键是否已存在，查询失败时记录警告并返回 false
+    /// </summary>
+    private async Task<bool> IsDuplicatedAsync(ISqlSugarClient client, string dedupKey)
+    {
+        try
+        {
+            return await client.Queryable<SysEventInbox>().AnyAsync(item => item.DedupKey == dedupKey);
+        }
+        catch (Exception queryException)
+        {
+            _logger.LogWarning(queryException, "收件箱去重查询失败，去重键 {DedupKey}，改为抛出原始插入异常。", dedupKey);
+            return false;
         }
     }
 

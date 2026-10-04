@@ -49,6 +49,38 @@ public sealed class SaasEventInboxTests : IDisposable
     }
 
     /// <summary>
+    /// 事务外重复入箱且去重查询失败时，抛出原始插入异常
+    /// </summary>
+    [Fact]
+    public async Task Enqueue_DuplicateWhenDedupQueryFails_ThrowsOriginalException()
+    {
+        const string QueryFailure = "dedup-query-failed";
+        var inbox = _context.CreateInbox();
+        await inbox.EnqueueAsync(NewEvent("msg-q"));
+
+        _context.Client.Aop.OnLogExecuting = (sql, _) =>
+        {
+            if (sql.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(QueryFailure);
+            }
+        };
+
+        try
+        {
+            var exception = await Assert.ThrowsAnyAsync<Exception>(() => inbox.EnqueueAsync(NewEvent("msg-q")));
+            Assert.DoesNotContain(QueryFailure, exception.Message, StringComparison.Ordinal);
+            Assert.Contains("UNIQUE", exception.Message, StringComparison.Ordinal);
+        }
+        finally
+        {
+            _context.Client.Aop.OnLogExecuting = null;
+        }
+
+        Assert.Equal(1, await _context.Client.Queryable<SysEventInbox>().CountAsync());
+    }
+
+    /// <summary>
     /// 入箱后可按消息标识查到
     /// </summary>
     [Fact]

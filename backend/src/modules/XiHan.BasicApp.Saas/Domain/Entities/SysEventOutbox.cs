@@ -46,7 +46,7 @@ public class SysEventOutbox : SugarEntity<Guid>
     /// <summary>
     /// 事件名称
     /// </summary>
-    [SugarColumn(ColumnName = "Event_Name", Length = 256, IsNullable = false, ColumnDescription = "事件名称")]
+    [SugarColumn(ColumnName = "Event_Name", Length = 512, IsNullable = false, ColumnDescription = "事件名称")]
     public string EventName { get; set; } = string.Empty;
 
     /// <summary>

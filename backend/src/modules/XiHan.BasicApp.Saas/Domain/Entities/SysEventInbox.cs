@@ -16,6 +16,7 @@ namespace XiHan.BasicApp.Saas.Domain.Entities;
 [SugarTable(TableName = "Sys_Event_Inbox", TableDescription = "分布式事件收件箱表")]
 [SugarIndex("UX_{table}_DeKe", nameof(DedupKey), OrderByType.Asc, true)]
 [SugarIndex("IX_{table}_St_CrTi", nameof(Status), OrderByType.Asc, nameof(CreatedTime), OrderByType.Asc)]
+[SugarIndex("IX_{table}_St_HaTi", nameof(Status), OrderByType.Asc, nameof(HandledTime), OrderByType.Asc)]
 [PlatformDataSource]
 public class SysEventInbox : SugarEntity<Guid>
 {
@@ -69,7 +70,7 @@ public class SysEventInbox : SugarEntity<Guid>
     /// <summary>
     /// 事件名称
     /// </summary>
-    [SugarColumn(ColumnName = "Event_Name", Length = 256, IsNullable = false, ColumnDescription = "事件名称")]
+    [SugarColumn(ColumnName = "Event_Name", Length = 512, IsNullable = false, ColumnDescription = "事件名称")]
     public string EventName { get; set; } = string.Empty;
 
     /// <summary>
