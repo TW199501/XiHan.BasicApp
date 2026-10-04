@@ -1,0 +1,28 @@
+backend/src/framework/XiHan.BasicApp.Web.Core/Idempotency/IdempotencyOptions.cs
+  h_be8240d2cfaa4b 55-59
+backend/src/framework/XiHan.BasicApp.Web.Core/README.md
+  h_be8240d2cfaa4b 63
+backend/src/modules/XiHan.BasicApp.Saas/Extensions/ServiceCollectionExtensions.cs
+  h_be8240d2cfaa4b 539-540,553,558-559
+backend/src/modules/XiHan.BasicApp.Saas/Infrastructure/Idempotency/IIdempotencyRecordPurger.cs
+  h_be8240d2cfaa4b 1-17
+backend/src/modules/XiHan.BasicApp.Saas/Infrastructure/Idempotency/SaasIdempotencyPurgeHostedService.cs
+  h_be8240d2cfaa4b 1-65
+backend/src/modules/XiHan.BasicApp.Saas/Infrastructure/Idempotency/SaasIdempotencyStore.cs
+  h_be8240d2cfaa4b 24,134
+backend/src/modules/XiHan.BasicApp.Saas/README.md
+  h_be8240d2cfaa4b 116-117
+backend/test/XiHan.BasicApp.Saas.Tests/Idempotency/SaasIdempotencyPurgeHostedServiceTests.cs
+  h_be8240d2cfaa4b 1-196
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "bc875ba1dbbf2d2412c9699483f74154bf665f12",
+  "prompts": {},
+  "humans": {
+    "h_be8240d2cfaa4b": {
+      "author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
