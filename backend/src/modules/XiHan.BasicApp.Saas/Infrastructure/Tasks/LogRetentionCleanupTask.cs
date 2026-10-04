@@ -23,7 +23,8 @@ namespace XiHan.BasicApp.Saas.Infrastructure.Tasks;
 /// <list type="bullet">
 ///   <item>保留期天数：读取平台参数 <c>saas.log.retention-days</c>；未配置时为 <see cref="DefaultRetentionDays"/> 天，配置非法直接报错；</item>
 ///   <item>覆盖：访问/操作/异常/登录/差异/开放接口/权限变更/任务执行 共 8 类日志，统一按分表字段 CreatedTime 删除早于截止时间的行；</item>
-///   <item>日志严格按上下文隔离，逐个作用域（平台与每个数据可达的租户）切入清理，库隔离租户在它自己的库里清理；删除走 SqlSugar SplitTable（仅命中实际存在的月表）；</item>
+///   <item>日志严格按上下文隔离，逐个作用域（平台与每个数据可达的租户）切入清理；每类日志在其实体所在库中删除当前作用域租户的行：
+///         放在平台库的任务执行历史在平台库删除，其它日志在作用域当前库删除；删除走 SqlSugar SplitTable（仅命中实际存在的月表）；</item>
 ///   <item>单个作用域、单类失败不影响其它（逐项 try/catch 并记错误日志），结果汇总返回。</item>
 /// </list>
 /// <para>说明：本任务只删行不 DROP 表；空月表保留对运行无影响，如需物理回收可另行 DROP。</para>
@@ -80,17 +81,16 @@ public sealed class LogRetentionCleanupTask
 
         await _scopeRunner.RunAsync(async tenantId =>
         {
-            var client = _clientResolver.GetCurrentClient();
             var jobs = new (string Name, Func<Task<int>> Run)[]
             {
-                ("访问", () => CleanupAsync<SysAccessLog>(client, cutoff)),
-                ("操作", () => CleanupAsync<SysOperationLog>(client, cutoff)),
-                ("异常", () => CleanupAsync<SysExceptionLog>(client, cutoff)),
-                ("登录", () => CleanupAsync<SysLoginLog>(client, cutoff)),
-                ("差异", () => CleanupAsync<SysDiffLog>(client, cutoff)),
-                ("开放接口", () => CleanupAsync<SysOpenApiLog>(client, cutoff)),
-                ("权限变更", () => CleanupAsync<SysPermissionChangeLog>(client, cutoff)),
-                ("任务执行", () => CleanupAsync<SysTaskLog>(client, cutoff))
+                ("访问", () => CleanupAsync<SysAccessLog>(cutoff)),
+                ("操作", () => CleanupAsync<SysOperationLog>(cutoff)),
+                ("异常", () => CleanupAsync<SysExceptionLog>(cutoff)),
+                ("登录", () => CleanupAsync<SysLoginLog>(cutoff)),
+                ("差异", () => CleanupAsync<SysDiffLog>(cutoff)),
+                ("开放接口", () => CleanupAsync<SysOpenApiLog>(cutoff)),
+                ("权限变更", () => CleanupAsync<SysPermissionChangeLog>(cutoff)),
+                ("任务执行", () => CleanupAsync<SysTaskLog>(cutoff))
             };
 
             foreach (var (name, run) in jobs)
@@ -115,12 +115,14 @@ public sealed class LogRetentionCleanupTask
     }
 
     /// <summary>
-    /// 删除某类日志早于截止时间的行（按月分表，仅命中实际存在的月表）
+    /// 在实体所在库中删除某类日志早于截止时间的行（按月分表，仅命中实际存在的月表；租户过滤限定为当前作用域租户的行）
     /// </summary>
-    private static async Task<int> CleanupAsync<T>(ISqlSugarClient client, DateTimeOffset cutoff)
+    private async Task<int> CleanupAsync<T>(DateTimeOffset cutoff)
         where T : BasicAppCreationEntity, ISplitTableEntity, new()
     {
-        // 无参 SplitTable() 仅支持按实体集合删除（运行时抛异常），条件删除必须走带表筛选的重载
+        var client = _clientResolver.GetClientForEntity<T>();
+
+        // 按 CreatedTime 条件删除各月分表中早于截止时间的行，只命中实际存在的月表
         return await client.Deleteable<T>()
             .Where(entity => entity.CreatedTime < cutoff)
             .SplitTable(tabs => tabs)
