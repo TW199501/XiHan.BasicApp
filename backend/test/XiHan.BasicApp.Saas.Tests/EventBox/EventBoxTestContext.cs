@@ -1,6 +1,7 @@
 // Copyright (c) 2021-Present XiHanFun and contributors.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using SqlSugar;
@@ -12,20 +13,24 @@ using XiHan.Framework.MultiTenancy.Abstractions;
 namespace XiHan.BasicApp.Saas.Tests.EventBox;
 
 /// <summary>
-/// 事件收发件箱测试上下文：临时 SQLite 库、可切换租户与布局的解析器、手动时钟
+/// 事件收发件箱测试上下文：共享内存 SQLite 库、可切换租户与布局的解析器、手动时钟
 /// </summary>
 internal sealed class EventBoxTestContext : IDisposable
 {
-    private readonly string _databasePath = Path.Combine(Path.GetTempPath(), $"xihan-eventbox-{Guid.NewGuid():N}.db");
+    private readonly SqliteConnection _keepAlive;
 
     /// <summary>
     /// 建库并建立收发件箱表
     /// </summary>
     public EventBoxTestContext()
     {
+        var connectionString = $"Data Source=xihan-eventbox-{Guid.NewGuid():N};Mode=Memory;Cache=Shared";
+        _keepAlive = new SqliteConnection(connectionString);
+        _keepAlive.Open();
+
         Client = new SqlSugarClient(new ConnectionConfig
         {
-            ConnectionString = $"DataSource={_databasePath};Pooling=False",
+            ConnectionString = connectionString,
             DbType = DbType.Sqlite,
             IsAutoCloseConnection = false
         });
@@ -73,15 +78,12 @@ internal sealed class EventBoxTestContext : IDisposable
     }
 
     /// <summary>
-    /// 释放连接并删除临时库文件
+    /// 释放客户端与保活连接，内存库随之销毁
     /// </summary>
     public void Dispose()
     {
         Client.Dispose();
-        if (File.Exists(_databasePath))
-        {
-            File.Delete(_databasePath);
-        }
+        _keepAlive.Dispose();
     }
 }
 
