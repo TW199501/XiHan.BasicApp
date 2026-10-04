@@ -54,7 +54,7 @@ public sealed class EffectiveFieldRule
 /// 实体一律以类型传入（<c>typeof(SysUser)</c>），必须在字段安全实体目录里登记过，否则当场报错。
 /// 查询服务：构建完查询条件后 <see cref="GuardQueryAsync"/>；内部强制约束（租户、归属等）放在门控之后追加，门控只处理此前的条件。
 /// 应用服务：新建前 <see cref="EnsureCreatableAsync{TInput}"/>，修改（含状态）前 <see cref="EnsureUpdatableAsync{TInput}"/>。
-/// 读脱敏不逐个接口接线：HTTP 响应经 <c>FieldSecurityResponseFilter</c>、后台导出经导出基类，统一调 <see cref="MaskAsync"/>。
+/// 读脱敏不逐个接口接线：HTTP 响应经 <c>FieldSecurityResponseFilter</c>、幂等快照经 <c>FieldSecurityIdempotencyResponseProcessor</c>、后台导出经导出基类，统一调 <see cref="MaskAsync"/>。
 /// </remarks>
 public interface IFieldSecurityService
 {

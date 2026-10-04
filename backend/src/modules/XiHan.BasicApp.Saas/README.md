@@ -107,6 +107,18 @@ public sealed class OrderNumberService(INumberGenerator numberGenerator)
 - 使用 XiHan.Framework 4.6.1 时，以默认的 `onUnitOfWorkComplete: true` 发布的分布式事件在提交后直接发送，不经过发件箱；只有在进行中的工作单元内以 `PublishAsync(..., onUnitOfWorkComplete: false)` 发布的事件，才会在同一事务内写入发件箱。
 - 不支持 `filter` 参数。
 
+## 接口幂等存储
+
+- 表 `Sys_Idempotency_Record` 只建在平台主库，由 `SaasIdempotencyStore` 读写，替换 Web.Core 的进程内 `DefaultIdempotencyStore`；记录键摘要 `Key_Hash` 上有唯一索引，同一键的并发取得由数据库串行化。
+- 取得、释放、标记不确定与清理使用独立连接立即提交；完成写入经平台库连接登记到当前工作单元。
+- 业务数据在平台库（平台请求与非数据库隔离租户）时，事务型工作单元内完成写入与业务同一事务提交或回滚。`TenantIsolationMode.Database` 租户的业务数据在 `Tenant_{id}` 库，完成记录在平台库，两个事务在工作单元完成时按顺序分别提交，不是原子提交；这类租户的响应快照也保存在平台库。
+- 配置节沿用 `BasicApp:Web:Idempotency`；`MaxKeyLength` 不能超过 128（幂等键列长度），否则启动校验失败。
+- 请求路径超过 512 字符时截断写入端点列。
+- 后台服务 `SaasIdempotencyPurgeHostedService` 每隔 `PurgeInterval`（默认 1 小时）在新的作用域中删除已过期的完成记录与不确定记录；单次失败记录错误日志，不影响下一次清理。
+- 已知限制：非事务型端点的处理中记录没有过期时间，进程在动作执行期间崩溃时，该记录一直保持处理中，同一键始终返回 409，定期清理也不会删除它。
+- 响应体为空（null）时，记录的快照列保持为空，不写入占位内容。
+- 注册 `FieldSecurityIdempotencyResponseProcessor`：快照保存前按当前用户的字段安全规则就地打码，并标记该结果值已打码，`FieldSecurityResponseFilter` 对同一实例不再打码；首次响应只打码一次，快照与重播都是打码后的内容。
+
 ## 架构与职责
 
 - `Application`：应用服务、DTO、查询、映射与 Dynamic API。

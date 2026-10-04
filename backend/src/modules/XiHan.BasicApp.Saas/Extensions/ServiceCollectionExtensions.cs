@@ -19,6 +19,7 @@ using XiHan.BasicApp.Saas.Domain.Repositories;
 using XiHan.BasicApp.Saas.Infrastructure.Auth;
 using XiHan.BasicApp.Saas.Infrastructure.EventBus;
 using XiHan.BasicApp.Saas.Infrastructure.Exporting;
+using XiHan.BasicApp.Saas.Infrastructure.Idempotency;
 using XiHan.BasicApp.Saas.Infrastructure.Upgrade;
 using XiHan.BasicApp.Saas.Infrastructure.Logging;
 using XiHan.BasicApp.Saas.Infrastructure.Messaging;
@@ -27,6 +28,7 @@ using XiHan.BasicApp.Saas.Infrastructure.Repositories;
 using XiHan.BasicApp.Saas.Infrastructure.Security;
 using XiHan.BasicApp.Saas.Infrastructure.Seeders;
 using XiHan.BasicApp.Saas.Infrastructure.Tasks;
+using XiHan.BasicApp.Web.Core.Idempotency;
 using XiHan.Framework.Auditing;
 using XiHan.Framework.Auditing.Writers;
 using XiHan.Framework.Authentication.Jwt;
@@ -525,6 +527,37 @@ public static class ServiceCollectionExtensions
 
         services.TryAddScoped<SaasEventInbox>();
         services.Replace(ServiceDescriptor.Scoped<IEventInbox, SaasEventInbox>());
+
+        return services;
+    }
+
+    /// <summary>
+    /// 添加 SaaS 接口幂等数据库存储
+    /// </summary>
+    /// <remarks>
+    /// 以 <see cref="SaasIdempotencyStore"/> 替换默认的进程内存储，并在启动时校验幂等键最大长度不超过记录列长度；
+    /// 注册 <see cref="FieldSecurityIdempotencyResponseProcessor"/>，快照保存前按字段安全规则打码；
+    /// 注册 <see cref="SaasIdempotencyPurgeHostedService"/>，按 <see cref="IdempotencyOptions.PurgeInterval"/> 定期清理过期记录。
+    /// </remarks>
+    /// <param name="services">服务集合</param>
+    /// <param name="configuration">配置</param>
+    /// <returns>服务集合</returns>
+    public static IServiceCollection AddSaasIdempotencyStore(this IServiceCollection services, IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        services.AddOptions<IdempotencyOptions>()
+            .Validate(options => options.MaxKeyLength <= SaasIdempotencyStore.MaxKeyColumnLength,
+                $"幂等配置无效：使用数据库存储时 MaxKeyLength 不能超过 {SaasIdempotencyStore.MaxKeyColumnLength}。")
+            .Validate(options => options.PurgeInterval > TimeSpan.Zero, "幂等配置无效：PurgeInterval 必须大于零。")
+            .ValidateOnStart();
+        services.TryAddSingleton(TimeProvider.System);
+        services.TryAddScoped<SaasIdempotencyStore>();
+        services.Replace(ServiceDescriptor.Scoped<IIdempotencyStore, SaasIdempotencyStore>());
+        services.TryAddScoped<IIdempotencyRecordPurger>(provider => provider.GetRequiredService<SaasIdempotencyStore>());
+        services.AddHostedService<SaasIdempotencyPurgeHostedService>();
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IIdempotencyResponseProcessor, FieldSecurityIdempotencyResponseProcessor>());
 
         return services;
     }
