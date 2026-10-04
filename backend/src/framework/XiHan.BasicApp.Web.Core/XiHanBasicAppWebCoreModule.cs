@@ -3,8 +3,10 @@
 
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using XiHan.BasicApp.Core;
+using XiHan.BasicApp.Web.Core.Idempotency;
 using XiHan.BasicApp.Web.Core.Upgrade;
 using XiHan.Framework.Core.Application;
+using XiHan.Framework.Core.Extensions.DependencyInjection;
 using XiHan.Framework.Core.Modularity;
 using XiHan.Framework.Upgrade.Abstractions;
 using XiHan.Framework.Web.Api;
@@ -42,6 +44,9 @@ public class XiHanBasicAppWebCoreModule : XiHanModule
         // 维护模式：升级引擎置位、中间件据此拦截业务请求
         services.TryAddSingleton<MaintenanceModeState>();
         services.Replace(ServiceDescriptor.Singleton<IUpgradeMaintenanceModeManager, BasicAppUpgradeMaintenanceModeManager>());
+
+        // 注册接口幂等保护（默认进程内存储；Saas 模块替换为数据库存储）
+        services.AddBasicAppIdempotency(services.GetConfiguration());
     }
 
     /// <summary>
