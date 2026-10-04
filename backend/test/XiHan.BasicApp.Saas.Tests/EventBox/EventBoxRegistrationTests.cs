@@ -78,6 +78,19 @@ public sealed class EventBoxRegistrationTests
         Assert.Throws<OptionsValidationException>(() => provider.GetRequiredService<IOptions<SaasEventBoxOptions>>().Value);
     }
 
+    /// <summary>
+    /// 收件箱保留期不大于零时配置校验失败
+    /// </summary>
+    [Fact]
+    public void AddSaasEventBoxes_RejectsNonPositiveInboxRetentionPeriod()
+    {
+        var services = new ServiceCollection();
+        services.AddSaasEventBoxes(BuildConfiguration(new() { ["Saas:EventBus:Box:InboxRetentionPeriod"] = "00:00:00" }));
+        using var provider = services.BuildServiceProvider();
+
+        Assert.Throws<OptionsValidationException>(() => provider.GetRequiredService<IOptions<SaasEventBoxOptions>>().Value);
+    }
+
     private static IConfiguration BuildConfiguration(Dictionary<string, string?> values)
     {
         return new ConfigurationBuilder().AddInMemoryCollection(values).Build();
