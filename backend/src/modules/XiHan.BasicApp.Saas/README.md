@@ -105,6 +105,15 @@ public sealed class OrderNumberService(INumberGenerator numberGenerator)
 - 多实例部署时，以条件更新加领取令牌互斥领取待发送事件。
 - 数据库隔离模式的租户发布分布式事件时，入箱会被拒绝。
 - 使用 XiHan.Framework 4.6.1 时，以默认的 `onUnitOfWorkComplete: true` 发布的分布式事件在提交后直接发送，不经过发件箱；只有在进行中的工作单元内以 `PublishAsync(..., onUnitOfWorkComplete: false)` 发布的事件，才会在同一事务内写入发件箱。
+- 收件箱去重键 `Dedup_Key` 区分大小写与重音，由 `SaasEventBoxCodeFirstConvention` 经 `XiHanSqlSugarCoreOptions.ConfigureConnectionConfigs` 挂到每条连接，只在建表时生效：
+  - MySQL：`varchar` + `utf8mb4_bin`。
+  - SQL Server：`nvarchar` + 由数据库默认排序规则推导的排序规则，首次映射时按连接查询一次。`CI` 换成 `CS`、`AI` 换成 `AS`，优先 `<基底>_CS_AS_KS_WS`，`sys.fn_helpcollations()` 中没有时用 `<基底>_CS_AS`，两者都没有时建表失败并列出候选。
+  - PostgreSQL：沿用默认定义，本身区分大小写。
+  - 已知限制：SQL Server 的 `SQL_` 开头排序规则没有 `KS_WS` 版本，全角与半角、平假名与片假名视为相同；两种基底都把内嵌 NUL 与 Unicode 合成、分解形式视为相同；`SQL_*Pref*` 等少数旧排序规则推导不出候选，建表失败。
+  - 既有 SQL Server 库用 `backend/scripts/upgrade/mssql/sys-event-inbox-dedup-key-collation.sql` 修补：可重复执行，列改为 `nvarchar` 并换排序规则，重建原有索引；原先已存成 `?` 的值无法还原。
+- 入箱时消息标识以空白字符开头或结尾会抛出 `ArgumentException`，`ExistsByMessageIdAsync` 对这类标识返回 false；只含空白的消息标识视为没有消息标识。
+- 时间列保留 6 位小数秒：MySQL `datetime(6)`、SQL Server `datetimeoffset(6)`、PostgreSQL `timestamptz(6)`。幂等记录表 `Sys_Idempotency_Record` 同样如此。
+- 建表只建不改：在此之前已由 CodeFirst 建好的 MySQL／SQL Server 收发件箱与幂等记录表不会被改列，需要重建表或另行执行对应方言的结构变更。
 - 不支持 `filter` 参数。
 
 ## 接口幂等存储
