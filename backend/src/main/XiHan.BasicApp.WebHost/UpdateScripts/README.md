@@ -48,3 +48,31 @@
 
 脚本抛错即整体回滚、写入一条 `Success = false` 的台账，并**中断应用启动** —— 宁可起不来，
 也不让应用带着半吊子表结构对外服务。修好脚本后重启即可，失败记录不影响重试。
+
+## 方言目录
+
+升级时按当前连接的数据库类型只执行对应方言的脚本（`DialectAwareUpgradeScriptProvider`），平台库与各库隔离租户的独立库各自判断。
+
+```text
+UpdateScripts/
+├── 5.6.0/5.6.0.sql            # 根层 = PostgreSQL
+└── 5.7.0/
+    ├── pgsql/5.7.0.sql        # PostgreSQL
+    ├── mssql/5.7.0.sql        # SQL Server
+    └── mysql/5.7.0.sql        # MySQL
+```
+
+- 版本目录根层的 `.sql` 视为 PostgreSQL 脚本。3.10.0～5.6.0 的历史脚本留在根层，只有 PostgreSQL。
+- 同一版本不能同时有根层 `.sql` 与 `pgsql/`；版本目录下只允许 `pgsql/`、`mssql/`、`mysql/` 三个子目录。违反任一条，启动时扫描就失败。
+- 自 5.6.1 起每个版本都要同时提供 `pgsql/`、`mssql/`、`mysql/` 三份（`UpgradeScriptLayoutTests` 检查）。
+- 某版本缺少当前数据库的方言脚本时升级失败并中断启动，不会跳过。该版本之前的版本照常执行并推进 `db_version`；补上脚本后重启，从该版本继续。
+- 缺方言导致的失败：升级结果消息是系统的路径不存在异常，如 `升级失败: Could not find a part of the path '…/5.7.0/mssql/__missing__.sql'`；日志中对应的一行是 `执行迁移脚本: 5.7.0/[缺少 mssql 方言脚本]`。两处都带有缺少的版本与方言。
+- 新建的库（包括 SQL Server、MySQL）建好即登记为最新版本，不执行历史脚本。
+- SQLite、Oracle 等其他数据库没有方言目录：新库照常登记，存量库一旦需要升级就失败。
+
+三种方言的写法：
+
+- 某方言在该版本不需要变更时也要放文件，内容写 `SELECT 1;`。只有注释的文件在 MySQL 上可能报 `Query was empty`。
+- SQL Server 脚本不能含 `GO`，整个文件作为一个批次执行；MySQL 脚本不能用 `DELIMITER`。
+- MySQL 脚本不能用 `@` 用户变量：连接未开启 `AllowUserVariables`，MySqlConnector 会把它当成未定义的参数报错。需要先查再改时，在脚本里建一个临时存储过程，`CALL` 之后 `DROP`（不需要 `DELIMITER`），数据库账号要有 `CREATE ROUTINE` 权限。
+- MySQL 的 DDL 会隐式提交，失败时已执行的语句无法回滚。三种方言都写成可重复执行：PostgreSQL 用 `IF NOT EXISTS` / `DO $$ … $$`，SQL Server 用 `IF OBJECT_ID(N'…', N'U') IS NULL`、`IF COL_LENGTH(N'…', N'…') IS NULL`，MySQL 用 `CREATE TABLE IF NOT EXISTS`，或在临时存储过程里先查 `information_schema` 再执行。
