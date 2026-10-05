@@ -4,8 +4,11 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using SqlSugar;
+using XiHan.BasicApp.Saas.Domain.Entities;
 using XiHan.BasicApp.Saas.Extensions;
 using XiHan.BasicApp.Saas.Infrastructure.EventBus;
+using XiHan.Framework.Data.SqlSugar.Options;
 using XiHan.Framework.EventBus.Abstractions.Distributed;
 using XiHan.Framework.EventBus.Distributed;
 
@@ -89,6 +92,34 @@ public sealed class EventBoxRegistrationTests
         using var provider = services.BuildServiceProvider();
 
         Assert.Throws<OptionsValidationException>(() => provider.GetRequiredService<IOptions<SaasEventBoxOptions>>().Value);
+    }
+
+    /// <summary>
+    /// 连接配置钩子套用去重键列定义，并保留已注册的钩子
+    /// </summary>
+    [Fact]
+    public void AddSaasEventBoxes_AppliesDedupKeyConventionAndKeepsExistingHook()
+    {
+        var services = new ServiceCollection();
+        var existingHookCalled = false;
+        services.Configure<XiHanSqlSugarCoreOptions>(options => options.ConfigureConnectionConfigs = _ => existingHookCalled = true);
+        services.AddSaasEventBoxes(BuildConfiguration([]));
+        using var provider = services.BuildServiceProvider();
+        var config = new ConnectionConfig
+        {
+            ConfigId = $"registration-{Guid.NewGuid():N}",
+            ConnectionString = "Server=127.0.0.1",
+            DbType = DbType.MySql,
+            IsAutoCloseConnection = true,
+            InitKeyType = InitKeyType.Attribute
+        };
+
+        provider.GetRequiredService<IOptions<XiHanSqlSugarCoreOptions>>().Value.ConfigureConnectionConfigs!.Invoke([config]);
+
+        Assert.True(existingHookCalled);
+        using var client = new SqlSugarClient(config);
+        var column = client.EntityMaintenance.GetEntityInfo<SysEventInbox>().Columns.Single(c => c.PropertyName == nameof(SysEventInbox.DedupKey));
+        Assert.Equal("varchar(256) COLLATE utf8mb4_0900_bin", column.DataType);
     }
 
     private static IConfiguration BuildConfiguration(Dictionary<string, string?> values)

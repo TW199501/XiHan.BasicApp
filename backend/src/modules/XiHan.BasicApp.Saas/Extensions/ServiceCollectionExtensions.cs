@@ -530,7 +530,8 @@ public static class ServiceCollectionExtensions
     /// 添加 SaaS 事件收发件箱持久化
     /// </summary>
     /// <remarks>
-    /// 以 SqlSugar 收发件箱替换框架默认的进程内实现，并设为分布式事件总线的默认收发件箱。
+    /// 以 SqlSugar 收发件箱替换框架默认的进程内实现，并设为分布式事件总线的默认收发件箱；
+    /// 经 <see cref="XiHanSqlSugarCoreOptions.ConfigureConnectionConfigs"/> 在每条连接上套用 <see cref="SaasEventBoxCodeFirstConvention"/>，保留已注册的钩子。
     /// 配置节：<c>Saas:EventBus:Box</c>。
     /// </remarks>
     /// <param name="services">服务集合</param>
@@ -552,6 +553,19 @@ public static class ServiceCollectionExtensions
         {
             options.Outboxes.Configure(config => config.ImplementationType = typeof(SaasEventOutbox));
             options.Inboxes.Configure(config => config.ImplementationType = typeof(SaasEventInbox));
+        });
+
+        services.Configure<XiHanSqlSugarCoreOptions>(options =>
+        {
+            var previous = options.ConfigureConnectionConfigs;
+            options.ConfigureConnectionConfigs = configs =>
+            {
+                previous?.Invoke(configs);
+                foreach (var config in configs)
+                {
+                    SaasEventBoxCodeFirstConvention.Apply(config);
+                }
+            };
         });
 
         services.TryAddScoped<SaasEventOutbox>();

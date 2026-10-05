@@ -72,6 +72,11 @@ public abstract class EventBoxDatabaseTests : IDisposable
     protected abstract long? ExpectedBinaryMaxLength { get; }
 
     /// <summary>
+    /// 去重键列的排序规则，使用数据库默认值时为 null
+    /// </summary>
+    protected abstract string? ExpectedDedupKeyCollation { get; }
+
+    /// <summary>
     /// 时间列、二进制列与事件名称列的定义符合该数据库的预期，收件箱带三个索引
     /// </summary>
     [Fact]
@@ -316,6 +321,57 @@ public abstract class EventBoxDatabaseTests : IDisposable
     }
 
     /// <summary>
+    /// 去重键列使用该数据库区分大小写的排序规则
+    /// </summary>
+    [Fact]
+    public async Task InitTables_DedupKeyUsesCaseSensitiveCollation()
+    {
+        var context = RequireContext();
+        var columns = await DatabaseSchemaProbe.GetColumnsAsync(context.Client, context.Client.EntityMaintenance.GetTableName<SysEventInbox>());
+
+        Assert.Equal(ExpectedDedupKeyCollation, columns["dedup_key"].Collation);
+        Assert.Equal(256, columns["dedup_key"].MaxLength);
+    }
+
+    /// <summary>
+    /// 只有大小写不同的两个消息标识各自入箱，按消息标识查询也区分大小写
+    /// </summary>
+    [Fact]
+    public async Task InboxEnqueue_MessageIdsDifferingOnlyByCase_AreBothStored()
+    {
+        var context = RequireContext();
+        var inbox = context.CreateInbox();
+
+        await inbox.EnqueueAsync(NewIncomingEvent(context, "Msg-A"));
+        await inbox.EnqueueAsync(NewIncomingEvent(context, "msg-a"));
+
+        var keys = await context.Client.Queryable<SysEventInbox>().Select(e => e.DedupKey).ToListAsync();
+        Assert.Equal(2, keys.Count);
+        Assert.Contains("Msg-A", keys);
+        Assert.Contains("msg-a", keys);
+        Assert.True(await inbox.ExistsByMessageIdAsync("msg-a"));
+        Assert.False(await inbox.ExistsByMessageIdAsync("MSG-A"));
+    }
+
+    /// <summary>
+    /// 只有重音不同的两个消息标识各自入箱
+    /// </summary>
+    [Fact]
+    public async Task InboxEnqueue_MessageIdsDifferingOnlyByAccent_AreBothStored()
+    {
+        var context = RequireContext();
+        var inbox = context.CreateInbox();
+
+        await inbox.EnqueueAsync(NewIncomingEvent(context, "msg-é"));
+        await inbox.EnqueueAsync(NewIncomingEvent(context, "msg-e"));
+
+        var keys = await context.Client.Queryable<SysEventInbox>().Select(e => e.DedupKey).ToListAsync();
+        Assert.Equal(2, keys.Count);
+        Assert.Contains("msg-é", keys);
+        Assert.Contains("msg-e", keys);
+    }
+
+    /// <summary>
     /// 删除本实例建立的收发件箱表并释放上下文
     /// </summary>
     public void Dispose()
@@ -435,6 +491,15 @@ public sealed class EventBoxPostgresTests : EventBoxDatabaseTests
     }
 
     /// <inheritdoc />
+    protected override string? ExpectedDedupKeyCollation
+    {
+        get
+        {
+            return null;
+        }
+    }
+
+    /// <inheritdoc />
     protected override bool IsDuplicateKeyViolation(Exception exception)
     {
         return IntegrationDatabase.FindException<PostgresException>(exception) is { SqlState: "23505" };
@@ -482,6 +547,15 @@ public sealed class EventBoxSqlServerTests : EventBoxDatabaseTests
     }
 
     /// <inheritdoc />
+    protected override string? ExpectedDedupKeyCollation
+    {
+        get
+        {
+            return "Latin1_General_100_BIN2";
+        }
+    }
+
+    /// <inheritdoc />
     protected override bool IsDuplicateKeyViolation(Exception exception)
     {
         return IntegrationDatabase.FindException<SqlException>(exception) is { Number: 2601 or 2627 };
@@ -525,6 +599,15 @@ public sealed class EventBoxMySqlTests : EventBoxDatabaseTests
         get
         {
             return 4294967295L;
+        }
+    }
+
+    /// <inheritdoc />
+    protected override string? ExpectedDedupKeyCollation
+    {
+        get
+        {
+            return "utf8mb4_0900_bin";
         }
     }
 
