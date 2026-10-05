@@ -313,24 +313,29 @@ public abstract class IdempotencyDatabaseTests : IDisposable
     /// <summary>
     /// 取得测试客户端，未设置连接串时跳过
     /// </summary>
+    /// <returns>测试客户端</returns>
     protected SqlSugarClient RequireClient()
     {
         Assert.SkipWhen(_client is null, $"未设置 {ConnectionStringVariable}");
-        return _client!;
+        return _client;
     }
 
     /// <summary>
     /// 取得连接串，未设置时跳过
     /// </summary>
+    /// <returns>连接串</returns>
     protected string RequireConnectionString()
     {
         Assert.SkipWhen(_connectionString is null, $"未设置 {ConnectionStringVariable}");
-        return _connectionString!;
+        return _connectionString;
     }
 
     /// <summary>
     /// 建立使用指定客户端与时钟的存储
     /// </summary>
+    /// <param name="client">客户端</param>
+    /// <param name="timeProvider">时钟</param>
+    /// <returns>幂等记录存储</returns>
     protected SaasIdempotencyStore CreateStore(ISqlSugarClient client, TimeProvider timeProvider)
     {
         return new SaasIdempotencyStore(
@@ -343,6 +348,8 @@ public abstract class IdempotencyDatabaseTests : IDisposable
     /// <summary>
     /// 建立不与其他用例重复的记录键
     /// </summary>
+    /// <param name="key">用例自定的键名片段</param>
+    /// <returns>记录键</returns>
     protected static IdempotencyRecordKey CreateKey(string key)
     {
         return new IdempotencyRecordKey(string.Empty, "42", "POST", "/api/orders", $"db-{key}-{Guid.NewGuid():N}");
@@ -351,6 +358,9 @@ public abstract class IdempotencyDatabaseTests : IDisposable
     /// <summary>
     /// 按记录键读取记录
     /// </summary>
+    /// <param name="client">客户端</param>
+    /// <param name="key">记录键</param>
+    /// <returns>记录，不存在时为 null</returns>
     protected static SysIdempotencyRecord? FindRecord(ISqlSugarClient client, IdempotencyRecordKey key)
     {
         var keyHash = key.ComputeHash();

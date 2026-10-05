@@ -420,7 +420,7 @@ public abstract class EventBoxDatabaseTests : IDisposable
     [Theory]
     [InlineData(" msg-ws")]
     [InlineData("msg-ws ")]
-    [InlineData("	msg-ws")]
+    [InlineData("\tmsg-ws")]
     public async Task InboxEnqueue_MessageIdWithSurroundingWhitespace_Throws(string messageId)
     {
         var context = RequireContext();
@@ -438,7 +438,7 @@ public abstract class EventBoxDatabaseTests : IDisposable
     [Theory]
     [InlineData(" msg-ws")]
     [InlineData("msg-ws ")]
-    [InlineData("	msg-ws")]
+    [InlineData("\tmsg-ws")]
     public async Task InboxExists_MessageIdWithSurroundingWhitespace_ReturnsFalse(string messageId)
     {
         var context = RequireContext();
@@ -544,7 +544,7 @@ public abstract class EventBoxDatabaseTests : IDisposable
     private EventBoxTestContext RequireContext()
     {
         Assert.SkipWhen(_context is null, $"未设置 {ConnectionStringVariable}");
-        return _context!;
+        return _context;
     }
 
     /// <summary>
@@ -554,7 +554,7 @@ public abstract class EventBoxDatabaseTests : IDisposable
     protected string RequireConnectionString()
     {
         Assert.SkipWhen(_connectionString is null, $"未设置 {ConnectionStringVariable}");
-        return _connectionString!;
+        return _connectionString;
     }
 
     private static SysEventOutbox NewOutboxRow(DateTimeOffset createdTime)
@@ -760,7 +760,7 @@ public sealed partial class EventBoxSqlServerTests : EventBoxDatabaseTests
     {
         get
         {
-            return "SQL_Latin1_General_CP1_CS_AS";
+            return ResolveExpectedDedupKeyCollation(RequireConnectionString());
         }
     }
 

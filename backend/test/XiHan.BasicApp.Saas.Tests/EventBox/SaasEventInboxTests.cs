@@ -265,7 +265,7 @@ public sealed class SaasEventInboxTests : IDisposable
     [Theory]
     [InlineData(" msg-ws")]
     [InlineData("msg-ws ")]
-    [InlineData("	msg-ws")]
+    [InlineData("\tmsg-ws")]
     public async Task Enqueue_MessageIdWithSurroundingWhitespace_Throws(string messageId)
     {
         var inbox = _context.CreateInbox();

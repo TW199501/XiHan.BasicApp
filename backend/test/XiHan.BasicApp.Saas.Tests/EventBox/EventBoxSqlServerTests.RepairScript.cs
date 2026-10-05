@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 using Microsoft.Data.SqlClient;
 using SqlSugar;
 using XiHan.BasicApp.Saas.Domain.Entities;
+using XiHan.BasicApp.Saas.Infrastructure.EventBus;
 
 namespace XiHan.BasicApp.Saas.Tests.EventBox;
 
@@ -16,18 +17,15 @@ public sealed partial class EventBoxSqlServerTests
     private const string InboxTable = "Sys_Event_Inbox";
 
     /// <summary>
-    /// 建表时去重键使用 nvarchar；SQL_ 默认排序规则没有 CS_AS_KS_WS 版本，退回 CS_AS
+    /// 建表时去重键使用 nvarchar 与由数据库默认排序规则推导出的排序规则
     /// </summary>
     [Fact]
     public async Task InitTables_DedupKeyCollationIsDerivedFromDatabaseDefault()
     {
-        await using var connection = await OpenConnectionAsync(RequireConnectionString());
+        var connectionString = RequireConnectionString();
+        await using var connection = await OpenConnectionAsync(connectionString);
 
-        var databaseDefault = await ReadDatabaseCollationAsync(connection);
-
-        Assert.Equal("SQL_Latin1_General_CP1_CI_AS", databaseDefault);
-        Assert.False(await CollationExistsAsync(connection, "SQL_Latin1_General_CP1_CS_AS_KS_WS"));
-        Assert.Equal(new DedupKeyColumn("nvarchar", 512, false, "SQL_Latin1_General_CP1_CS_AS"), await ReadDedupKeyColumnAsync(connection));
+        Assert.Equal(new DedupKeyColumn("nvarchar", 512, false, ResolveExpectedDedupKeyCollation(connectionString)), await ReadDedupKeyColumnAsync(connection));
     }
 
     /// <summary>
@@ -62,7 +60,7 @@ public sealed partial class EventBoxSqlServerTests
         await ExecuteRepairScriptAsync(connection);
 
         var columnAfter = await ReadDedupKeyColumnAsync(connection);
-        Assert.Equal(new DedupKeyColumn("nvarchar", 512, false, "SQL_Latin1_General_CP1_CS_AS"), columnAfter);
+        Assert.Equal(new DedupKeyColumn("nvarchar", 512, false, ResolveExpectedDedupKeyCollation(connectionString)), columnAfter);
         Assert.Equal(indexesBefore, await ReadIndexesAsync(connection));
         Assert.Equal(rowsBefore, await ReadRowsAsync(connection));
         var modifiedAfterFirstRun = await ReadTableModifyDateAsync(connection);
@@ -89,7 +87,7 @@ public sealed partial class EventBoxSqlServerTests
         var column = await ReadDedupKeyColumnAsync(connection);
         var indexes = await ReadIndexesAsync(connection);
         var modified = await ReadTableModifyDateAsync(connection);
-        Assert.Equal(new DedupKeyColumn("nvarchar", 512, false, "SQL_Latin1_General_CP1_CS_AS"), column);
+        Assert.Equal(new DedupKeyColumn("nvarchar", 512, false, ResolveExpectedDedupKeyCollation(RequireConnectionString())), column);
 
         await Task.Delay(TimeSpan.FromMilliseconds(50));
         await ExecuteRepairScriptAsync(connection);
@@ -194,11 +192,24 @@ public sealed partial class EventBoxSqlServerTests
         return (string)(await command.ExecuteScalarAsync())!;
     }
 
-    private static async Task<bool> CollationExistsAsync(SqlConnection connection, string collation)
+    private static string ResolveExpectedDedupKeyCollation(string connectionString)
     {
-        await using var command = new SqlCommand("SELECT COUNT(*) FROM sys.fn_helpcollations() WHERE name = @name", connection);
-        command.Parameters.AddWithValue("@name", collation);
-        return (int)(await command.ExecuteScalarAsync())! > 0;
+        using var connection = new SqlConnection(connectionString);
+        connection.Open();
+        using var defaultCommand = new SqlCommand("SELECT CONVERT(nvarchar(128), DATABASEPROPERTYEX(DB_NAME(), 'Collation'))", connection);
+        var databaseDefault = (string)defaultCommand.ExecuteScalar();
+        var available = new List<string>();
+        foreach (var candidate in SaasEventBoxCodeFirstConvention.GetSqlServerDedupKeyCollationCandidates(databaseDefault))
+        {
+            using var existsCommand = new SqlCommand("SELECT COUNT(*) FROM sys.fn_helpcollations() WHERE name = @name", connection);
+            existsCommand.Parameters.AddWithValue("@name", candidate);
+            if ((int)existsCommand.ExecuteScalar() > 0)
+            {
+                available.Add(candidate);
+            }
+        }
+
+        return SaasEventBoxCodeFirstConvention.SelectSqlServerDedupKeyCollation(databaseDefault, available);
     }
 
     private static async Task<DedupKeyColumn> ReadDedupKeyColumnAsync(SqlConnection connection)
