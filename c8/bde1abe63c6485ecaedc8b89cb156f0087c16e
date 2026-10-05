@@ -1,0 +1,33 @@
+docs/backend/database.md
+  s_94057b8e5cf9b6::t_f22639d80066b2 229
+  s_94057b8e5cf9b6::t_64b8d0352f19e6 206
+backend/src/modules/XiHan.BasicApp.Saas/README.md
+  s_94057b8e5cf9b6::t_3745e18071fe9c 113-114
+  s_94057b8e5cf9b6::t_9a784855d181d1 117
+backend/test/XiHan.BasicApp.Saas.Tests/EventBox/EventBoxSqlServerTests.RepairScript.cs
+  s_94057b8e5cf9b6::t_9155a724eede6d 309
+backend/src/modules/XiHan.BasicApp.Saas/Infrastructure/EventBus/SaasEventBoxCodeFirstConvention.cs
+  s_94057b8e5cf9b6::t_dfd04300ec2ea0 17
+backend/src/main/XiHan.BasicApp.WebHost/UpdateScripts/5.6.1/mysql/5.6.1.sql
+  s_94057b8e5cf9b6::t_d3ea6785d64006 1-49
+backend/src/main/XiHan.BasicApp.WebHost/UpdateScripts/5.6.1/pgsql/5.6.1.sql
+  s_94057b8e5cf9b6::t_b9eee85155c1bb 1-2
+backend/test/XiHan.BasicApp.Saas.Tests/Upgrade/UpgradeScript561DatabaseTests.cs
+  s_94057b8e5cf9b6::t_73a46d3b530580 1-421
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c8bde1abe63c6485ecaedc8b89cb156f0087c16e",
+  "prompts": {},
+  "sessions": {
+    "s_94057b8e5cf9b6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "90574393-d99d-4685-85bc-153dc25d1750",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
