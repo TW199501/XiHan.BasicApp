@@ -7,6 +7,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\modules\XiHan.BasicApp.Saas\XiHan.BasicApp.Saas.csproj" />
+    <ProjectReference Include="..\..\src\modules\XiHan.BasicApp.AI\XiHan.BasicApp.AI.csproj" />
+    <ProjectReference Include="..\..\src\modules\XiHan.BasicApp.Chat\XiHan.BasicApp.Chat.csproj" />
+    <ProjectReference Include="..\..\src\modules\XiHan.BasicApp.CodeGeneration\XiHan.BasicApp.CodeGeneration.csproj" />
+    <ProjectReference Include="..\..\src\modules\XiHan.BasicApp.Printing\XiHan.BasicApp.Printing.csproj" />
+    <ProjectReference Include="..\..\src\modules\XiHan.BasicApp.Workflow\XiHan.BasicApp.Workflow.csproj" />
   </ItemGroup>
 
 </Project>

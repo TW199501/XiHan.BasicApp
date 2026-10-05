@@ -34,6 +34,22 @@ public sealed class IntegrationDatabaseTests
     }
 
     /// <summary>
+    /// 只有 SQL Server 连接配置开启 CodeFirst nvarchar
+    /// </summary>
+    /// <param name="dbType">数据库种类</param>
+    /// <param name="expected">是否开启</param>
+    [Theory]
+    [InlineData(DbType.PostgreSQL, false)]
+    [InlineData(DbType.SqlServer, true)]
+    [InlineData(DbType.MySql, false)]
+    public void CreateConnectionConfig_EnablesNvarcharOnlyForSqlServer(DbType dbType, bool expected)
+    {
+        var config = IntegrationDatabase.CreateConnectionConfig(dbType, "Server=127.0.0.1");
+
+        Assert.Equal(expected, config.MoreSettings?.SqlServerCodeFirstNvarchar ?? false);
+    }
+
+    /// <summary>
     /// 未设置或只含空白的环境变量视为未设置
     /// </summary>
     [Fact]
