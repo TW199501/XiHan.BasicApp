@@ -1,0 +1,101 @@
+.agents/skills/fullstack-contracts/references/contracts-security-and-operations.md
+  s_94057b8e5cf9b6::t_a75a90715b02d0 44
+AGENTS.md
+  s_94057b8e5cf9b6::t_a1da7706626e99 104
+README.md
+  s_94057b8e5cf9b6::t_ecd8a07d5fbfe6 67-68,71-72,75,78-79,82-83,86,89-90,94-152,162,164-166,194-195
+README_cn.md
+  s_94057b8e5cf9b6::t_d4ef4ad370ab52 67-68,71-72,75,78-79,82-83,86,89-90,94-152,162,164-166,194-195
+assets/architecture.html
+  s_94057b8e5cf9b6::t_ee4d5525c6a9ed 1-430
+backend/README.md
+  s_94057b8e5cf9b6::t_354afd7cb76ad9 107,115
+backend/README_cn.md
+  s_94057b8e5cf9b6::t_8755407b24ab7d 107,115
+backend/nuget/readme.md
+  s_94057b8e5cf9b6::t_df36c35ddb2a57 9
+backend/src/framework/XiHan.BasicApp.Web.Core/README.md
+  s_94057b8e5cf9b6::t_5cdd9bdfe56673 4,8,13,15,24,89-90,92-102,112-113,125-126
+backend/src/main/XiHan.BasicApp.WebHost/XiHanBasicAppWebHostModule.cs
+  s_94057b8e5cf9b6::t_abdf80cd0a740c 62,65-67
+backend/src/modules/XiHan.BasicApp.Saas/Infrastructure/Seeders/Demo/SaasDemoNotificationSeeder.cs
+  s_94057b8e5cf9b6::t_a7056996c932e8 40-43,47-49,51,53-56,65,69-70,74,79-80,84,89-91,95,101-102,104,106
+backend/test/XiHan.BasicApp.WebHost.Tests/WebHostConfigurationLayoutTests.cs
+  s_94057b8e5cf9b6::t_9ae503889143bc 85,110
+docs/.vitepress/config.ts
+  s_94057b8e5cf9b6::t_6be6dee8f6bb1c 302
+docs/api-guide.md
+  s_94057b8e5cf9b6::t_a7cf40b25e3865 354
+docs/backend/ai.md
+  s_94057b8e5cf9b6::t_76d626f948fde0 261
+docs/backend/approval.md
+  s_94057b8e5cf9b6::t_12006a4edf7828 57-61,70,80-91,95,97-100,103,105,108-109,121,125
+docs/backend/authentication.md
+  s_94057b8e5cf9b6::t_6306ac238ce605 68-71,215
+docs/backend/code-generation.md
+  s_94057b8e5cf9b6::t_dce004274c5f27 83
+docs/backend/data-permission.md
+  s_94057b8e5cf9b6::t_1a5366cd9bf116 14,35
+docs/backend/database.md
+  s_94057b8e5cf9b6::t_cd30ee5018ea0a 9,11-21,130,138
+docs/backend/development.md
+  s_94057b8e5cf9b6::t_263c289e6993e4 15,149,369
+docs/backend/entity.md
+  s_94057b8e5cf9b6::t_2adf309300cc79 143
+docs/backend/introduction.md
+  s_94057b8e5cf9b6::t_5ca5cde827c965 9-17,48,52-53,56,86-88,105
+docs/backend/multi-tenancy.md
+  s_94057b8e5cf9b6::t_d78f017062c477 16,271,279
+docs/backend/organization.md
+  s_94057b8e5cf9b6::t_34e606cf219b07 77,79
+docs/backend/permission.md
+  s_94057b8e5cf9b6::t_3877e8071e5251 3,9,17,20,27,108,110-112,116-119,131,135,139-145,147,149,160,164,166,168,170,186,196-205,213-214,216,250,255,258-260,263-265
+docs/backend/request-lifecycle.md
+  s_94057b8e5cf9b6::t_3fc0455252c75c 107,172
+docs/backend/settings.md
+  s_94057b8e5cf9b6::t_ffd2c6002544c4 139
+docs/backend/upgrade.md
+  s_94057b8e5cf9b6::t_f2dea13386c8ec 3,11-12,16-17,19-20,22-25,37,58,62-68,74-75,84,92,94,128-129,147,149,151,153-155,173
+docs/configuration.md
+  s_94057b8e5cf9b6::t_d1e26be1620335 102,133,246,253
+docs/deployment.md
+  s_94057b8e5cf9b6::t_9676e5778270ec 17,31
+docs/dev-environment.md
+  s_94057b8e5cf9b6::t_7f4660d984539e 177-178
+docs/faq.md
+  s_94057b8e5cf9b6::t_0a3c2ceb5a7e5f 115-120,217,264
+docs/features.md
+  s_94057b8e5cf9b6::t_a92dd93802d972 5
+docs/frontend/permission.md
+  s_94057b8e5cf9b6::t_ee3dd5ee3b8f30 87
+docs/getting-started.md
+  s_94057b8e5cf9b6::t_b71329eb06d157 114
+docs/index.md
+  s_94057b8e5cf9b6::t_bd4c86a7a6e09b 9,33
+docs/introduction.md
+  s_94057b8e5cf9b6::t_1f453ce3d3ae24 3,24,51
+docs/overview.md
+  s_94057b8e5cf9b6::t_e3d3ed2e46fa9c 7,25,30,89
+docs/preview.md
+  s_94057b8e5cf9b6::t_532853d37d4eff 7-8,11-12,15,18-19,22-23,26,29-30,47-50
+docs/project-structure.md
+  s_94057b8e5cf9b6::t_e413bebfc96a6b 32-33
+docs/why.md
+  s_94057b8e5cf9b6::t_314e0fda43e8e5 34,41,49,51,53-58,60,103-104
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8206a51ee7da45c094bc786012ae32185f475a87",
+  "prompts": {},
+  "sessions": {
+    "s_94057b8e5cf9b6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "90574393-d99d-4685-85bc-153dc25d1750",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
