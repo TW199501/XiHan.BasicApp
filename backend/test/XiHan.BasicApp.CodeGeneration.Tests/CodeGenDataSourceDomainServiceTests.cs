@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using Moq;
+using MySqlConnector;
 using SqlSugar;
 using XiHan.BasicApp.CodeGeneration.Domain.DomainServices;
 using XiHan.BasicApp.CodeGeneration.Domain.Entities;
@@ -608,7 +609,6 @@ public sealed class CodeGenDataSourceDomainServiceTests
     /// <param name="databaseType">数据库类型</param>
     /// <param name="expected">期望连接串</param>
     [Theory]
-    [InlineData(DatabaseType.MySql, "Server=db.internal;Port=5432;Database=demo;Uid=root;Pwd=;Connection Timeout=20;")]
     [InlineData(DatabaseType.SqlServer, "Server=db.internal,5432;Database=demo;User Id=root;Password=;Connect Timeout=20;TrustServerCertificate=true;")]
     [InlineData(DatabaseType.PostgreSql, "Host=db.internal;Port=5432;Database=demo;Username=root;Password=;Timeout=20;")]
     [InlineData(DatabaseType.Oracle, "Data Source=db.internal:5432/demo;User Id=root;Password=;Connection Timeout=20;")]
@@ -622,6 +622,28 @@ public sealed class CodeGenDataSourceDomainServiceTests
         var info = await _service.GetConnectionInfoAsync(1);
 
         Assert.Equal(expected, info.ConnectionString, StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// MySQL 按主机/端口/库/账号拼装连接串，并带 DateTimeKind=Utc。
+    /// </summary>
+    [Fact]
+    public async Task GetConnectionInfoAsync_ShouldBuildMySqlConnectionStringWithUtcDateTimeKind()
+    {
+        _repository
+            .Setup(repository => repository.GetByIdAsync(1L, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Existing(databaseType: DatabaseType.MySql));
+
+        var info = await _service.GetConnectionInfoAsync(1);
+
+        var builder = new MySqlConnectionStringBuilder(info.ConnectionString);
+        Assert.Equal("db.internal", builder.Server);
+        Assert.Equal(5432u, builder.Port);
+        Assert.Equal("demo", builder.Database);
+        Assert.Equal("root", builder.UserID);
+        Assert.Equal(string.Empty, builder.Password);
+        Assert.Equal(20u, builder.ConnectionTimeout);
+        Assert.Equal(MySqlDateTimeKind.Utc, builder.DateTimeKind);
     }
 
     /// <summary>
@@ -652,7 +674,13 @@ public sealed class CodeGenDataSourceDomainServiceTests
 
         var info = await _service.GetConnectionInfoAsync(11);
 
-        Assert.Equal(PlainConnectionString, info.ConnectionString, StringComparer.Ordinal);
+        var builder = new MySqlConnectionStringBuilder(info.ConnectionString);
+        Assert.Equal("other.host", builder.Server);
+        Assert.Equal(1u, builder.Port);
+        Assert.Equal("other", builder.Database);
+        Assert.Equal("u", builder.UserID);
+        Assert.Equal("x", builder.Password);
+        Assert.Equal(MySqlDateTimeKind.Utc, builder.DateTimeKind);
     }
 
     /// <summary>
@@ -667,7 +695,13 @@ public sealed class CodeGenDataSourceDomainServiceTests
 
         var info = await _service.GetConnectionInfoAsync(1);
 
-        Assert.Equal("Server=legacy;Database=plain;", info.ConnectionString, StringComparer.Ordinal);
+        var builder = new MySqlConnectionStringBuilder(info.ConnectionString);
+        Assert.Equal("legacy", builder.Server);
+        Assert.Equal("plain", builder.Database);
+        Assert.Equal(MySqlDateTimeKind.Utc, builder.DateTimeKind);
+        var expectedKeys = new[] { "Server", "Database", "DateTimeKind" };
+        Assert.Equal(expectedKeys.Length, builder.Count);
+        Assert.All(expectedKeys, key => Assert.True(builder.ContainsKey(key), key));
     }
 
     /// <summary>
