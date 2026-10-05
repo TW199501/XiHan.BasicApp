@@ -4,7 +4,7 @@
 using MySqlConnector;
 using SqlSugar;
 
-namespace XiHan.BasicApp.Saas.Infrastructure.Data;
+namespace XiHan.BasicApp.Core.Data;
 
 /// <summary>
 /// MySQL 连接串规范化：保证连接以 UTC 读写时间列

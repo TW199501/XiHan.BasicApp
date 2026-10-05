@@ -6,6 +6,7 @@ XiHan.BasicApp.Core 是基础应用的核心模块，提供统一的领域与应
 ## 核心能力
 - 基础实体与审计实体基类（多租户支持）
 - 应用层 DTO 基类与分页请求模型
+- MySQL 连接配置规范化（`Data/MySqlConnectionStrings`）
 - 统一聚合框架模块依赖，形成基础运行环境
 
 ## 架构与职责
@@ -34,6 +35,8 @@ public class MyModule : XiHanModule
 XiHan.BasicApp.Core/
   README.md
   XiHanBasicAppCoreModule.cs
+  Data/
+    MySqlConnectionStrings.cs
   Dtos/
     BasicAppDto.cs
   Entities/

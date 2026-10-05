@@ -6,8 +6,8 @@ using System.Diagnostics;
 using XiHan.BasicApp.CodeGeneration.Domain.Entities;
 using XiHan.BasicApp.CodeGeneration.Domain.Enums;
 using XiHan.BasicApp.CodeGeneration.Domain.Repositories;
+using XiHan.BasicApp.Core.Data;
 using XiHan.BasicApp.Saas.Domain.Enums;
-using XiHan.BasicApp.Saas.Infrastructure.Data;
 using XiHan.Framework.Data.SqlSugar.Connections;
 using XiHan.Framework.Utils.Security.Cryptography;
 

@@ -2,7 +2,7 @@
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using SqlSugar;
-using XiHan.BasicApp.Saas.Infrastructure.Data;
+using XiHan.BasicApp.Core.Data;
 
 namespace XiHan.BasicApp.Saas.Tests.TestDatabases;
 
