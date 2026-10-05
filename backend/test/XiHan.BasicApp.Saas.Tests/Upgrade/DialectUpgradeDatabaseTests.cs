@@ -1,6 +1,7 @@
 // Copyright (c) 2021-Present XiHanFun and contributors.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
+using System.Runtime.ExceptionServices;
 using Microsoft.Extensions.Logging.Abstractions;
 using SqlSugar;
 using XiHan.BasicApp.Saas.Domain.Entities;
@@ -87,25 +88,64 @@ public sealed class DialectUpgradeDatabaseTests : IDisposable
             if (dbType == DbType.PostgreSQL)
             {
                 Assert.Equal(UpgradeStatus.Completed, rootOnly.Status);
+                Assert.Equal(["pgsql", "pgsql-1.2.0"], db.Ado.SqlQuery<string>($"SELECT dialect FROM {MarkerTable} ORDER BY dialect"));
+                Assert.Equal(["1.1.0", "1.2.0"], db.Queryable<SysMigrationHistory>().ToList().Select(entry => entry.Version).Order(StringComparer.Ordinal));
                 AssertVersion(db, "1.2.0");
             }
             else
             {
                 Assert.Equal(UpgradeStatus.Failed, rootOnly.Status);
                 Assert.Contains(UpgradeScriptCatalog.MissingScriptFileName, rootOnly.Message);
+                Assert.Equal("1.1.0", Assert.Single(db.Queryable<SysMigrationHistory>().ToList()).Version);
                 AssertVersion(db, "1.1.0");
             }
         }
-        finally
+        catch (Exception failure)
         {
-            foreach (var table in new[] { MarkerTable, HistoryTable, VersionTable })
+            var cleanupFailure = DropTables(db);
+            if (cleanupFailure is not null)
+            {
+                throw new AggregateException(failure, cleanupFailure);
+            }
+
+            throw;
+        }
+
+        var cleanupError = DropTables(db);
+        if (cleanupError is not null)
+        {
+            ExceptionDispatchInfo.Throw(cleanupError);
+        }
+    }
+
+    /// <summary>
+    /// 删除本实例建立的标记表、台账表与版本表，逐张尝试
+    /// </summary>
+    /// <returns>删除失败时的异常；多张失败时合并为 <see cref="AggregateException"/>；全部成功返回 null</returns>
+    private Exception? DropTables(ISqlSugarClient db)
+    {
+        var errors = new List<Exception>();
+        foreach (var table in new[] { MarkerTable, HistoryTable, VersionTable })
+        {
+            try
             {
                 if (db.DbMaintenance.IsAnyTable(table, false))
                 {
                     _ = db.DbMaintenance.DropTable(table);
                 }
             }
+            catch (Exception exception)
+            {
+                errors.Add(exception);
+            }
         }
+
+        return errors.Count switch
+        {
+            0 => null,
+            1 => errors[0],
+            _ => new AggregateException(errors)
+        };
     }
 
     private static string VariableOf(DbType dbType)
