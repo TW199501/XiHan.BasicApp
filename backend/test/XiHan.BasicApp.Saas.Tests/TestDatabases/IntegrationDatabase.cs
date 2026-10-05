@@ -9,7 +9,7 @@ namespace XiHan.BasicApp.Saas.Tests.TestDatabases;
 /// 真实数据库集成测试的连接入口
 /// </summary>
 /// <remarks>
-/// 连接串只从环境变量读取。ConfigId 按数据库种类区分，SqlSugar 按 ConfigId 缓存实体信息。
+/// 连接串从环境变量读取，ConfigId 为 IntegrationTest_ 加数据库种类。
 /// </remarks>
 public static class IntegrationDatabase
 {
