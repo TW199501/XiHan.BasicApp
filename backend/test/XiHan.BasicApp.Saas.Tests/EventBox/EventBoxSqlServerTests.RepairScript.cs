@@ -5,7 +5,6 @@ using System.Runtime.CompilerServices;
 using Microsoft.Data.SqlClient;
 using SqlSugar;
 using XiHan.BasicApp.Saas.Domain.Entities;
-using XiHan.BasicApp.Saas.Infrastructure.EventBus;
 
 namespace XiHan.BasicApp.Saas.Tests.EventBox;
 
@@ -17,21 +16,21 @@ public sealed partial class EventBoxSqlServerTests
     private const string InboxTable = "Sys_Event_Inbox";
 
     /// <summary>
-    /// 去重键的目标排序规则是数据库默认排序规则对应的区分大小写版本
+    /// 建表时去重键使用 nvarchar 与数据库默认排序规则对应的区分大小写版本
     /// </summary>
     [Fact]
-    public async Task DedupKeyCollation_IsCaseSensitiveCounterpartOfDatabaseDefault()
+    public async Task InitTables_DedupKeyCollationIsDerivedFromDatabaseDefault()
     {
         await using var connection = await OpenConnectionAsync(RequireConnectionString());
 
         var databaseDefault = await ReadDatabaseCollationAsync(connection);
 
-        Assert.Contains("_CI_", databaseDefault, StringComparison.Ordinal);
-        Assert.Equal(SaasEventBoxCodeFirstConvention.SqlServerDedupKeyCollation, databaseDefault.Replace("_CI_", "_CS_", StringComparison.Ordinal));
+        Assert.Equal("SQL_Latin1_General_CP1_CI_AS", databaseDefault);
+        Assert.Equal(new DedupKeyColumn("nvarchar", 512, false, "SQL_Latin1_General_CP1_CS_AS"), await ReadDedupKeyColumnAsync(connection));
     }
 
     /// <summary>
-    /// 修复脚本把旧表的去重键改为区分大小写，类型、索引与数据不变，再次执行不做任何改动
+    /// 修复脚本把旧表的去重键改为 nvarchar 与区分大小写的排序规则，长度、可空性、索引与数据不变，再次执行不做任何改动
     /// </summary>
     [Fact]
     public async Task DedupKeyRepairScript_ConvertsLegacyColumnAndIsIdempotent()
@@ -44,7 +43,8 @@ public sealed partial class EventBoxSqlServerTests
         {
             NewLegacyRow("Msg-A"),
             NewLegacyRow("Msg-B"),
-            NewLegacyRow("msg-é")
+            NewLegacyRow("msg-é"),
+            NewLegacyRow("消息-1")
         }).ExecuteCommandAsync();
 
         await using var connection = await OpenConnectionAsync(connectionString);
@@ -53,14 +53,15 @@ public sealed partial class EventBoxSqlServerTests
         var rowsBefore = await ReadRowsAsync(connection);
         Assert.Equal(new DedupKeyColumn("varchar", 256, false, await ReadDatabaseCollationAsync(connection)), columnBefore);
         Assert.Contains($"UX_{InboxTable}_DeKe|unique|NONCLUSTERED|Dedup_Key", indexesBefore);
-        Assert.Equal(3, rowsBefore.Count);
+        Assert.Equal(4, rowsBefore.Count);
+        Assert.Contains(rowsBefore, row => row.Contains("|??-1|", StringComparison.Ordinal));
         var duplicate = await Assert.ThrowsAnyAsync<Exception>(() => legacy.Insertable(NewLegacyRow("msg-a")).ExecuteCommandAsync());
         Assert.True(IsDuplicateKeyViolation(duplicate));
 
         await ExecuteRepairScriptAsync(connection);
 
         var columnAfter = await ReadDedupKeyColumnAsync(connection);
-        Assert.Equal(columnBefore with { Collation = SaasEventBoxCodeFirstConvention.SqlServerDedupKeyCollation }, columnAfter);
+        Assert.Equal(new DedupKeyColumn("nvarchar", 512, false, "SQL_Latin1_General_CP1_CS_AS"), columnAfter);
         Assert.Equal(indexesBefore, await ReadIndexesAsync(connection));
         Assert.Equal(rowsBefore, await ReadRowsAsync(connection));
         var modifiedAfterFirstRun = await ReadTableModifyDateAsync(connection);
@@ -74,7 +75,7 @@ public sealed partial class EventBoxSqlServerTests
         Assert.Equal(modifiedAfterFirstRun, await ReadTableModifyDateAsync(connection));
 
         await legacy.Insertable(NewLegacyRow("msg-a")).ExecuteCommandAsync();
-        Assert.Equal(4, (await ReadRowsAsync(connection)).Count);
+        Assert.Equal(5, (await ReadRowsAsync(connection)).Count);
     }
 
     /// <summary>
@@ -87,7 +88,7 @@ public sealed partial class EventBoxSqlServerTests
         var column = await ReadDedupKeyColumnAsync(connection);
         var indexes = await ReadIndexesAsync(connection);
         var modified = await ReadTableModifyDateAsync(connection);
-        Assert.Equal(SaasEventBoxCodeFirstConvention.SqlServerDedupKeyCollation, column.Collation);
+        Assert.Equal(new DedupKeyColumn("nvarchar", 512, false, "SQL_Latin1_General_CP1_CS_AS"), column);
 
         await Task.Delay(TimeSpan.FromMilliseconds(50));
         await ExecuteRepairScriptAsync(connection);

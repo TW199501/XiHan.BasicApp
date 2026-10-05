@@ -13,34 +13,100 @@ namespace XiHan.BasicApp.Saas.Tests.EventBox;
 public sealed class SaasEventBoxCodeFirstConventionTests
 {
     /// <summary>
-    /// MySQL 与 SQL Server 的去重键使用区分大小写的二进制排序规则
+    /// MySQL 的去重键使用 utf8mb4_bin
     /// </summary>
-    [Theory]
-    [InlineData(DbType.MySql, "varchar(256) COLLATE utf8mb4_bin")]
-    [InlineData(DbType.SqlServer, "varchar(256) COLLATE SQL_Latin1_General_CP1_CS_AS")]
-    public void Apply_SetsCaseSensitiveDedupKeyColumnType(DbType dbType, string expected)
+    [Fact]
+    public void Apply_SetsMySqlDedupKeyColumnType()
     {
-        var config = NewConfig(dbType);
+        var config = NewConfig(DbType.MySql);
 
         SaasEventBoxCodeFirstConvention.Apply(config);
 
         var column = GetColumn(config, nameof(SysEventInbox.DedupKey));
-        Assert.Equal(expected, column.DataType);
+        Assert.Equal("varchar(256) COLLATE utf8mb4_bin", column.DataType);
         Assert.Equal(0, column.Length);
     }
 
     /// <summary>
-    /// SQL Server 连接开启 nvarchar 建表时，去重键也用 nvarchar
+    /// SQL Server 的去重键使用 nvarchar 与数据库默认排序规则对应的区分大小写版本，数据库默认排序规则只读取一次
     /// </summary>
     [Fact]
-    public void Apply_UsesNvarcharWhenSqlServerCodeFirstNvarchar()
+    public void Apply_SetsSqlServerDedupKeyColumnTypeFromDatabaseCollation()
     {
         var config = NewConfig(DbType.SqlServer);
-        config.MoreSettings = new ConnMoreSettings { SqlServerCodeFirstNvarchar = true };
+        var reads = 0;
 
-        SaasEventBoxCodeFirstConvention.Apply(config);
+        SaasEventBoxCodeFirstConvention.Apply(config, readConfig =>
+        {
+            Assert.Same(config, readConfig);
+            reads++;
+            return "Chinese_PRC_CI_AS";
+        });
+
+        var column = GetColumn(config, nameof(SysEventInbox.DedupKey));
+        Assert.Equal("nvarchar(256) COLLATE Chinese_PRC_CS_AS", column.DataType);
+        Assert.Equal(0, column.Length);
+        Assert.Equal("nvarchar(256) COLLATE Chinese_PRC_CS_AS", GetColumn(config, nameof(SysEventInbox.DedupKey)).DataType);
+        Assert.Equal(1, reads);
+    }
+
+    /// <summary>
+    /// 读取数据库默认排序规则失败后，下一次映射会重新读取
+    /// </summary>
+    [Fact]
+    public void Apply_RetriesDatabaseCollationAfterReadFailure()
+    {
+        var config = NewConfig(DbType.SqlServer);
+        var reads = 0;
+        SaasEventBoxCodeFirstConvention.Apply(config, _ =>
+        {
+            reads++;
+            return reads == 1 ? throw new InvalidOperationException("unreachable") : "SQL_Latin1_General_CP1_CI_AS";
+        });
+
+        Assert.ThrowsAny<Exception>(() => GetColumn(config, nameof(SysEventInbox.DedupKey)));
 
         Assert.Equal("nvarchar(256) COLLATE SQL_Latin1_General_CP1_CS_AS", GetColumn(config, nameof(SysEventInbox.DedupKey)).DataType);
+        Assert.Equal(2, reads);
+    }
+
+    /// <summary>
+    /// 不是 SQL Server 时不读取数据库默认排序规则
+    /// </summary>
+    [Theory]
+    [InlineData(DbType.MySql)]
+    [InlineData(DbType.PostgreSQL)]
+    public void Apply_DoesNotReadDatabaseCollationOutsideSqlServer(DbType dbType)
+    {
+        var config = NewConfig(dbType);
+
+        SaasEventBoxCodeFirstConvention.Apply(config, _ => throw new InvalidOperationException("should not read"));
+
+        _ = GetColumn(config, nameof(SysEventInbox.DedupKey));
+    }
+
+    /// <summary>
+    /// 区分大小写版本：CI 换成 CS、AI 换成 AS，其余部分不变
+    /// </summary>
+    [Theory]
+    [InlineData("SQL_Latin1_General_CP1_CI_AS", "SQL_Latin1_General_CP1_CS_AS")]
+    [InlineData("Chinese_PRC_CI_AS", "Chinese_PRC_CS_AS")]
+    [InlineData("Latin1_General_100_CI_AI_SC_UTF8", "Latin1_General_100_CS_AS_SC_UTF8")]
+    [InlineData("Latin1_General_100_CI_AS_KS_WS", "Latin1_General_100_CS_AS_KS_WS")]
+    [InlineData("SQL_Latin1_General_CP1_CS_AS", "SQL_Latin1_General_CP1_CS_AS")]
+    [InlineData("Latin1_General_100_BIN2", "Latin1_General_100_BIN2")]
+    public void ToCaseSensitiveCollation_ReplacesInsensitiveParts(string collation, string expected)
+    {
+        Assert.Equal(expected, SaasEventBoxCodeFirstConvention.ToCaseSensitiveCollation(collation));
+    }
+
+    /// <summary>
+    /// 既没有大小写部分也不是二进制排序规则时报错
+    /// </summary>
+    [Fact]
+    public void ToCaseSensitiveCollation_RejectsUnknownCollation()
+    {
+        Assert.Throws<ArgumentException>(() => SaasEventBoxCodeFirstConvention.ToCaseSensitiveCollation("Latin1_General"));
     }
 
     /// <summary>

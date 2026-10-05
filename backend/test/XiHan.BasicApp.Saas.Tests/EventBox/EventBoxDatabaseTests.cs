@@ -77,6 +77,11 @@ public abstract class EventBoxDatabaseTests : IDisposable
     protected abstract string? ExpectedDedupKeyCollation { get; }
 
     /// <summary>
+    /// 去重键列的数据类型
+    /// </summary>
+    protected abstract string ExpectedDedupKeyType { get; }
+
+    /// <summary>
     /// 时间列、二进制列与事件名称列的定义符合该数据库的预期，收件箱带三个索引
     /// </summary>
     [Fact]
@@ -329,6 +334,7 @@ public abstract class EventBoxDatabaseTests : IDisposable
         var context = RequireContext();
         var columns = await DatabaseSchemaProbe.GetColumnsAsync(context.Client, context.Client.EntityMaintenance.GetTableName<SysEventInbox>());
 
+        Assert.Equal(ExpectedDedupKeyType, columns["dedup_key"].DataType);
         Assert.Equal(ExpectedDedupKeyCollation, columns["dedup_key"].Collation);
         Assert.Equal(256, columns["dedup_key"].MaxLength);
     }
@@ -360,6 +366,26 @@ public abstract class EventBoxDatabaseTests : IDisposable
         Assert.True(await inbox.ExistsByMessageIdAsync("Msg-A"));
         Assert.True(await inbox.ExistsByMessageIdAsync("msg-a"));
         Assert.False(await inbox.ExistsByMessageIdAsync("MSG-A"));
+    }
+
+    /// <summary>
+    /// 两个不同的非拉丁字符消息标识各自入箱，内容原样保存
+    /// </summary>
+    [Fact]
+    public async Task InboxEnqueue_NonLatinMessageIds_AreBothStored()
+    {
+        var context = RequireContext();
+        var inbox = context.CreateInbox();
+
+        await inbox.EnqueueAsync(NewIncomingEvent(context, "消息-1"));
+        await inbox.EnqueueAsync(NewIncomingEvent(context, "訊息-1"));
+
+        var keys = await context.Client.Queryable<SysEventInbox>().Select(e => e.DedupKey).ToListAsync();
+        Assert.Equal(2, keys.Count);
+        Assert.Contains("消息-1", keys);
+        Assert.Contains("訊息-1", keys);
+        Assert.True(await inbox.ExistsByMessageIdAsync("消息-1"));
+        Assert.True(await inbox.ExistsByMessageIdAsync("訊息-1"));
     }
 
     /// <summary>
@@ -513,6 +539,15 @@ public sealed class EventBoxPostgresTests : EventBoxDatabaseTests
     }
 
     /// <inheritdoc />
+    protected override string ExpectedDedupKeyType
+    {
+        get
+        {
+            return "character varying";
+        }
+    }
+
+    /// <inheritdoc />
     protected override bool IsDuplicateKeyViolation(Exception exception)
     {
         return IntegrationDatabase.FindException<PostgresException>(exception) is { SqlState: "23505" };
@@ -569,6 +604,15 @@ public sealed partial class EventBoxSqlServerTests : EventBoxDatabaseTests
     }
 
     /// <inheritdoc />
+    protected override string ExpectedDedupKeyType
+    {
+        get
+        {
+            return "nvarchar";
+        }
+    }
+
+    /// <inheritdoc />
     protected override bool IsDuplicateKeyViolation(Exception exception)
     {
         return IntegrationDatabase.FindException<SqlException>(exception) is { Number: 2601 or 2627 };
@@ -621,6 +665,15 @@ public sealed class EventBoxMySqlTests : EventBoxDatabaseTests
         get
         {
             return "utf8mb4_bin";
+        }
+    }
+
+    /// <inheritdoc />
+    protected override string ExpectedDedupKeyType
+    {
+        get
+        {
+            return "varchar";
         }
     }
 

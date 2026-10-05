@@ -1,9 +1,11 @@
--- SQL Server：收件箱去重键 Sys_Event_Inbox.Dedup_Key 改为区分大小写、区分重音的排序规则。
+-- SQL Server：收件箱去重键 Sys_Event_Inbox.Dedup_Key 改为 nvarchar，使用区分大小写、区分重音的排序规则。
 --
--- 目标排序规则与 SaasEventBoxCodeFirstConvention.SqlServerDedupKeyCollation 一致。
--- 只改排序规则，列类型、长度与可空性保持原样；包含该列的索引先删除，改列后按原名、原定义重建。
--- 表或列不存在、排序规则已是目标值时不做任何改动，可重复执行。
--- 该列还被外键、检查约束、计算列、手工统计信息或行存储以外的索引引用时报错，不做改动。
+-- 目标排序规则由数据库默认排序规则推导：按下划线分段，CI 换成 CS、AI 换成 AS，其余分段不变，
+-- 与 SaasEventBoxCodeFirstConvention.ToCaseSensitiveCollation 一致；推导出的排序规则不存在时报错，不做改动。
+-- 列改为 nvarchar，字符长度与可空性保持原样；包含该列的索引先删除，改列后按原名、原定义重建。
+-- 表或列不存在、列已是 nvarchar 且排序规则已是目标值时不做任何改动，可重复执行。
+-- 该列不是 varchar/nvarchar、长度超过 4000，或被外键、检查约束、计算列、手工统计信息、非行存储索引引用时报错，不做改动。
+-- 原列为 varchar 时，写入时无法用该代码页表示的字符已存成 ?，转换后仍是 ?，无法恢复。
 -- 整个脚本作为一个批次执行，改动在一个事务内完成。
 
 SET NOCOUNT ON;
@@ -11,7 +13,10 @@ SET XACT_ABORT ON;
 
 DECLARE @tableName sysname = N'Sys_Event_Inbox';
 DECLARE @columnName sysname = N'Dedup_Key';
-DECLARE @targetCollation sysname = N'SQL_Latin1_General_CP1_CS_AS';
+DECLARE @databaseCollation sysname = CONVERT(sysname, DATABASEPROPERTYEX(DB_NAME(), 'Collation'));
+DECLARE @derivedCollation nvarchar(260) =
+    REPLACE(REPLACE(N'_' + @databaseCollation + N'_', N'_CI_', N'_CS_'), N'_AI_', N'_AS_');
+DECLARE @targetCollation sysname = SUBSTRING(@derivedCollation, 2, LEN(@derivedCollation) - 2);
 
 DECLARE @objectId int = OBJECT_ID(QUOTENAME(@tableName), N'U');
 DECLARE @columnId int;
@@ -32,8 +37,25 @@ BEGIN
     WHERE c.object_id = @objectId AND c.name = @columnName;
 END;
 
-IF @columnId IS NOT NULL AND @currentCollation <> @targetCollation
+IF @columnId IS NOT NULL AND (@typeName <> N'nvarchar' OR @currentCollation <> @targetCollation)
 BEGIN
+    IF NOT EXISTS (SELECT 1 FROM sys.fn_helpcollations() WHERE name = @targetCollation)
+    BEGIN
+        THROW 50001, N'由数据库默认排序规则推导出的区分大小写排序规则不存在，脚本未做改动。', 1;
+    END;
+
+    DECLARE @characterLength int =
+        CASE
+            WHEN @maxLength = -1 THEN -1
+            WHEN @typeName = N'nvarchar' THEN @maxLength / 2
+            WHEN @typeName = N'varchar' THEN @maxLength
+        END;
+
+    IF @characterLength IS NULL OR @characterLength = -1 OR @characterLength > 4000
+    BEGIN
+        THROW 50002, N'Sys_Event_Inbox.Dedup_Key 不是长度不超过 4000 的 varchar/nvarchar 列，脚本未做改动。', 1;
+    END;
+
     IF EXISTS (SELECT 1 FROM sys.foreign_key_columns
                WHERE (parent_object_id = @objectId AND parent_column_id = @columnId)
                   OR (referenced_object_id = @objectId AND referenced_column_id = @columnId))
@@ -49,20 +71,14 @@ BEGIN
                    JOIN sys.index_columns AS ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id
                    WHERE i.object_id = @objectId AND ic.column_id = @columnId AND i.type NOT IN (1, 2))
     BEGIN
-        THROW 50001, N'Sys_Event_Inbox.Dedup_Key 被外键、检查约束、计算列、手工统计信息或非行存储索引引用，脚本未做改动。', 1;
+        THROW 50003, N'Sys_Event_Inbox.Dedup_Key 被外键、检查约束、计算列、手工统计信息或非行存储索引引用，脚本未做改动。', 1;
     END;
 
     DECLARE @qualifiedTable nvarchar(600) = QUOTENAME(OBJECT_SCHEMA_NAME(@objectId)) + N'.' + QUOTENAME(@tableName);
-    DECLARE @columnType nvarchar(200) =
-        QUOTENAME(@typeName) + N'(' +
-        CASE
-            WHEN @maxLength = -1 THEN N'max'
-            WHEN @typeName IN (N'nvarchar', N'nchar') THEN CONVERT(nvarchar(10), @maxLength / 2)
-            ELSE CONVERT(nvarchar(10), @maxLength)
-        END + N')';
     DECLARE @alterColumn nvarchar(max) =
-        N'ALTER TABLE ' + @qualifiedTable + N' ALTER COLUMN ' + QUOTENAME(@columnName) + N' ' + @columnType +
-        N' COLLATE ' + @targetCollation + CASE WHEN @isNullable = 1 THEN N' NULL;' ELSE N' NOT NULL;' END;
+        N'ALTER TABLE ' + @qualifiedTable + N' ALTER COLUMN ' + QUOTENAME(@columnName) +
+        N' nvarchar(' + CONVERT(nvarchar(10), @characterLength) + N') COLLATE ' + @targetCollation +
+        CASE WHEN @isNullable = 1 THEN N' NULL;' ELSE N' NOT NULL;' END;
 
     DECLARE @dropIndexes nvarchar(max);
     DECLARE @createIndexes nvarchar(max);
