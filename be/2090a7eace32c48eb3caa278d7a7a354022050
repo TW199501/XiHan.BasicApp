@@ -1,0 +1,34 @@
+backend/test/XiHan.BasicApp.Saas.Tests/TestDatabases/IntegrationDatabase.cs
+  s_94057b8e5cf9b6::t_2d4e465721b376 1-107
+backend/test/XiHan.BasicApp.Saas.Tests/TestDatabases/DatabaseSchemaProbe.cs
+  s_94057b8e5cf9b6::t_ae2ef289b5f28b 1-176
+backend/test/XiHan.BasicApp.Saas.Tests/TestDatabases/IntegrationDatabaseTests.cs
+  s_94057b8e5cf9b6::t_3b6b1362320dfc 23
+  s_94057b8e5cf9b6::t_dc47dd63b23eab 20-22
+  s_94057b8e5cf9b6::t_441992c5a9b5b9 24-26
+  s_eeeca346e17a13::t_015c320328a8ce 1-19,27-65
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "be2090a7eace32c48eb3caa278d7a7a354022050",
+  "prompts": {},
+  "sessions": {
+    "s_94057b8e5cf9b6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "90574393-d99d-4685-85bc-153dc25d1750",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    },
+    "s_eeeca346e17a13": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-aimpl-e85-74dc337e90396b33",
+        "model": "unknown"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
