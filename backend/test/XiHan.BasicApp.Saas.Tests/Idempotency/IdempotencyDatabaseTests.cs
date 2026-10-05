@@ -257,6 +257,23 @@ public abstract class IdempotencyDatabaseTests : IDisposable
     }
 
     /// <summary>
+    /// 幂等记录全部时间列至少保留 6 位小数秒
+    /// </summary>
+    [Fact]
+    public async Task InitTables_TimestampColumnsKeepSubSecondPrecision()
+    {
+        var client = RequireClient();
+        var tableName = client.EntityMaintenance.GetTableName<SysIdempotencyRecord>();
+        var columns = await DatabaseSchemaProbe.GetColumnsAsync(client, tableName);
+
+        foreach (var columnName in new[] { "lease_expires_time", "expires_time", "created_time", "completed_time" })
+        {
+            var precision = columns[columnName].DateTimePrecision;
+            Assert.True(precision >= 6, $"[{DatabaseType}] {tableName}.{columnName} 的小数秒位数为 {precision?.ToString() ?? "null"}，至少应为 6");
+        }
+    }
+
+    /// <summary>
     /// 删除本实例建立的幂等记录表并释放资源
     /// </summary>
     public void Dispose()

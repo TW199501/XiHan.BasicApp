@@ -201,6 +201,55 @@ public abstract class EventBoxDatabaseTests : IDisposable
     }
 
     /// <summary>
+    /// 收发件箱全部时间列至少保留 6 位小数秒
+    /// </summary>
+    [Fact]
+    public async Task InitTables_TimestampColumnsKeepSubSecondPrecision()
+    {
+        var context = RequireContext();
+        var expected = new Dictionary<string, string[]>
+        {
+            [context.Client.EntityMaintenance.GetTableName<SysEventOutbox>()] = ["created_time", "claim_time"],
+            [context.Client.EntityMaintenance.GetTableName<SysEventInbox>()] = ["created_time", "next_retry_time", "claim_time", "handled_time"]
+        };
+
+        foreach (var (tableName, columnNames) in expected)
+        {
+            var columns = await DatabaseSchemaProbe.GetColumnsAsync(context.Client, tableName);
+            foreach (var columnName in columnNames)
+            {
+                var precision = columns[columnName].DateTimePrecision;
+                Assert.True(precision >= 6, $"[{DatabaseType}] {tableName}.{columnName} 的小数秒位数为 {precision?.ToString() ?? "null"}，至少应为 6");
+            }
+        }
+    }
+
+    /// <summary>
+    /// 同一秒内先后入箱的事件按创建时刻领取，主键顺序与时间顺序相反
+    /// </summary>
+    [Fact]
+    public async Task OutboxClaim_ReturnsOldestFirst()
+    {
+        var context = RequireContext();
+        var outbox = context.CreateOutbox();
+        var start = new DateTime(2026, 10, 4, 1, 0, 0, DateTimeKind.Utc);
+        Guid[] ids =
+        [
+            Guid.Parse("ffffffff-0000-0000-0000-000000000000"),
+            Guid.Parse("88888888-0000-0000-0000-000000000000"),
+            Guid.Parse("00000000-0000-0000-0000-000000000001")
+        ];
+        for (var index = 0; index < ids.Length; index++)
+        {
+            await outbox.EnqueueAsync(new OutgoingEventInfo(ids[index], "order.created", [1, 2, 3], start.AddMilliseconds(index)));
+        }
+
+        var claimed = await outbox.GetWaitingEventsAsync(2);
+
+        Assert.Equal(new[] { ids[0], ids[1] }, claimed.Select(e => e.Id).ToArray());
+    }
+
+    /// <summary>
     /// 删除本实例建立的收发件箱表并释放上下文
     /// </summary>
     public void Dispose()
