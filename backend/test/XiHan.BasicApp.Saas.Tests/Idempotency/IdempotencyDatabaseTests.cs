@@ -1,55 +1,85 @@
 // Copyright (c) 2021-Present XiHanFun and contributors.
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
-using DataRow = System.Data.DataRow;
 using Microsoft.Extensions.DependencyInjection;
 using SqlSugar;
 using XiHan.BasicApp.Saas.Domain.Entities;
 using XiHan.BasicApp.Saas.Infrastructure.Idempotency;
+using XiHan.BasicApp.Saas.Tests.TestDatabases;
 using XiHan.BasicApp.Web.Core.Idempotency;
 using XiHan.Framework.Uow;
 
 namespace XiHan.BasicApp.Saas.Tests.Idempotency;
 
 /// <summary>
-/// 接口幂等存储在 PostgreSQL 上的集成测试，未设置 XIHAN_TEST_POSTGRES 时跳过
+/// 接口幂等存储在真实数据库上的集成测试基类，未设置对应连接串环境变量时跳过
 /// </summary>
 /// <remarks>
 /// 每个测试实例重建幂等记录表，结束时只删除这张表。
 /// </remarks>
-public sealed class IdempotencyPostgresTests : IDisposable
+public abstract class IdempotencyDatabaseTests : IDisposable
 {
-    private const string ConnectionStringVariable = "XIHAN_TEST_POSTGRES";
-
     private readonly string? _connectionString;
     private readonly SqlSugarClient? _client;
     private readonly ServiceProvider _provider = IdempotencyStoreTestContext.BuildUnitOfWorkProvider();
-    private readonly IdempotencyOptions _options = new();
-    private readonly ManualTimeProvider _clock = new();
 
     /// <summary>
     /// 设置了连接串时重建幂等记录表
     /// </summary>
-    public IdempotencyPostgresTests()
+    /// <param name="connectionStringVariable">连接串环境变量名</param>
+    /// <param name="databaseType">数据库种类</param>
+    protected IdempotencyDatabaseTests(string connectionStringVariable, DbType databaseType)
     {
-        _connectionString = Environment.GetEnvironmentVariable(ConnectionStringVariable);
-        if (string.IsNullOrWhiteSpace(_connectionString))
+        ConnectionStringVariable = connectionStringVariable;
+        DatabaseType = databaseType;
+        _connectionString = IntegrationDatabase.GetConnectionString(connectionStringVariable);
+        if (_connectionString is null)
         {
             return;
         }
 
-        _client = new SqlSugarClient(new ConnectionConfig
-        {
-            ConnectionString = _connectionString,
-            DbType = DbType.PostgreSQL,
-            IsAutoCloseConnection = true
-        });
+        _client = IntegrationDatabase.CreateClient(databaseType, _connectionString);
         DropIdempotencyTable(_client);
         _client.CodeFirst.InitTables(typeof(SysIdempotencyRecord));
     }
 
     /// <summary>
-    /// 时间列为 timestamp with time zone，响应快照列为 bytea，记录键摘要上有唯一索引
+    /// 连接串环境变量名
+    /// </summary>
+    protected string ConnectionStringVariable { get; }
+
+    /// <summary>
+    /// 数据库种类
+    /// </summary>
+    protected DbType DatabaseType { get; }
+
+    /// <summary>
+    /// 幂等配置
+    /// </summary>
+    protected IdempotencyOptions IdempotencyOptions { get; } = new();
+
+    /// <summary>
+    /// 可推进的时钟
+    /// </summary>
+    protected ManualTimeProvider Clock { get; } = new();
+
+    /// <summary>
+    /// 时间列（DateTimeOffset）的数据类型
+    /// </summary>
+    protected abstract string ExpectedTimestampType { get; }
+
+    /// <summary>
+    /// 二进制列（byte[]）的数据类型
+    /// </summary>
+    protected abstract string ExpectedBinaryType { get; }
+
+    /// <summary>
+    /// 二进制列的最大长度
+    /// </summary>
+    protected abstract long? ExpectedBinaryMaxLength { get; }
+
+    /// <summary>
+    /// 时间列、响应快照列与字符列长度符合该数据库的预期，记录键摘要上有唯一索引
     /// </summary>
     [Fact]
     public async Task InitTables_CreatesExpectedColumnTypesAndUniqueIndex()
@@ -57,23 +87,24 @@ public sealed class IdempotencyPostgresTests : IDisposable
         var client = RequireClient();
         var tableName = client.EntityMaintenance.GetTableName<SysIdempotencyRecord>();
 
-        var columns = await GetColumnsAsync(client, tableName);
+        var columns = await DatabaseSchemaProbe.GetColumnsAsync(client, tableName);
 
         Assert.Equal("Sys_Idempotency_Record", tableName);
-        Assert.Equal("timestamp with time zone", columns["lease_expires_time"].DataType);
-        Assert.Equal("timestamp with time zone", columns["expires_time"].DataType);
-        Assert.Equal("timestamp with time zone", columns["created_time"].DataType);
-        Assert.Equal("timestamp with time zone", columns["completed_time"].DataType);
-        Assert.Equal("bytea", columns["response_body"].DataType);
+        Assert.Equal(ExpectedTimestampType, columns["lease_expires_time"].DataType);
+        Assert.Equal(ExpectedTimestampType, columns["expires_time"].DataType);
+        Assert.Equal(ExpectedTimestampType, columns["created_time"].DataType);
+        Assert.Equal(ExpectedTimestampType, columns["completed_time"].DataType);
+        Assert.Equal(ExpectedBinaryType, columns["response_body"].DataType);
+        Assert.Equal(ExpectedBinaryMaxLength, columns["response_body"].MaxLength);
         Assert.Equal(64, columns["key_hash"].MaxLength);
         Assert.Equal(128, columns["idempotency_key"].MaxLength);
         Assert.Equal(512, columns["endpoint"].MaxLength);
 
-        var indexes = await GetIndexDefinitionsAsync(client, tableName);
+        var indexes = await DatabaseSchemaProbe.GetIndexesAsync(client, tableName);
         var uniqueIndexName = $"ux_{tableName}_keha".ToLowerInvariant();
-        Assert.True(indexes.TryGetValue(uniqueIndexName, out var definition), $"缺少索引 {uniqueIndexName}");
-        Assert.Contains("UNIQUE", definition, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("key_hash", definition, StringComparison.OrdinalIgnoreCase);
+        Assert.True(indexes.TryGetValue(uniqueIndexName, out var index), $"缺少索引 {uniqueIndexName}");
+        Assert.True(index.IsUnique);
+        Assert.Equal(new[] { "key_hash" }, index.Columns);
     }
 
     /// <summary>
@@ -83,7 +114,7 @@ public sealed class IdempotencyPostgresTests : IDisposable
     public async Task Completion_RollsBackWithBusinessTransaction()
     {
         var client = RequireClient();
-        var store = CreateStore(client, _clock);
+        var store = CreateStore(client, Clock);
         var key = CreateKey("rollback");
         var acquired = await store.TryAcquireAsync(key, "fp-a", isTransactional: true);
         Assert.Equal(IdempotencyAcquireStatus.Acquired, acquired.Status);
@@ -113,7 +144,7 @@ public sealed class IdempotencyPostgresTests : IDisposable
     public async Task Completion_CommitsWithBusinessTransaction()
     {
         var client = RequireClient();
-        var store = CreateStore(client, _clock);
+        var store = CreateStore(client, Clock);
         var key = CreateKey("commit");
         var body = new byte[] { 7, 8, 9 };
         var acquired = await store.TryAcquireAsync(key, "fp-a", isTransactional: true);
@@ -135,7 +166,7 @@ public sealed class IdempotencyPostgresTests : IDisposable
     public async Task Completion_WithNullBody_ReplaysNullBody()
     {
         var client = RequireClient();
-        var store = CreateStore(client, _clock);
+        var store = CreateStore(client, Clock);
         var key = CreateKey("null-body");
         var acquired = await store.TryAcquireAsync(key, "fp-a", isTransactional: true);
 
@@ -154,8 +185,8 @@ public sealed class IdempotencyPostgresTests : IDisposable
     public async Task ConcurrentAcquire_TwoStores_ExactlyOneAcquired()
     {
         var connectionString = RequireConnectionString();
-        using var firstClient = CreateScopeClient(connectionString);
-        using var secondClient = CreateScopeClient(connectionString);
+        using var firstClient = IntegrationDatabase.CreateScope(DatabaseType, connectionString);
+        using var secondClient = IntegrationDatabase.CreateScope(DatabaseType, connectionString);
         var first = CreateStore(firstClient, TimeProvider.System);
         var second = CreateStore(secondClient, TimeProvider.System);
         var key = CreateKey("pair");
@@ -176,8 +207,8 @@ public sealed class IdempotencyPostgresTests : IDisposable
     public async Task ConcurrentAcquire_FiftyRequestsAcrossTwoClients_ExactlyOneAcquired()
     {
         var connectionString = RequireConnectionString();
-        using var firstClient = CreateScopeClient(connectionString);
-        using var secondClient = CreateScopeClient(connectionString);
+        using var firstClient = IntegrationDatabase.CreateScope(DatabaseType, connectionString);
+        using var secondClient = IntegrationDatabase.CreateScope(DatabaseType, connectionString);
         var stores = new[]
         {
             CreateStore(firstClient, TimeProvider.System),
@@ -208,14 +239,14 @@ public sealed class IdempotencyPostgresTests : IDisposable
     public async Task ProcessingRecord_CanBeReacquiredAfterLeaseExpires()
     {
         var client = RequireClient();
-        var store = CreateStore(client, _clock);
+        var store = CreateStore(client, Clock);
         var key = CreateKey("lease");
         var first = await store.TryAcquireAsync(key, "fp-a", isTransactional: true);
 
-        _clock.Advance(_options.ProcessingLease - TimeSpan.FromSeconds(1));
+        Clock.Advance(IdempotencyOptions.ProcessingLease - TimeSpan.FromSeconds(1));
         Assert.Equal(IdempotencyAcquireStatus.InProgress, (await store.TryAcquireAsync(key, "fp-a", isTransactional: true)).Status);
 
-        _clock.Advance(TimeSpan.FromSeconds(2));
+        Clock.Advance(TimeSpan.FromSeconds(2));
         var takeover = await store.TryAcquireAsync(key, "fp-a", isTransactional: true);
 
         Assert.Equal(IdempotencyAcquireStatus.Acquired, takeover.Status);
@@ -237,6 +268,54 @@ public sealed class IdempotencyPostgresTests : IDisposable
         }
 
         _provider.Dispose();
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// 取得测试客户端，未设置连接串时跳过
+    /// </summary>
+    protected SqlSugarClient RequireClient()
+    {
+        Assert.SkipWhen(_client is null, $"未设置 {ConnectionStringVariable}");
+        return _client!;
+    }
+
+    /// <summary>
+    /// 取得连接串，未设置时跳过
+    /// </summary>
+    protected string RequireConnectionString()
+    {
+        Assert.SkipWhen(_connectionString is null, $"未设置 {ConnectionStringVariable}");
+        return _connectionString!;
+    }
+
+    /// <summary>
+    /// 建立使用指定客户端与时钟的存储
+    /// </summary>
+    protected SaasIdempotencyStore CreateStore(ISqlSugarClient client, TimeProvider timeProvider)
+    {
+        return new SaasIdempotencyStore(
+            new StubClientResolver(client),
+            _provider.GetRequiredService<IUnitOfWorkManager>(),
+            Microsoft.Extensions.Options.Options.Create(IdempotencyOptions),
+            timeProvider);
+    }
+
+    /// <summary>
+    /// 建立不与其他用例重复的记录键
+    /// </summary>
+    protected static IdempotencyRecordKey CreateKey(string key)
+    {
+        return new IdempotencyRecordKey(string.Empty, "42", "POST", "/api/orders", $"db-{key}-{Guid.NewGuid():N}");
+    }
+
+    /// <summary>
+    /// 按记录键读取记录
+    /// </summary>
+    protected static SysIdempotencyRecord? FindRecord(ISqlSugarClient client, IdempotencyRecordKey key)
+    {
+        var keyHash = key.ComputeHash();
+        return client.Queryable<SysIdempotencyRecord>().Where(record => record.KeyHash == keyHash).First();
     }
 
     private static void DropIdempotencyTable(ISqlSugarClient client)
@@ -247,74 +326,127 @@ public sealed class IdempotencyPostgresTests : IDisposable
             client.DbMaintenance.DropTable(tableName);
         }
     }
+}
 
-    private static SqlSugarScope CreateScopeClient(string connectionString)
+/// <summary>
+/// 接口幂等存储在 PostgreSQL 上的集成测试，未设置 XIHAN_TEST_POSTGRES 时跳过
+/// </summary>
+public sealed class IdempotencyPostgresTests : IdempotencyDatabaseTests
+{
+    /// <summary>
+    /// 构造函数
+    /// </summary>
+    public IdempotencyPostgresTests()
+        : base(IntegrationDatabase.PostgresVariable, DbType.PostgreSQL)
     {
-        return new SqlSugarScope(new ConnectionConfig
+    }
+
+    /// <inheritdoc />
+    protected override string ExpectedTimestampType
+    {
+        get
         {
-            ConnectionString = connectionString,
-            DbType = DbType.PostgreSQL,
-            IsAutoCloseConnection = true
-        });
-    }
-
-    private static IdempotencyRecordKey CreateKey(string key)
-    {
-        return new IdempotencyRecordKey(string.Empty, "42", "POST", "/api/orders", $"pg-{key}-{Guid.NewGuid():N}");
-    }
-
-    private static SysIdempotencyRecord? FindRecord(ISqlSugarClient client, IdempotencyRecordKey key)
-    {
-        var keyHash = key.ComputeHash();
-        return client.Queryable<SysIdempotencyRecord>().Where(record => record.KeyHash == keyHash).First();
-    }
-
-    private static async Task<Dictionary<string, (string DataType, int? MaxLength)>> GetColumnsAsync(ISqlSugarClient client, string tableName)
-    {
-        var table = await client.Ado.GetDataTableAsync(
-            "SELECT column_name, data_type, character_maximum_length FROM information_schema.columns " +
-            "WHERE table_schema = current_schema() AND lower(table_name) = lower(@tableName)",
-            new { tableName });
-
-        var columns = new Dictionary<string, (string DataType, int? MaxLength)>(StringComparer.OrdinalIgnoreCase);
-        foreach (DataRow row in table.Rows)
-        {
-            var maxLength = row["character_maximum_length"] is DBNull ? (int?)null : Convert.ToInt32(row["character_maximum_length"]);
-            columns[(string)row["column_name"]] = ((string)row["data_type"], maxLength);
+            return "timestamp with time zone";
         }
-
-        Assert.NotEmpty(columns);
-        return columns;
     }
 
-    private static async Task<Dictionary<string, string>> GetIndexDefinitionsAsync(ISqlSugarClient client, string tableName)
+    /// <inheritdoc />
+    protected override string ExpectedBinaryType
     {
-        var table = await client.Ado.GetDataTableAsync(
-            "SELECT indexname, indexdef FROM pg_indexes WHERE schemaname = current_schema() AND lower(tablename) = lower(@tableName)",
-            new { tableName });
-
-        return table.Rows.Cast<DataRow>()
-            .ToDictionary(row => ((string)row["indexname"]).ToLowerInvariant(), row => (string)row["indexdef"]);
+        get
+        {
+            return "bytea";
+        }
     }
 
-    private SaasIdempotencyStore CreateStore(ISqlSugarClient client, TimeProvider timeProvider)
+    /// <inheritdoc />
+    protected override long? ExpectedBinaryMaxLength
     {
-        return new SaasIdempotencyStore(
-            new StubClientResolver(client),
-            _provider.GetRequiredService<IUnitOfWorkManager>(),
-            Microsoft.Extensions.Options.Options.Create(_options),
-            timeProvider);
+        get
+        {
+            return null;
+        }
+    }
+}
+
+/// <summary>
+/// 接口幂等存储在 SQL Server 上的集成测试，未设置 XIHAN_TEST_SQLSERVER 时跳过
+/// </summary>
+public sealed class IdempotencySqlServerTests : IdempotencyDatabaseTests
+{
+    /// <summary>
+    /// 构造函数
+    /// </summary>
+    public IdempotencySqlServerTests()
+        : base(IntegrationDatabase.SqlServerVariable, DbType.SqlServer)
+    {
     }
 
-    private SqlSugarClient RequireClient()
+    /// <inheritdoc />
+    protected override string ExpectedTimestampType
     {
-        Assert.SkipWhen(_client is null, $"未设置 {ConnectionStringVariable}");
-        return _client;
+        get
+        {
+            return "datetimeoffset";
+        }
     }
 
-    private string RequireConnectionString()
+    /// <inheritdoc />
+    protected override string ExpectedBinaryType
     {
-        Assert.SkipWhen(_client is null || _connectionString is null, $"未设置 {ConnectionStringVariable}");
-        return _connectionString;
+        get
+        {
+            return "varbinary";
+        }
+    }
+
+    /// <inheritdoc />
+    protected override long? ExpectedBinaryMaxLength
+    {
+        get
+        {
+            return -1;
+        }
+    }
+}
+
+/// <summary>
+/// 接口幂等存储在 MySQL 上的集成测试，未设置 XIHAN_TEST_MYSQL 时跳过
+/// </summary>
+public sealed class IdempotencyMySqlTests : IdempotencyDatabaseTests
+{
+    /// <summary>
+    /// 构造函数
+    /// </summary>
+    public IdempotencyMySqlTests()
+        : base(IntegrationDatabase.MySqlVariable, DbType.MySql)
+    {
+    }
+
+    /// <inheritdoc />
+    protected override string ExpectedTimestampType
+    {
+        get
+        {
+            return "datetime";
+        }
+    }
+
+    /// <inheritdoc />
+    protected override string ExpectedBinaryType
+    {
+        get
+        {
+            return "longblob";
+        }
+    }
+
+    /// <inheritdoc />
+    protected override long? ExpectedBinaryMaxLength
+    {
+        get
+        {
+            return 4294967295L;
+        }
     }
 }
