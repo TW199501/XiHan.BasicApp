@@ -1,0 +1,29 @@
+backend/src/modules/XiHan.BasicApp.Saas/Extensions/ServiceCollectionExtensions.cs
+  s_94057b8e5cf9b6::t_ebdaf6b99a3b27 533-534,558-570
+backend/src/modules/XiHan.BasicApp.Saas/Infrastructure/EventBus/SaasEventBoxCodeFirstConvention.cs
+  s_94057b8e5cf9b6::t_8b5d8270a4b4e2 1-72
+backend/test/XiHan.BasicApp.Saas.Tests/EventBox/EventBoxDatabaseTests.cs
+  s_94057b8e5cf9b6::t_65274de3beadda 74-78,323-373,493-501,549-557,605-613
+backend/test/XiHan.BasicApp.Saas.Tests/EventBox/EventBoxRegistrationTests.cs
+  s_94057b8e5cf9b6::t_78e949ff486a1e 7-8,11,97-124
+backend/test/XiHan.BasicApp.Saas.Tests/EventBox/SaasEventBoxCodeFirstConventionTests.cs
+  s_94057b8e5cf9b6::t_f5b127d330a9e2 1-88
+backend/test/XiHan.BasicApp.Saas.Tests/TestDatabases/IntegrationDatabase.cs
+  s_94057b8e5cf9b6::t_7327cd837c635a 6,14-15,66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "543acd094a52a2f0d17b13ae140f3e43d1bd82c8",
+  "prompts": {},
+  "sessions": {
+    "s_94057b8e5cf9b6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "90574393-d99d-4685-85bc-153dc25d1750",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
