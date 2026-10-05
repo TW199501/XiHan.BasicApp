@@ -1,0 +1,35 @@
+backend/src/framework/XiHan.BasicApp.Core/Data/MySqlConnectionStrings.cs
+  s_94057b8e5cf9b6::t_0fbe39e4cab9aa 7
+backend/src/framework/XiHan.BasicApp.Core/README.md
+  s_94057b8e5cf9b6::t_a543f7be2055c2 9,38-39
+backend/src/modules/XiHan.BasicApp.CodeGeneration/Domain/DomainServices/Implementations/CodeGenDataSourceDomainService.cs
+  s_94057b8e5cf9b6::t_81493116fc61a7 9
+backend/src/modules/XiHan.BasicApp.Saas/Extensions/ServiceCollectionExtensions.cs
+  s_94057b8e5cf9b6::t_8ff4c26ba654cf 8
+backend/src/modules/XiHan.BasicApp.Saas/Infrastructure/MultiTenancy/SaasTenantConnectionProvider.cs
+  s_94057b8e5cf9b6::t_7d8d3c21c4f669 8
+backend/test/XiHan.BasicApp.Core.Tests/MySqlConnectionStringsTests.cs
+  s_94057b8e5cf9b6::t_fb74b247d70465 1-113
+backend/test/XiHan.BasicApp.Saas.Tests/SaasMySqlConnectionConventionTests.cs
+  s_94057b8e5cf9b6::t_c8c417eaba5b1a 21,23
+backend/test/XiHan.BasicApp.Saas.Tests/TestDatabases/IntegrationDatabase.cs
+  s_94057b8e5cf9b6::t_6ddbf0e2a8ff62 5
+backend/test/XiHan.BasicApp.Saas.Tests/TestDatabases/IntegrationDatabaseTests.cs
+  s_94057b8e5cf9b6::t_ed30123a4f6341 5
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3e7848e0a71f4bb98e8a921a8b650c45b5b142f9",
+  "prompts": {},
+  "sessions": {
+    "s_94057b8e5cf9b6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "90574393-d99d-4685-85bc-153dc25d1750",
+        "model": "unknown"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
