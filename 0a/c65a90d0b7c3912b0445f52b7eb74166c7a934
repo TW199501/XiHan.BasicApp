@@ -1,0 +1,21 @@
+backend/src/modules/XiHan.BasicApp.Saas/README.md
+  s_94057b8e5cf9b6::t_c5f5188ff29e82 108-116
+docs/backend/database.md
+  s_94057b8e5cf9b6::t_93482d7c2f4c46 203-238
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0ac65a90d0b7c3912b0445f52b7eb74166c7a934",
+  "prompts": {},
+  "sessions": {
+    "s_94057b8e5cf9b6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "90574393-d99d-4685-85bc-153dc25d1750",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
