@@ -10,7 +10,7 @@ namespace XiHan.BasicApp.Saas.Tests.TestDatabases;
 /// 真实数据库集成测试的连接入口
 /// </summary>
 /// <remarks>
-/// 连接串从环境变量读取，ConfigId 为 IntegrationTest_ 加数据库种类，MySQL 连接串经 MySqlConnectionStrings 规范化。
+/// 连接串从环境变量读取，ConfigId 为 IntegrationTest_ 加数据库种类，MySQL 连接配置经 MySqlConnectionStrings 规范化。
 /// </remarks>
 public static class IntegrationDatabase
 {

@@ -44,24 +44,33 @@ public sealed class MySqlConnectionStringsTests
     /// <summary>
     /// 已显式声明 Utc 时原样保留
     /// </summary>
-    [Fact]
-    public void EnsureUtcDateTimeKind_KeepsExplicitUtc()
+    /// <param name="option">DateTimeKind 选项的写法</param>
+    [Theory]
+    [InlineData("DateTimeKind=Utc")]
+    [InlineData("datetimekind=utc")]
+    [InlineData("DateTime Kind=Utc")]
+    public void EnsureUtcDateTimeKind_KeepsExplicitUtc(string option)
     {
-        var result = MySqlConnectionStrings.EnsureUtcDateTimeKind("Server=h;Database=d;DateTimeKind=Utc");
+        var result = MySqlConnectionStrings.EnsureUtcDateTimeKind($"Server=h;Database=d;{option}");
 
-        Assert.Equal(MySqlDateTimeKind.Utc, new MySqlConnectionStringBuilder(result).DateTimeKind);
+        var builder = new MySqlConnectionStringBuilder(result);
+        Assert.Equal(MySqlDateTimeKind.Utc, builder.DateTimeKind);
+        Assert.Equal(3, builder.Count);
     }
 
     /// <summary>
     /// 显式声明了非 Utc 的 DateTimeKind 时拒绝，异常信息不含连接串
     /// </summary>
+    /// <param name="option">DateTimeKind 选项的写法</param>
     [Theory]
-    [InlineData("Unspecified")]
-    [InlineData("Local")]
-    public void EnsureUtcDateTimeKind_ThrowsForExplicitNonUtc(string kind)
+    [InlineData("DateTimeKind=Unspecified")]
+    [InlineData("DateTimeKind=Local")]
+    [InlineData("datetimekind=local")]
+    [InlineData("DateTime Kind=Local")]
+    public void EnsureUtcDateTimeKind_ThrowsForExplicitNonUtc(string option)
     {
         var exception = Assert.Throws<InvalidOperationException>(
-            () => MySqlConnectionStrings.EnsureUtcDateTimeKind($"Server=secret-host;Pwd=secret-pwd;DateTimeKind={kind}"));
+            () => MySqlConnectionStrings.EnsureUtcDateTimeKind($"Server=secret-host;Pwd=secret-pwd;{option}"));
 
         Assert.DoesNotContain("secret", exception.Message, StringComparison.Ordinal);
     }
@@ -109,5 +118,126 @@ public sealed class MySqlConnectionStringsTests
         MySqlConnectionStrings.Apply(config);
 
         Assert.Equal("Host=h;Database=d", config.ConnectionString);
+        Assert.Null(config.AopEvents?.OnExecutingChangeSql);
+    }
+
+    /// <summary>
+    /// MySQL 连接执行前把 DateTimeOffset 参数转成 UTC，时刻不变，其他参数保持原样
+    /// </summary>
+    [Fact]
+    public void Apply_ConvertsDateTimeOffsetParametersToUtc()
+    {
+        var config = new ConnectionConfig { DbType = DbType.MySql, ConnectionString = "Server=h;Database=d" };
+        var localTime = new DateTimeOffset(2026, 10, 4, 13, 6, 7, 123, TimeSpan.FromHours(8));
+        var otherTime = new DateTimeOffset(2026, 10, 4, 10, 6, 7, 123, TimeSpan.FromHours(5));
+        var utcTime = new DateTimeOffset(2026, 10, 4, 5, 6, 7, 123, TimeSpan.Zero);
+        var dateTime = new DateTime(2026, 10, 4, 5, 6, 7, DateTimeKind.Unspecified);
+
+        MySqlConnectionStrings.Apply(config);
+        var result = config.AopEvents!.OnExecutingChangeSql!(
+            "SELECT 1",
+            [
+                new SugarParameter("@a", localTime),
+                new SugarParameter("@b", otherTime),
+                new SugarParameter("@c", utcTime),
+                new SugarParameter("@d", dateTime),
+                new SugarParameter("@e", "x"),
+                new SugarParameter("@f", null)
+            ]);
+
+        Assert.Equal("SELECT 1", result.Key);
+        var values = result.Value.Select(parameter => parameter.Value).ToArray();
+        Assert.All(values.Take(3), value => Assert.Equal(TimeSpan.Zero, Assert.IsType<DateTimeOffset>(value).Offset));
+        Assert.Equal(localTime.UtcDateTime, ((DateTimeOffset)values[0]).UtcDateTime);
+        Assert.Equal(otherTime.UtcDateTime, ((DateTimeOffset)values[1]).UtcDateTime);
+        Assert.Equal(utcTime, values[2]);
+        Assert.Equal(dateTime, values[3]);
+        Assert.Equal("x", values[4]);
+        Assert.Null(values[5]);
+    }
+
+    /// <summary>
+    /// 已有的执行前钩子先执行，其返回的语句与参数再做 UTC 转换
+    /// </summary>
+    [Fact]
+    public void Apply_ChainsExistingExecutingChangeSql()
+    {
+        var calls = 0;
+        var added = new DateTimeOffset(2026, 10, 4, 10, 6, 7, TimeSpan.FromHours(5));
+        var config = new ConnectionConfig
+        {
+            DbType = DbType.MySqlConnector,
+            ConnectionString = "Server=h;Database=d",
+            AopEvents = new AopEvents
+            {
+                OnExecutingChangeSql = (sql, parameters) =>
+                {
+                    calls++;
+                    return new KeyValuePair<string, SugarParameter[]>(sql + " /*hooked*/", [.. parameters, new SugarParameter("@added", added)]);
+                }
+            }
+        };
+
+        MySqlConnectionStrings.Apply(config);
+        var result = config.AopEvents.OnExecutingChangeSql!("SELECT 1", []);
+
+        Assert.Equal(1, calls);
+        Assert.Equal("SELECT 1 /*hooked*/", result.Key);
+        var value = Assert.IsType<DateTimeOffset>(Assert.Single(result.Value).Value);
+        Assert.Equal(TimeSpan.Zero, value.Offset);
+        Assert.Equal(added.UtcDateTime, value.UtcDateTime);
+    }
+
+    /// <summary>
+    /// 同一连接配置规范化两次，连接串只有一个 DateTimeKind，已有钩子每次执行只调用一次
+    /// </summary>
+    [Fact]
+    public void Apply_Twice_IsIdempotent()
+    {
+        var calls = 0;
+        var config = new ConnectionConfig
+        {
+            DbType = DbType.MySql,
+            ConnectionString = "Server=h;Database=d",
+            AopEvents = new AopEvents
+            {
+                OnExecutingChangeSql = (sql, parameters) =>
+                {
+                    calls++;
+                    return new KeyValuePair<string, SugarParameter[]>(sql, parameters);
+                }
+            }
+        };
+
+        MySqlConnectionStrings.Apply(config);
+        var first = config.AopEvents.OnExecutingChangeSql;
+        MySqlConnectionStrings.Apply(config);
+        config.AopEvents.OnExecutingChangeSql!("SELECT 1", []);
+
+        Assert.Same(first, config.AopEvents.OnExecutingChangeSql);
+        Assert.Equal(1, calls);
+        Assert.Single(config.ConnectionString.Split(';'), part => part.Contains("DateTime", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// 客户端构建时另设其他 AOP 事件，不影响已挂上的执行前钩子
+    /// </summary>
+    [Fact]
+    public void Apply_HookSurvivesClientAopConfiguration()
+    {
+        var config = new ConnectionConfig { ConfigId = "main", DbType = DbType.MySql, ConnectionString = "Server=h;Database=d" };
+        MySqlConnectionStrings.Apply(config);
+        var hook = config.AopEvents!.OnExecutingChangeSql;
+
+        var scope = new SqlSugarScope(config, client =>
+        {
+            var provider = client.GetConnectionScope("main");
+            provider.Aop.OnLogExecuting = (_, _) => { };
+            provider.Aop.OnLogExecuted = (_, _) => { };
+            provider.Aop.OnError = _ => { };
+            provider.Aop.DataExecuting = (_, _) => { };
+        });
+
+        Assert.Same(hook, scope.GetConnectionScope("main").CurrentConnectionConfig.AopEvents.OnExecutingChangeSql);
     }
 }

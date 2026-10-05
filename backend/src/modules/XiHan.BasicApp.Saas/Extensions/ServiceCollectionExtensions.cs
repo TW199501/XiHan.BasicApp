@@ -498,7 +498,7 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// 添加 MySQL 连接约定：框架构建 SqlSugar 连接配置前，把 MySQL 连接串规范化为 DateTimeKind=Utc
+    /// 添加 MySQL 连接约定：框架构建 SqlSugar 连接配置前，把 MySQL 连接串规范化为 DateTimeKind=Utc，并在执行前把 DateTimeOffset 参数转成 UTC
     /// </summary>
     /// <remarks>
     /// 链在已有的 <c>ConfigureConnectionConfigs</c> 钩子之后执行，平台库与运行时新增的租户连接都会经过。

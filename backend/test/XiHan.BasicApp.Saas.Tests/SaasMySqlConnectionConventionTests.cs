@@ -78,6 +78,44 @@ public sealed class SaasMySqlConnectionConventionTests
         Assert.Equal("Host=h;Database=d", postgres.ConnectionString);
     }
 
+    /// <summary>
+    /// 连接约定注册两次，连接串只补一个 DateTimeKind，已有钩子只执行一次，执行前钩子只挂一层
+    /// </summary>
+    [Fact]
+    public void ConnectionConvention_RegisteredTwice_AppliesOnce()
+    {
+        var hookCalls = 0;
+        var services = new ServiceCollection();
+        services.Configure<XiHanSqlSugarCoreOptions>(options => options.ConfigureConnectionConfigs = _ => hookCalls++);
+        services.AddSaasMySqlConnectionConvention();
+        services.AddSaasMySqlConnectionConvention();
+        var options = services.BuildServiceProvider().GetRequiredService<IOptions<XiHanSqlSugarCoreOptions>>().Value;
+        var sqlCalls = 0;
+        var mysql = new ConnectionConfig
+        {
+            DbType = DbType.MySql,
+            ConnectionString = "Server=h;Database=d",
+            AopEvents = new AopEvents
+            {
+                OnExecutingChangeSql = (sql, parameters) =>
+                {
+                    sqlCalls++;
+                    return new KeyValuePair<string, SugarParameter[]>(sql, parameters);
+                }
+            }
+        };
+
+        options.ConfigureConnectionConfigs!([mysql]);
+        var result = mysql.AopEvents.OnExecutingChangeSql!(
+            "SELECT 1",
+            [new SugarParameter("@t", new DateTimeOffset(2026, 10, 4, 10, 6, 7, TimeSpan.FromHours(5)))]);
+
+        Assert.Equal(1, hookCalls);
+        Assert.Equal(1, sqlCalls);
+        Assert.Single(mysql.ConnectionString.Split(';'), part => part.Contains("DateTime", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal(TimeSpan.Zero, Assert.IsType<DateTimeOffset>(Assert.Single(result.Value).Value).Offset);
+    }
+
     private static void InsertTenant(ISqlSugarClient client, long id, TenantDatabaseType databaseType, string connectionString)
     {
         var tenant = new SysTenant

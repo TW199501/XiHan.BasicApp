@@ -250,6 +250,47 @@ public abstract class EventBoxDatabaseTests : IDisposable
     }
 
     /// <summary>
+    /// 以本机时区偏移表示的时刻作查询参数，筛出该时刻的事件
+    /// </summary>
+    [Fact]
+    public async Task CreatedTimeFilter_AcceptsLocalOffsetParameter()
+    {
+        var context = RequireContext();
+        var createdTime = new DateTimeOffset(2026, 10, 4, 5, 6, 7, 123, TimeSpan.Zero);
+        var row = NewOutboxRow(createdTime);
+        await context.Client.Insertable(row).ExecuteCommandAsync();
+        var localOffset = TimeZoneInfo.Local.GetUtcOffset(createdTime.UtcDateTime);
+        var from = createdTime.AddSeconds(-1).ToOffset(localOffset);
+        var to = createdTime.AddSeconds(1).ToOffset(localOffset);
+
+        var rows = await context.Client.Queryable<SysEventOutbox>()
+            .Where(e => e.CreatedTime >= from && e.CreatedTime <= to)
+            .ToListAsync();
+
+        Assert.Equal(row.BasicId, Assert.Single(rows).BasicId);
+    }
+
+    /// <summary>
+    /// 非 UTC 偏移的时刻经实体插入与更新写入后，读回同一时刻
+    /// </summary>
+    [Fact]
+    public async Task NonUtcOffsetTimes_WrittenByEntityRoundTripInstant()
+    {
+        var context = RequireContext();
+        var createdTime = new DateTimeOffset(2026, 10, 4, 10, 6, 7, 123, TimeSpan.FromHours(5));
+        var claimTime = createdTime.AddMinutes(30);
+        var row = NewOutboxRow(createdTime);
+        await context.Client.Insertable(row).ExecuteCommandAsync();
+        row.ClaimTime = claimTime;
+        await context.Client.Updateable(row).UpdateColumns(e => e.ClaimTime).ExecuteCommandAsync();
+
+        var stored = await context.Client.Queryable<SysEventOutbox>().Where(e => e.BasicId == row.BasicId).FirstAsync();
+
+        Assert.Equal(createdTime.UtcDateTime, stored.CreatedTime.UtcDateTime);
+        Assert.Equal(claimTime.UtcDateTime, stored.ClaimTime!.Value.UtcDateTime);
+    }
+
+    /// <summary>
     /// 同一秒内先后入箱的事件按创建时刻领取，主键顺序与时间顺序相反
     /// </summary>
     [Fact]
@@ -305,6 +346,17 @@ public abstract class EventBoxDatabaseTests : IDisposable
     {
         Assert.SkipWhen(_connectionString is null, $"未设置 {ConnectionStringVariable}");
         return _connectionString!;
+    }
+
+    private static SysEventOutbox NewOutboxRow(DateTimeOffset createdTime)
+    {
+        return new SysEventOutbox(Guid.NewGuid())
+        {
+            EventName = "order.created",
+            EventData = [1, 2, 3],
+            CreatedTime = createdTime,
+            Status = SysEventOutbox.StatusPending
+        };
     }
 
     private static OutgoingEventInfo NewOutgoingEvent(EventBoxTestContext context)
