@@ -1,0 +1,21 @@
+backend/src/main/XiHan.BasicApp.WebHost/UpdateScripts/5.6.1/mssql/5.6.1.sql
+  s_94057b8e5cf9b6::t_450e377860d89f 180,310,313-317
+backend/test/XiHan.BasicApp.Saas.Tests/Upgrade/UpgradeScript561DatabaseTests.SqlServerNvarchar.cs
+  s_94057b8e5cf9b6::t_f0e2d69bd31c52 62-67,93-96,178
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ea402c99d04af26b71b432ce7a5821e0f326e69a",
+  "prompts": {},
+  "sessions": {
+    "s_94057b8e5cf9b6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "90574393-d99d-4685-85bc-153dc25d1750",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
