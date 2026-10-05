@@ -177,7 +177,7 @@ END;
 --
 -- 列从系统目录动态查出，不写死表名；没有 varchar 列时不做任何改动，可重复执行。
 -- 每列改为 nvarchar，字符长度、排序规则与可空性保持原样；varchar(max) 改为 nvarchar(max)。
--- 引用这些列的行存储索引先删除，改列后按原名、原定义重建：唯一性、聚集与否、键列顺序与 ASC/DESC、INCLUDE 列、筛选条件，
+-- 引用这些列的行存储索引（含仅在筛选条件中引用的）先删除，改列后按原名、原定义重建：唯一性、聚集与否、键列顺序与 ASC/DESC、INCLUDE 列、筛选条件，
 -- 以及 IGNORE_DUP_KEY、FILLFACTOR、PAD_INDEX、ALLOW_ROW_LOCKS、ALLOW_PAGE_LOCKS、DATA_COMPRESSION 与文件组。
 -- 以下情况报错并列出表名、列名与对象类型，不做改动：长度超过 4000 的 varchar、别名类型、计算列、动态数据掩码、Always Encrypted、
 -- 内存优化表、时态表、CDC 跟踪表、外键、默认值约束、检查约束、被计算列引用、架构绑定引用、手工统计信息、全文索引、
@@ -307,9 +307,14 @@ BEGIN
     END;
 
     WITH affected AS (
-        SELECT DISTINCT ic.object_id, ic.index_id
+        SELECT ic.object_id, ic.index_id
         FROM sys.index_columns AS ic
         JOIN @nvColumns AS n ON n.object_id = ic.object_id AND n.column_id = ic.column_id
+        UNION
+        SELECT i.object_id, i.index_id
+        FROM sys.indexes AS i
+        JOIN @nvColumns AS n ON n.object_id = i.object_id
+        WHERE i.has_filter = 1 AND CHARINDEX(QUOTENAME(n.column_name) COLLATE DATABASE_DEFAULT, i.filter_definition COLLATE DATABASE_DEFAULT) > 0
     )
     INSERT INTO @nvIndexes (object_id, index_id, index_type, drop_sql, create_sql)
     SELECT i.object_id, i.index_id, i.type,

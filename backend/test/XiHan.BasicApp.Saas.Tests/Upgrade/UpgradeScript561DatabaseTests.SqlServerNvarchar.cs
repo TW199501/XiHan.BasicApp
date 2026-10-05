@@ -59,7 +59,12 @@ public sealed partial class UpgradeScript561DatabaseTests
         CREATE TABLE dbo.Sys_E116_Max (Id bigint NOT NULL PRIMARY KEY, Body varchar(max) NULL, Code varchar(50) NOT NULL, Remark varchar(100) NULL, Note varchar(100) NULL);
         CREATE UNIQUE NONCLUSTERED INDEX UX_Sys_E116_Max_Code ON dbo.Sys_E116_Max (Code DESC) INCLUDE (Body) WHERE Code <> ''
             WITH (FILLFACTOR = 80, PAD_INDEX = ON, DATA_COMPRESSION = PAGE);
-        CREATE UNIQUE NONCLUSTERED INDEX UX_Sys_E116_Max_Remark ON dbo.Sys_E116_Max (Remark) WITH (IGNORE_DUP_KEY = ON);
+        CREATE UNIQUE NONCLUSTERED INDEX UX_Sys_E116_Max_Remark ON dbo.Sys_E116_Max (Remark) WITH (IGNORE_DUP_KEY = ON, ALLOW_PAGE_LOCKS = OFF);
+        CREATE NONCLUSTERED INDEX IX_Sys_E116_Max_Filter ON dbo.Sys_E116_Max (Id) WHERE Remark IS NOT NULL;
+        CREATE TABLE dbo.Sys_E116_Clu (Id bigint NOT NULL CONSTRAINT PK_Sys_E116_Clu PRIMARY KEY NONCLUSTERED, Code varchar(50) NOT NULL, Name varchar(100) NULL);
+        CREATE UNIQUE CLUSTERED INDEX UX_Sys_E116_Clu_Code ON dbo.Sys_E116_Clu (Code);
+        CREATE NONCLUSTERED INDEX IX_Sys_E116_Clu_Name ON dbo.Sys_E116_Clu (Name);
+        INSERT INTO dbo.Sys_E116_Clu (Id, Code, Name) VALUES (1, 'c-1', 'n-1');
         INSERT INTO dbo.Sys_E116_Max (Id, Body, Code, Remark, Note) VALUES (1, 'body', 'c-1', 'r-1', 'n-1');
         """;
 
@@ -85,6 +90,10 @@ public sealed partial class UpgradeScript561DatabaseTests
         Assert.Contains(columnsBefore, column => column is { Table: "Sys_E116_Max", Column: "Body", Type: "varchar", CharLength: -1 });
         Assert.Contains(indexesBefore, index => index.StartsWith("Sys_Position|UX_Sys_Position_TeId_PoCo|1|", StringComparison.Ordinal));
         Assert.Contains(indexesBefore, index => index.StartsWith("Sys_E116_Max|UX_Sys_E116_Max_Code|1|0|NONCLUSTERED|([Code]<>'')|0|80|1|PAGE|PRIMARY|Code-,Body+", StringComparison.Ordinal));
+        Assert.Contains(indexesBefore, index => index.StartsWith("Sys_E116_Max|IX_Sys_E116_Max_Filter|0|0|NONCLUSTERED|([Remark] IS NOT NULL)|", StringComparison.Ordinal));
+        Assert.Contains(indexesBefore, index => index.StartsWith("Sys_E116_Max|UX_Sys_E116_Max_Remark|1|0|NONCLUSTERED||1|", StringComparison.Ordinal) && index.EndsWith("|1|0", StringComparison.Ordinal));
+        Assert.Contains(indexesBefore, index => index.StartsWith("Sys_E116_Clu|UX_Sys_E116_Clu_Code|1|0|CLUSTERED|", StringComparison.Ordinal));
+        Assert.Contains(indexesBefore, index => index.StartsWith("Sys_E116_Clu|IX_Sys_E116_Clu_Name|0|0|NONCLUSTERED|", StringComparison.Ordinal));
         string[] expectedRows = ["1|P-1|???|<null>", "2|P-2|Position Two|remark"];
         Assert.Equal(expectedRows, rowsBefore);
         Assert.True(await db.Ado.GetIntAsync("SELECT COUNT(*) FROM sys.stats WHERE object_id = OBJECT_ID(N'dbo.Sys_E116_Max') AND auto_created = 1") > 0);
@@ -166,7 +175,7 @@ public sealed partial class UpgradeScript561DatabaseTests
             "(SELECT STRING_AGG(c.name + CASE WHEN ic.is_included_column = 1 THEN N'+' WHEN ic.is_descending_key = 1 THEN N'-' ELSE N'' END COLLATE DATABASE_DEFAULT, N',') " +
             "WITHIN GROUP (ORDER BY ic.is_included_column, ic.key_ordinal, ic.index_column_id) " +
             "FROM sys.index_columns AS ic JOIN sys.columns AS c ON c.object_id = ic.object_id AND c.column_id = ic.column_id " +
-            "WHERE ic.object_id = i.object_id AND ic.index_id = i.index_id)) COLLATE DATABASE_DEFAULT " +
+            "WHERE ic.object_id = i.object_id AND ic.index_id = i.index_id), N'|', i.allow_row_locks, N'|', i.allow_page_locks) COLLATE DATABASE_DEFAULT " +
             "FROM sys.indexes AS i " +
             "JOIN sys.tables AS tb ON tb.object_id = i.object_id " +
             "JOIN sys.partitions AS p ON p.object_id = i.object_id AND p.index_id = i.index_id AND p.partition_number = 1 " +
