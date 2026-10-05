@@ -1,0 +1,21 @@
+backend/src/modules/XiHan.BasicApp.Saas/Infrastructure/Upgrade/UpgradeScriptDialect.cs
+  s_94057b8e5cf9b6::t_92f8fd31b9d7d5 1-58
+backend/test/XiHan.BasicApp.Saas.Tests/Upgrade/UpgradeScriptDialectTests.cs
+  s_94057b8e5cf9b6::t_5bb38ff2ad99c4 1-49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d2eeaad3dab89f7de47577aedcdecdd5fdf2d627",
+  "prompts": {},
+  "sessions": {
+    "s_94057b8e5cf9b6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "90574393-d99d-4685-85bc-153dc25d1750",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
