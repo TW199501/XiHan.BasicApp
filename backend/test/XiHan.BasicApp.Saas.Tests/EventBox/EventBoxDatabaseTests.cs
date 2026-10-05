@@ -2,6 +2,8 @@
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using MySqlConnector;
 using Npgsql;
 using SqlSugar;
@@ -23,6 +25,12 @@ public abstract class EventBoxDatabaseTests : IDisposable
     private readonly string? _connectionString;
 
     private readonly EventBoxTestContext? _context;
+
+    private const int ConcurrentEventCount = 200;
+
+    private const int ConcurrentClaimerCount = 4;
+
+    private const int ConcurrentBatchSize = 10;
 
     /// <summary>
     /// 设置了连接串时重建收发件箱表
@@ -442,6 +450,77 @@ public abstract class EventBoxDatabaseTests : IDisposable
     }
 
     /// <summary>
+    /// 多个发件箱实例经各自连接同时领取，每条事件只被领取一次且没有异常
+    /// </summary>
+    [Fact]
+    public async Task OutboxClaim_ConcurrentClaimers_NoDuplicateAndNoError()
+    {
+        var context = RequireContext();
+        var connectionString = RequireConnectionString();
+        var seeder = context.CreateOutbox();
+        var expected = new HashSet<Guid>();
+        for (var index = 0; index < ConcurrentEventCount; index++)
+        {
+            var info = NewOutgoingEvent(context);
+            await seeder.EnqueueAsync(info);
+            expected.Add(info.Id);
+        }
+
+        var claimed = await RunConcurrentClaimersAsync(connectionString, (client, tenant) =>
+        {
+            var outbox = new SaasEventOutbox(new TestClientResolver(client, tenant), tenant, Options.Create(new SaasEventBoxOptions()), TimeProvider.System);
+            return async () => [.. (await outbox.GetWaitingEventsAsync(ConcurrentBatchSize)).Select(item => item.Id)];
+        });
+
+        List<OutgoingEventInfo> batch;
+        while ((batch = await seeder.GetWaitingEventsAsync(ConcurrentBatchSize)).Count > 0)
+        {
+            claimed.AddRange(batch.Select(item => item.Id));
+        }
+
+        Assert.Equal(claimed.Count, claimed.Distinct().Count());
+        Assert.True(expected.SetEquals(claimed), $"[{DatabaseType}] 领取到 {claimed.Distinct().Count()} 条，应为 {expected.Count} 条");
+    }
+
+    /// <summary>
+    /// 多个收件箱实例经各自连接同时领取，每条事件只被领取一次且没有异常
+    /// </summary>
+    [Fact]
+    public async Task InboxClaim_ConcurrentClaimers_NoDuplicateAndNoError()
+    {
+        var context = RequireContext();
+        var connectionString = RequireConnectionString();
+        var seeder = context.CreateInbox();
+        var expected = new HashSet<Guid>();
+        for (var index = 0; index < ConcurrentEventCount; index++)
+        {
+            var info = NewIncomingEvent(context, $"db-concurrent-{index}");
+            await seeder.EnqueueAsync(info);
+            expected.Add(info.Id);
+        }
+
+        var claimed = await RunConcurrentClaimersAsync(connectionString, (client, tenant) =>
+        {
+            var inbox = new SaasEventInbox(
+                new TestClientResolver(client, tenant),
+                tenant,
+                Options.Create(new SaasEventBoxOptions()),
+                NullLogger<SaasEventInbox>.Instance,
+                TimeProvider.System);
+            return async () => [.. (await inbox.GetWaitingEventsAsync(ConcurrentBatchSize)).Select(item => item.Id)];
+        });
+
+        List<IncomingEventInfo> batch;
+        while ((batch = await seeder.GetWaitingEventsAsync(ConcurrentBatchSize)).Count > 0)
+        {
+            claimed.AddRange(batch.Select(item => item.Id));
+        }
+
+        Assert.Equal(claimed.Count, claimed.Distinct().Count());
+        Assert.True(expected.SetEquals(claimed), $"[{DatabaseType}] 领取到 {claimed.Distinct().Count()} 条，应为 {expected.Count} 条");
+    }
+
+    /// <summary>
     /// 删除本实例建立的收发件箱表并释放上下文
     /// </summary>
     public void Dispose()
@@ -499,6 +578,53 @@ public abstract class EventBoxDatabaseTests : IDisposable
     {
         context.Clock.Advance(TimeSpan.FromMilliseconds(1));
         return new IncomingEventInfo(Guid.NewGuid(), messageId, "order.created", [1, 2, 3], context.Clock.GetUtcNow().UtcDateTime);
+    }
+
+    private async Task<List<Guid>> RunConcurrentClaimersAsync(
+        string connectionString,
+        Func<ISqlSugarClient, FakeCurrentTenant, Func<Task<List<Guid>>>> createClaimer)
+    {
+        var clients = Enumerable.Range(0, ConcurrentClaimerCount)
+            .Select(_ => IntegrationDatabase.CreateScope(DatabaseType, connectionString))
+            .ToList();
+        try
+        {
+            var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var tasks = clients
+                .Select(client =>
+                {
+                    var claim = createClaimer(client, new FakeCurrentTenant());
+                    return Task.Run(async () =>
+                    {
+                        await start.Task;
+                        var ids = new List<Guid>();
+                        for (var round = 0; round < ConcurrentEventCount; round++)
+                        {
+                            var batch = await claim();
+                            if (batch.Count == 0)
+                            {
+                                break;
+                            }
+
+                            ids.AddRange(batch);
+                        }
+
+                        return ids;
+                    });
+                })
+                .ToList();
+
+            start.SetResult();
+            var results = await Task.WhenAll(tasks);
+            return [.. results.SelectMany(ids => ids)];
+        }
+        finally
+        {
+            foreach (var client in clients)
+            {
+                client.Dispose();
+            }
+        }
     }
 
     private static DatabaseIndex RequireIndex(IReadOnlyDictionary<string, DatabaseIndex> indexes, string name)
