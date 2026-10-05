@@ -200,6 +200,44 @@ CodeFirst 负责首次建表；已有库的结构和数据变化由 Framework Up
 `.EnableDiffLogEvent()` 保留，它单独用是安全的。
 :::
 
+## MySQL 与 SQL Server 的约定
+
+- **MySQL 时间按 UTC 读写**：BasicApp 的每条 MySQL 连接都把连接串规范化为 `DateTimeKind=Utc`，连接串显式设成其他值时，构建连接配置（启动时创建 SqlSugarScope，或运行时新增租户连接）即抛出异常（消息不含连接串）；执行前把 `DateTimeOffset` 参数转成 UTC（挂在 `AopEvents.OnExecutingChangeSql`，串接已有委派）。经 `ConfigureConnectionConfigs` 生效，覆盖平台库、平台模块库与运行时新增的租户主库。
+- **时间列 6 位小数秒**：新建表的时间列为 MySQL `datetime(6)`、SQL Server `datetimeoffset(6)`、PostgreSQL `timestamptz(6)`。已存在的 MySQL 库不会自动改列，时间列仍是 `datetime(0)`，在提供 MySQL 升级脚本（E-86）之前需手动改列。
+- **收件箱去重键**：区分大小写的排序规则与既有 SQL Server 库的修补脚本，见 `backend/src/modules/XiHan.BasicApp.Saas/README.md` 的「事件收发件箱」。
+
+已知限制（MySQL，追踪于 E-115）：
+
+| 情形 | 表现 |
+| --- | --- |
+| 多行批量写入（`Insertable(list)`、`AddRangeAsync`，很可能也包括 `UpdateRangeAsync`） | 时间以墙上时间字面量写入 SQL，不经参数转换；带非 0 偏移的值会被存成错误时刻 |
+| 租户模块库（`Tenant_{id}_Erp`） | 连接串由租户主库派生，继承其 `DateTimeKind=Utc`；不经 `ConfigureConnectionConfigs`，没有参数转换，带非 0 偏移的 `DateTimeOffset` 参数会抛出异常 |
+| `IDynamicConnectionRegistrar` 注册的连接 | 不经 `ConfigureConnectionConfigs`，既没有 UTC 规范化也没有参数转换，由注册方自行处理（代码生成的数据源连接已补上 `DateTimeKind=Utc`） |
+
+## 多数据库集成测试
+
+收发件箱、接口幂等与任务执行历史清理的数据库测试在 PostgreSQL、SQL Server、MySQL 上各跑一遍，每种数据库一个测试类，由环境变量门控：
+
+| 环境变量 | 数据库 | 连接串示例（密码只放环境变量） |
+| --- | --- | --- |
+| `XIHAN_TEST_POSTGRES` | PostgreSQL | `Host=127.0.0.1;Port=15432;Database=xihan_basicapp_test;Username=postgres;Password=***` |
+| `XIHAN_TEST_SQLSERVER` | SQL Server 2022 | `Server=127.0.0.1,14333;Database=xihan_basicapp_test;User Id=sa;Password=***;TrustServerCertificate=True` |
+| `XIHAN_TEST_MYSQL` | MySQL 8.4 | `Server=127.0.0.1;Port=13306;Database=xihan_basicapp_test;Uid=root;Pwd=***;AllowPublicKeyRetrieval=True;SslMode=None` |
+
+- 未设置的变量对应的测试跳过，跳过不算通过；CI 不起数据库，全部跳过。
+- 连接的库必须是专用的一次性测试库：测试会删除并重建 `Sys_Event_Outbox`、`Sys_Event_Inbox`、`Sys_Idempotency_Record` 与自己写入的 `Sys_Task_Log_` 月表。
+- SQL Server 账号需要 `CREATE DATABASE` 权限：部分用例会新建默认排序规则为 `Chinese_PRC_CI_AS` 的临时库，用完即删除。
+- MySQL 测试库保留默认排序规则 `utf8mb4_0900_ai_ci`，用来验证去重键的排序规则。
+- SQL Server 测试库未开启 `READ_COMMITTED_SNAPSHOT`：并发领取用例在 SQL Server 上不覆盖领取更新的状态守卫，去掉守卫时只有 PostgreSQL 与 MySQL 的用例会失败。
+- 在 bash 载入连接串时值要加单引号，否则会在 `;` 处被截断。
+
+```bash
+set -a; . ~/.xihan/basicapp-test.env; set +a
+dotnet test --project backend/test/XiHan.BasicApp.Saas.Tests/XiHan.BasicApp.Saas.Tests.csproj -c Release
+```
+
+共用的连接与表结构查询在测试项目的 `TestDatabases/`（`IntegrationDatabase`、`DatabaseSchemaProbe`）。
+
 ## 排查
 
 | 现象 | 原因 |

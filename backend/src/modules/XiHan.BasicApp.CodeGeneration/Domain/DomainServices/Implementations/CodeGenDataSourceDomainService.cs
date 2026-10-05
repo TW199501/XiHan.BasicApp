@@ -6,6 +6,7 @@ using System.Diagnostics;
 using XiHan.BasicApp.CodeGeneration.Domain.Entities;
 using XiHan.BasicApp.CodeGeneration.Domain.Enums;
 using XiHan.BasicApp.CodeGeneration.Domain.Repositories;
+using XiHan.BasicApp.Core.Data;
 using XiHan.BasicApp.Saas.Domain.Enums;
 using XiHan.Framework.Data.SqlSugar.Connections;
 using XiHan.Framework.Utils.Security.Cryptography;
@@ -299,7 +300,9 @@ public sealed class CodeGenDataSourceDomainService : ICodeGenDataSourceDomainSer
         var explicitConnectionString = DecryptSecret(dataSource.ConnectionString);
         if (!string.IsNullOrWhiteSpace(explicitConnectionString))
         {
-            return explicitConnectionString;
+            return dataSource.DatabaseType == DatabaseType.MySql
+                ? MySqlConnectionStrings.EnsureUtcDateTimeKind(explicitConnectionString)
+                : explicitConnectionString;
         }
 
         var password = DecryptSecret(dataSource.Password) ?? string.Empty;
@@ -308,7 +311,8 @@ public sealed class CodeGenDataSourceDomainService : ICodeGenDataSourceDomainSer
         return dataSource.DatabaseType switch
         {
             DatabaseType.MySql =>
-                $"Server={dataSource.Host};Port={dataSource.Port};Database={dataSource.DatabaseName};Uid={dataSource.UserName};Pwd={password};Connection Timeout={timeout};",
+                MySqlConnectionStrings.EnsureUtcDateTimeKind(
+                    $"Server={dataSource.Host};Port={dataSource.Port};Database={dataSource.DatabaseName};Uid={dataSource.UserName};Pwd={password};Connection Timeout={timeout};"),
             DatabaseType.SqlServer =>
                 $"Server={dataSource.Host},{dataSource.Port};Database={dataSource.DatabaseName};User Id={dataSource.UserName};Password={password};Connect Timeout={timeout};TrustServerCertificate=true;",
             DatabaseType.PostgreSql =>

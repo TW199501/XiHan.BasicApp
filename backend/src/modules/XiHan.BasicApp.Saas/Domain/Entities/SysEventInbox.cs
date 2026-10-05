@@ -82,7 +82,7 @@ public class SysEventInbox : SugarEntity<Guid>
     /// <summary>
     /// 入箱时刻
     /// </summary>
-    [SugarColumn(ColumnName = "Created_Time", IsNullable = false, ColumnDescription = "入箱时刻")]
+    [SugarColumn(ColumnName = "Created_Time", Length = 6, IsNullable = false, ColumnDescription = "入箱时刻")]
     public DateTimeOffset CreatedTime { get; set; }
 
     /// <summary>
@@ -106,7 +106,7 @@ public class SysEventInbox : SugarEntity<Guid>
     /// <summary>
     /// 下次重试时刻
     /// </summary>
-    [SugarColumn(ColumnName = "Next_Retry_Time", IsNullable = true, ColumnDescription = "下次重试时刻")]
+    [SugarColumn(ColumnName = "Next_Retry_Time", Length = 6, IsNullable = true, ColumnDescription = "下次重试时刻")]
     public DateTimeOffset? NextRetryTime { get; set; }
 
     /// <summary>
@@ -118,12 +118,12 @@ public class SysEventInbox : SugarEntity<Guid>
     /// <summary>
     /// 领取时刻
     /// </summary>
-    [SugarColumn(ColumnName = "Claim_Time", IsNullable = true, ColumnDescription = "领取时刻")]
+    [SugarColumn(ColumnName = "Claim_Time", Length = 6, IsNullable = true, ColumnDescription = "领取时刻")]
     public DateTimeOffset? ClaimTime { get; set; }
 
     /// <summary>
     /// 完结时刻
     /// </summary>
-    [SugarColumn(ColumnName = "Handled_Time", IsNullable = true, ColumnDescription = "完结时刻")]
+    [SugarColumn(ColumnName = "Handled_Time", Length = 6, IsNullable = true, ColumnDescription = "完结时刻")]
     public DateTimeOffset? HandledTime { get; set; }
 }

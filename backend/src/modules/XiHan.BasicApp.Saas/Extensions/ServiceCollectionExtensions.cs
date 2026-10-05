@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using XiHan.BasicApp.Core.Data;
 using XiHan.BasicApp.Saas.Application.Authorization;
 using XiHan.BasicApp.Saas.Application.Caching;
 using XiHan.BasicApp.Saas.Application.Contracts;
@@ -44,6 +45,7 @@ using XiHan.Framework.Bot.Telegram.Extensions.DependencyInjection;
 using XiHan.Framework.Bot.WeCom.Abstractions;
 using XiHan.Framework.Data.Extensions.DependencyInjection;
 using XiHan.Framework.Data.SqlSugar.Initializers;
+using XiHan.Framework.Data.SqlSugar.Options;
 using XiHan.Framework.Data.SqlSugar.Tenanting;
 using XiHan.Framework.EventBus.Abstractions.Distributed;
 using XiHan.Framework.EventBus.Distributed;
@@ -116,6 +118,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<SaasTenantConnectionProvider>();
         services.AddSingleton<ISqlSugarTenantConnectionProvider>(sp => sp.GetRequiredService<SaasTenantConnectionProvider>());
         services.AddSingleton<ITenantConnectionCacheInvalidator>(sp => sp.GetRequiredService<SaasTenantConnectionProvider>());
+        services.AddSaasMySqlConnectionConvention();
         // 跨租户后台作业逐作用域（平台与每个数据可达的租户）切入执行，不靠「无租户上下文看全部」
         services.AddScoped<ITenantDataScopeRunner, TenantDataScopeRunner>();
         services.AddScoped<IConfigDomainService, ConfigDomainService>();
@@ -495,10 +498,40 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
+    /// 添加 MySQL 连接约定：框架构建 SqlSugar 连接配置前，把 MySQL 连接串规范化为 DateTimeKind=Utc，并在执行前把 DateTimeOffset 参数转成 UTC
+    /// </summary>
+    /// <remarks>
+    /// 链在已有的 <c>ConfigureConnectionConfigs</c> 钩子之后执行。平台库、平台模块库与运行时新增的租户主库会经过；
+    /// 租户模块库（如 <c>Tenant_{id}_Erp</c>）与经 <c>IDynamicConnectionRegistrar</c> 注册的连接不经过。
+    /// </remarks>
+    /// <param name="services">服务集合</param>
+    /// <returns>服务集合</returns>
+    public static IServiceCollection AddSaasMySqlConnectionConvention(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.PostConfigure<XiHanSqlSugarCoreOptions>(options =>
+        {
+            var previous = options.ConfigureConnectionConfigs;
+            options.ConfigureConnectionConfigs = configs =>
+            {
+                previous?.Invoke(configs);
+                foreach (var config in configs)
+                {
+                    MySqlConnectionStrings.Apply(config);
+                }
+            };
+        });
+
+        return services;
+    }
+
+    /// <summary>
     /// 添加 SaaS 事件收发件箱持久化
     /// </summary>
     /// <remarks>
-    /// 以 SqlSugar 收发件箱替换框架默认的进程内实现，并设为分布式事件总线的默认收发件箱。
+    /// 以 SqlSugar 收发件箱替换框架默认的进程内实现，并设为分布式事件总线的默认收发件箱；
+    /// 在 PostConfigure 阶段经 <see cref="XiHanSqlSugarCoreOptions.ConfigureConnectionConfigs"/> 在每条连接上套用 <see cref="SaasEventBoxCodeFirstConvention"/>，先执行已注册的钩子。
     /// 配置节：<c>Saas:EventBus:Box</c>。
     /// </remarks>
     /// <param name="services">服务集合</param>
@@ -520,6 +553,19 @@ public static class ServiceCollectionExtensions
         {
             options.Outboxes.Configure(config => config.ImplementationType = typeof(SaasEventOutbox));
             options.Inboxes.Configure(config => config.ImplementationType = typeof(SaasEventInbox));
+        });
+
+        services.PostConfigure<XiHanSqlSugarCoreOptions>(options =>
+        {
+            var previous = options.ConfigureConnectionConfigs;
+            options.ConfigureConnectionConfigs = configs =>
+            {
+                previous?.Invoke(configs);
+                foreach (var config in configs)
+                {
+                    SaasEventBoxCodeFirstConvention.Apply(config);
+                }
+            };
         });
 
         services.TryAddScoped<SaasEventOutbox>();

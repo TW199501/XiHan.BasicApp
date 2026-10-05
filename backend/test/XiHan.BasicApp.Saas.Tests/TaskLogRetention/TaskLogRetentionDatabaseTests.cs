@@ -10,6 +10,7 @@ using XiHan.BasicApp.Saas.Domain.Configurations;
 using XiHan.BasicApp.Saas.Domain.DomainServices;
 using XiHan.BasicApp.Saas.Domain.Entities;
 using XiHan.BasicApp.Saas.Infrastructure.Tasks;
+using XiHan.BasicApp.Saas.Tests.TestDatabases;
 using XiHan.Framework.Data.SqlSugar.Clients;
 using XiHan.Framework.Domain.Entities.Abstracts;
 using XiHan.Framework.MultiTenancy.Abstractions;
@@ -193,7 +194,7 @@ public abstract class TaskLogRetentionDatabaseTests : IDisposable
     private SqlSugarClient RequireClient()
     {
         Assert.SkipWhen(_client is null, $"未设置 {ConnectionStringVariable}");
-        return _client!;
+        return _client;
     }
 
     private void Insert(SqlSugarClient client, DateTimeOffset createdTime, long tenantId)
@@ -292,7 +293,7 @@ public sealed class TaskLogRetentionPostgresTests : TaskLogRetentionDatabaseTest
     /// </summary>
     /// <param name="output">测试输出</param>
     public TaskLogRetentionPostgresTests(ITestOutputHelper output)
-        : base(output, "XIHAN_TEST_POSTGRES", DbType.PostgreSQL)
+        : base(output, IntegrationDatabase.PostgresVariable, DbType.PostgreSQL)
     {
     }
 }
@@ -307,7 +308,22 @@ public sealed class TaskLogRetentionMySqlTests : TaskLogRetentionDatabaseTests
     /// </summary>
     /// <param name="output">测试输出</param>
     public TaskLogRetentionMySqlTests(ITestOutputHelper output)
-        : base(output, "XIHAN_TEST_MYSQL", DbType.MySql)
+        : base(output, IntegrationDatabase.MySqlVariable, DbType.MySql)
+    {
+    }
+}
+
+/// <summary>
+/// 任务执行历史清理在 SQL Server 上的集成测试，未设置 XIHAN_TEST_SQLSERVER 时跳过
+/// </summary>
+public sealed class TaskLogRetentionSqlServerTests : TaskLogRetentionDatabaseTests
+{
+    /// <summary>
+    /// 构造函数
+    /// </summary>
+    /// <param name="output">测试输出</param>
+    public TaskLogRetentionSqlServerTests(ITestOutputHelper output)
+        : base(output, IntegrationDatabase.SqlServerVariable, DbType.SqlServer)
     {
     }
 }

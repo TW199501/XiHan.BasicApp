@@ -111,13 +111,13 @@ public class SysIdempotencyRecord : SugarEntity<Guid>
     /// <summary>
     /// 处理中租约到期时间
     /// </summary>
-    [SugarColumn(ColumnName = "Lease_Expires_Time", IsNullable = false, ColumnDescription = "处理中租约到期时间")]
+    [SugarColumn(ColumnName = "Lease_Expires_Time", Length = 6, IsNullable = false, ColumnDescription = "处理中租约到期时间")]
     public DateTimeOffset LeaseExpiresTime { get; set; }
 
     /// <summary>
     /// 完成或不确定记录过期时间
     /// </summary>
-    [SugarColumn(ColumnName = "Expires_Time", IsNullable = true, ColumnDescription = "完成或不确定记录过期时间")]
+    [SugarColumn(ColumnName = "Expires_Time", Length = 6, IsNullable = true, ColumnDescription = "完成或不确定记录过期时间")]
     public DateTimeOffset? ExpiresTime { get; set; }
 
     /// <summary>
@@ -135,12 +135,12 @@ public class SysIdempotencyRecord : SugarEntity<Guid>
     /// <summary>
     /// 创建时间
     /// </summary>
-    [SugarColumn(ColumnName = "Created_Time", IsNullable = false, ColumnDescription = "创建时间")]
+    [SugarColumn(ColumnName = "Created_Time", Length = 6, IsNullable = false, ColumnDescription = "创建时间")]
     public DateTimeOffset CreatedTime { get; set; }
 
     /// <summary>
     /// 完成时间
     /// </summary>
-    [SugarColumn(ColumnName = "Completed_Time", IsNullable = true, ColumnDescription = "完成时间")]
+    [SugarColumn(ColumnName = "Completed_Time", Length = 6, IsNullable = true, ColumnDescription = "完成时间")]
     public DateTimeOffset? CompletedTime { get; set; }
 }
