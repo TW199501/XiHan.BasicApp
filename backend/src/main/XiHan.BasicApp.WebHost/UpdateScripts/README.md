@@ -78,3 +78,4 @@ UpdateScripts/
 - SQL Server 脚本不能含 `GO`，整个文件作为一个批次执行；MySQL 脚本不能用 `DELIMITER`。
 - MySQL 脚本不能用 `@` 用户变量：连接未开启 `AllowUserVariables`，MySqlConnector 会把它当成未定义的参数报错。需要先查再改时，在脚本里建一个临时存储过程，`CALL` 之后 `DROP`（不需要 `DELIMITER`），数据库账号要有 `CREATE ROUTINE` 权限。
 - MySQL 的 DDL 会隐式提交，失败时已执行的语句无法回滚。三种方言都写成可重复执行：PostgreSQL 用 `IF NOT EXISTS` / `DO $$ … $$`，SQL Server 用 `IF OBJECT_ID(N'…', N'U') IS NULL`、`IF COL_LENGTH(N'…', N'…') IS NULL`，MySQL 用 `CREATE TABLE IF NOT EXISTS`，或在临时存储过程里先查 `information_schema` 再执行。
+- 脚本在驱动默认的命令超时（30 秒）内执行。表数据量大时 `ALTER` 可能超时并中断启动，重启后通常仍会超时；这类库先手动执行该版本脚本，再启动。
