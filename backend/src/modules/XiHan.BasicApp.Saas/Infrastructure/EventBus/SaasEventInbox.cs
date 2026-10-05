@@ -123,10 +123,10 @@ public class SaasEventInbox : IEventInbox
     /// 判断指定消息标识是否已入箱
     /// </summary>
     /// <param name="messageId">消息标识</param>
-    /// <returns>已入箱时为 true</returns>
+    /// <returns>已入箱时为 true；消息标识为空、只含空白或以空白字符开头或结尾时为 false</returns>
     public async Task<bool> ExistsByMessageIdAsync(string messageId)
     {
-        if (string.IsNullOrWhiteSpace(messageId))
+        if (string.IsNullOrWhiteSpace(messageId) || HasSurroundingWhiteSpace(messageId))
         {
             return false;
         }

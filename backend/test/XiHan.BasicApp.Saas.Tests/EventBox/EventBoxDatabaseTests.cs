@@ -425,6 +425,23 @@ public abstract class EventBoxDatabaseTests : IDisposable
     }
 
     /// <summary>
+    /// 已入箱的消息标识加上前后空白字符后不视为已入箱
+    /// </summary>
+    [Theory]
+    [InlineData(" msg-ws")]
+    [InlineData("msg-ws ")]
+    [InlineData("	msg-ws")]
+    public async Task InboxExists_MessageIdWithSurroundingWhitespace_ReturnsFalse(string messageId)
+    {
+        var context = RequireContext();
+        var inbox = context.CreateInbox();
+        await inbox.EnqueueAsync(NewIncomingEvent(context, "msg-ws"));
+
+        Assert.True(await inbox.ExistsByMessageIdAsync("msg-ws"));
+        Assert.False(await inbox.ExistsByMessageIdAsync(messageId));
+    }
+
+    /// <summary>
     /// 删除本实例建立的收发件箱表并释放上下文
     /// </summary>
     public void Dispose()
