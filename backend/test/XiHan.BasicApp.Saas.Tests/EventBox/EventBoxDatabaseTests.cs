@@ -1,0 +1,410 @@
+// Copyright (c) 2021-Present XiHanFun and contributors.
+// Licensed under the MIT License. See LICENSE in the project root for license information.
+
+using Microsoft.Data.SqlClient;
+using MySqlConnector;
+using Npgsql;
+using SqlSugar;
+using XiHan.BasicApp.Saas.Domain.Entities;
+using XiHan.BasicApp.Saas.Infrastructure.EventBus;
+using XiHan.BasicApp.Saas.Tests.TestDatabases;
+using XiHan.Framework.EventBus.Abstractions.Distributed;
+
+namespace XiHan.BasicApp.Saas.Tests.EventBox;
+
+/// <summary>
+/// 收发件箱在真实数据库上的集成测试基类，未设置对应连接串环境变量时跳过
+/// </summary>
+/// <remarks>
+/// 每个测试实例重建收发件箱两张表，结束时只删除这两张表。
+/// </remarks>
+public abstract class EventBoxDatabaseTests : IDisposable
+{
+    private readonly string? _connectionString;
+
+    private readonly EventBoxTestContext? _context;
+
+    /// <summary>
+    /// 设置了连接串时重建收发件箱表
+    /// </summary>
+    /// <param name="connectionStringVariable">连接串环境变量名</param>
+    /// <param name="databaseType">数据库种类</param>
+    protected EventBoxDatabaseTests(string connectionStringVariable, DbType databaseType)
+    {
+        ConnectionStringVariable = connectionStringVariable;
+        DatabaseType = databaseType;
+        _connectionString = IntegrationDatabase.GetConnectionString(connectionStringVariable);
+        if (_connectionString is null)
+        {
+            return;
+        }
+
+        var client = IntegrationDatabase.CreateClient(databaseType, _connectionString);
+        DropEventTables(client);
+        client.CodeFirst.InitTables<SysEventOutbox, SysEventInbox>();
+
+        _context = new EventBoxTestContext(client);
+    }
+
+    /// <summary>
+    /// 连接串环境变量名
+    /// </summary>
+    protected string ConnectionStringVariable { get; }
+
+    /// <summary>
+    /// 数据库种类
+    /// </summary>
+    protected DbType DatabaseType { get; }
+
+    /// <summary>
+    /// 时间列（DateTimeOffset）的数据类型
+    /// </summary>
+    protected abstract string ExpectedTimestampType { get; }
+
+    /// <summary>
+    /// 二进制列（byte[]）的数据类型
+    /// </summary>
+    protected abstract string ExpectedBinaryType { get; }
+
+    /// <summary>
+    /// 二进制列的最大长度
+    /// </summary>
+    protected abstract long? ExpectedBinaryMaxLength { get; }
+
+    /// <summary>
+    /// 时间列、二进制列与事件名称列的定义符合该数据库的预期，收件箱带三个索引
+    /// </summary>
+    [Fact]
+    public async Task InitTables_CreatesExpectedColumnTypesAndIndexes()
+    {
+        var context = RequireContext();
+        var outboxTable = context.Client.EntityMaintenance.GetTableName<SysEventOutbox>();
+        var inboxTable = context.Client.EntityMaintenance.GetTableName<SysEventInbox>();
+
+        var outboxColumns = await DatabaseSchemaProbe.GetColumnsAsync(context.Client, outboxTable);
+        var inboxColumns = await DatabaseSchemaProbe.GetColumnsAsync(context.Client, inboxTable);
+
+        foreach (var columns in new[] { outboxColumns, inboxColumns })
+        {
+            Assert.Equal(ExpectedTimestampType, columns["created_time"].DataType);
+            Assert.Equal(ExpectedTimestampType, columns["claim_time"].DataType);
+            Assert.Equal(ExpectedBinaryType, columns["event_data"].DataType);
+            Assert.Equal(ExpectedBinaryMaxLength, columns["event_data"].MaxLength);
+            Assert.Equal(512, columns["event_name"].MaxLength);
+        }
+
+        Assert.Equal(ExpectedTimestampType, inboxColumns["handled_time"].DataType);
+        Assert.Equal(ExpectedTimestampType, inboxColumns["next_retry_time"].DataType);
+
+        var inboxIndexes = await DatabaseSchemaProbe.GetIndexesAsync(context.Client, inboxTable);
+        Assert.False(RequireIndex(inboxIndexes, $"ix_{inboxTable}_st_hati").IsUnique);
+        Assert.False(RequireIndex(inboxIndexes, $"ix_{inboxTable}_st_crti").IsUnique);
+        var dedupIndex = RequireIndex(inboxIndexes, $"ux_{inboxTable}_deke");
+        Assert.True(dedupIndex.IsUnique);
+        Assert.Equal(new[] { "dedup_key" }, dedupIndex.Columns);
+    }
+
+    /// <summary>
+    /// 事务回滚后发件箱不留下事件
+    /// </summary>
+    [Fact]
+    public async Task OutboxEnqueue_InRolledBackTransaction_LeavesNoRow()
+    {
+        var context = RequireContext();
+        var outbox = context.CreateOutbox();
+
+        context.Client.Ado.BeginTran();
+        await outbox.EnqueueAsync(NewOutgoingEvent(context));
+        context.Client.Ado.RollbackTran();
+
+        Assert.Equal(0, await context.Client.Queryable<SysEventOutbox>().CountAsync());
+    }
+
+    /// <summary>
+    /// 已领取的记录在超时前不可再领取，超时后可重新领取
+    /// </summary>
+    [Fact]
+    public async Task OutboxClaim_ReclaimsOnlyAfterClaimTimeout()
+    {
+        var context = RequireContext();
+        var outbox = context.CreateOutbox(new SaasEventBoxOptions { ClaimTimeout = TimeSpan.FromMinutes(5) });
+        var info = NewOutgoingEvent(context);
+        await outbox.EnqueueAsync(info);
+
+        Assert.Equal(info.Id, Assert.Single(await outbox.GetWaitingEventsAsync(10)).Id);
+        Assert.Empty(await outbox.GetWaitingEventsAsync(10));
+
+        context.Clock.Advance(TimeSpan.FromMinutes(5) + TimeSpan.FromSeconds(1));
+        var reclaimed = Assert.Single(await outbox.GetWaitingEventsAsync(10));
+
+        Assert.Equal(info.Id, reclaimed.Id);
+        Assert.Equal(info.EventName, reclaimed.EventName);
+        Assert.Equal(info.EventData, reclaimed.EventData);
+    }
+
+    /// <summary>
+    /// 事务外重复消息标识被忽略；事务内重复时抛出该数据库的原始唯一约束异常，事务仍可回滚
+    /// </summary>
+    [Fact]
+    public async Task InboxEnqueue_DuplicateMessageId_IgnoredOutsideTransactionAndThrowsInside()
+    {
+        var context = RequireContext();
+        var inbox = context.CreateInbox();
+
+        await inbox.EnqueueAsync(NewIncomingEvent(context, "db-dup"));
+        await inbox.EnqueueAsync(NewIncomingEvent(context, "db-dup"));
+
+        Assert.Equal(1, await context.Client.Queryable<SysEventInbox>().CountAsync());
+
+        context.Client.Ado.BeginTran();
+        try
+        {
+            var exception = await Assert.ThrowsAnyAsync<Exception>(() => inbox.EnqueueAsync(NewIncomingEvent(context, "db-dup")));
+            Assert.True(IsDuplicateKeyViolation(exception), $"[{DatabaseType}] 预期唯一约束异常，实际为 {exception.GetType().FullName}");
+        }
+        finally
+        {
+            context.Client.Ado.RollbackTran();
+        }
+
+        Assert.Equal(1, await context.Client.Queryable<SysEventInbox>().CountAsync());
+    }
+
+    /// <summary>
+    /// 只清理超过保留期的已完结记录
+    /// </summary>
+    [Fact]
+    public async Task InboxDeleteOldEvents_RemovesOnlyExpiredHandledRows()
+    {
+        var context = RequireContext();
+        var inbox = context.CreateInbox(new SaasEventBoxOptions { InboxRetentionPeriod = TimeSpan.FromDays(7) });
+        var expired = NewIncomingEvent(context, "db-old");
+        await inbox.EnqueueAsync(expired);
+        await inbox.GetWaitingEventsAsync(10);
+        await inbox.MarkAsProcessedAsync(expired.Id);
+
+        context.Clock.Advance(TimeSpan.FromDays(8));
+
+        var recent = NewIncomingEvent(context, "db-recent");
+        await inbox.EnqueueAsync(recent);
+        await inbox.GetWaitingEventsAsync(10);
+        await inbox.MarkAsDiscardAsync(recent.Id);
+        var pending = NewIncomingEvent(context, "db-pending");
+        await inbox.EnqueueAsync(pending);
+
+        await inbox.DeleteOldEventsAsync();
+
+        var ids = await context.Client.Queryable<SysEventInbox>().Select(e => e.BasicId).ToListAsync();
+        Assert.DoesNotContain(expired.Id, ids);
+        Assert.Contains(recent.Id, ids);
+        Assert.Contains(pending.Id, ids);
+    }
+
+    /// <summary>
+    /// 删除本实例建立的收发件箱表并释放上下文
+    /// </summary>
+    public void Dispose()
+    {
+        if (_context is not null)
+        {
+            DropEventTables(_context.Client);
+            _context.Dispose();
+        }
+
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// 判断异常是否为该数据库的唯一约束冲突
+    /// </summary>
+    /// <param name="exception">捕获的异常</param>
+    /// <returns>是唯一约束冲突时为 true</returns>
+    protected abstract bool IsDuplicateKeyViolation(Exception exception);
+
+    private EventBoxTestContext RequireContext()
+    {
+        Assert.SkipWhen(_context is null, $"未设置 {ConnectionStringVariable}");
+        return _context!;
+    }
+
+    private string RequireConnectionString()
+    {
+        Assert.SkipWhen(_connectionString is null, $"未设置 {ConnectionStringVariable}");
+        return _connectionString!;
+    }
+
+    private static OutgoingEventInfo NewOutgoingEvent(EventBoxTestContext context)
+    {
+        context.Clock.Advance(TimeSpan.FromMilliseconds(1));
+        return new OutgoingEventInfo(Guid.NewGuid(), "order.created", [1, 2, 3], context.Clock.GetUtcNow().UtcDateTime);
+    }
+
+    private static IncomingEventInfo NewIncomingEvent(EventBoxTestContext context, string messageId)
+    {
+        context.Clock.Advance(TimeSpan.FromMilliseconds(1));
+        return new IncomingEventInfo(Guid.NewGuid(), messageId, "order.created", [1, 2, 3], context.Clock.GetUtcNow().UtcDateTime);
+    }
+
+    private static DatabaseIndex RequireIndex(IReadOnlyDictionary<string, DatabaseIndex> indexes, string name)
+    {
+        var key = name.ToLowerInvariant();
+        Assert.True(indexes.TryGetValue(key, out var index), $"缺少索引 {key}");
+        return index;
+    }
+
+    private static void DropEventTables(ISqlSugarClient client)
+    {
+        foreach (var tableName in new[]
+        {
+            client.EntityMaintenance.GetTableName<SysEventOutbox>(),
+            client.EntityMaintenance.GetTableName<SysEventInbox>()
+        })
+        {
+            if (client.DbMaintenance.IsAnyTable(tableName, false))
+            {
+                client.DbMaintenance.DropTable(tableName);
+            }
+        }
+    }
+}
+
+/// <summary>
+/// 收发件箱在 PostgreSQL 上的集成测试，未设置 XIHAN_TEST_POSTGRES 时跳过
+/// </summary>
+public sealed class EventBoxPostgresTests : EventBoxDatabaseTests
+{
+    /// <summary>
+    /// 构造函数
+    /// </summary>
+    public EventBoxPostgresTests()
+        : base(IntegrationDatabase.PostgresVariable, DbType.PostgreSQL)
+    {
+    }
+
+    /// <inheritdoc />
+    protected override string ExpectedTimestampType
+    {
+        get
+        {
+            return "timestamp with time zone";
+        }
+    }
+
+    /// <inheritdoc />
+    protected override string ExpectedBinaryType
+    {
+        get
+        {
+            return "bytea";
+        }
+    }
+
+    /// <inheritdoc />
+    protected override long? ExpectedBinaryMaxLength
+    {
+        get
+        {
+            return null;
+        }
+    }
+
+    /// <inheritdoc />
+    protected override bool IsDuplicateKeyViolation(Exception exception)
+    {
+        return IntegrationDatabase.FindException<PostgresException>(exception) is { SqlState: "23505" };
+    }
+}
+
+/// <summary>
+/// 收发件箱在 SQL Server 上的集成测试，未设置 XIHAN_TEST_SQLSERVER 时跳过
+/// </summary>
+public sealed class EventBoxSqlServerTests : EventBoxDatabaseTests
+{
+    /// <summary>
+    /// 构造函数
+    /// </summary>
+    public EventBoxSqlServerTests()
+        : base(IntegrationDatabase.SqlServerVariable, DbType.SqlServer)
+    {
+    }
+
+    /// <inheritdoc />
+    protected override string ExpectedTimestampType
+    {
+        get
+        {
+            return "datetimeoffset";
+        }
+    }
+
+    /// <inheritdoc />
+    protected override string ExpectedBinaryType
+    {
+        get
+        {
+            return "varbinary";
+        }
+    }
+
+    /// <inheritdoc />
+    protected override long? ExpectedBinaryMaxLength
+    {
+        get
+        {
+            return -1;
+        }
+    }
+
+    /// <inheritdoc />
+    protected override bool IsDuplicateKeyViolation(Exception exception)
+    {
+        return IntegrationDatabase.FindException<SqlException>(exception) is { Number: 2601 or 2627 };
+    }
+}
+
+/// <summary>
+/// 收发件箱在 MySQL 上的集成测试，未设置 XIHAN_TEST_MYSQL 时跳过
+/// </summary>
+public sealed class EventBoxMySqlTests : EventBoxDatabaseTests
+{
+    /// <summary>
+    /// 构造函数
+    /// </summary>
+    public EventBoxMySqlTests()
+        : base(IntegrationDatabase.MySqlVariable, DbType.MySql)
+    {
+    }
+
+    /// <inheritdoc />
+    protected override string ExpectedTimestampType
+    {
+        get
+        {
+            return "datetime";
+        }
+    }
+
+    /// <inheritdoc />
+    protected override string ExpectedBinaryType
+    {
+        get
+        {
+            return "longblob";
+        }
+    }
+
+    /// <inheritdoc />
+    protected override long? ExpectedBinaryMaxLength
+    {
+        get
+        {
+            return 4294967295L;
+        }
+    }
+
+    /// <inheritdoc />
+    protected override bool IsDuplicateKeyViolation(Exception exception)
+    {
+        return IntegrationDatabase.FindException<MySqlException>(exception) is { Number: 1062 };
+    }
+}
