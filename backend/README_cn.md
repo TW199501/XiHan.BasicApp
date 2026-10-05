@@ -104,7 +104,7 @@ dotnet test --solution backend/XiHan.BasicApp.slnx --configuration Release
 
 ## 首次启动
 
-`EnableDbInitialization` / `EnableTableInitialization` / `EnableDataSeeding` 三个开关默认 **true**：给一个能连上的空库，启动即自建库表并播种。种子分两类——基础数据始终执行，演示数据只在 `Saas:Seed:EnableDemoData` 为 true 时写入（缺省不写；开发环境配置开启、生产环境关闭）。执行阶段、写入口径与演示账号见 [框架简介：种子数据](../docs/backend/introduction.md#种子数据)。
+`EnableDbInitialization` / `EnableTableInitialization` / `EnableDataSeeding` 三个开关框架缺省均为 **false**，仓库只在 `appsettings.Development.json` 里把它们全部打开（`appsettings.json` 不含这些键）：以 Development 环境启动并给一个能连上的空库，启动即自建库表并播种；其他环境需在对应配置或环境变量里自行打开。种子分两类——基础数据始终执行，演示数据只在 `Saas:Seed:EnableDemoData` 为 true 时写入（缺省不写；开发环境配置开启、生产环境关闭）。执行阶段、写入口径与演示账号见 [框架简介：种子数据](../docs/backend/introduction.md#种子数据)。
 
 默认超级管理员：账号 `superadmin`、邮箱 `superadmin@xihan.fun`、角色码 `super_admin`、初始密码 `SuperAdmin@123`（写在种子里，账号标记为需要本人改密，参数「密码设置」开启强制改密后首次登录即要求修改）。演示账号的密码都是 `Demo@123`。
 
@@ -112,7 +112,7 @@ dotnet test --solution backend/XiHan.BasicApp.slnx --configuration Release
 
 仓库内约定 `UpdateScripts/<版本号>/<版本号>.sql`，每个版本一个目录。按约定只提供 PostgreSQL 方言，且脚本须可重复安全空转（`IF NOT EXISTS` 之类）。
 
-脚本目前**不会在启动时自动执行**，需要自行在目标库上按版本顺序应用。
+`XiHan:Upgrade:EnableAutoCheckOnStartup` 为 true（缺省）时，启动会按版本顺序**自动执行**待执行的脚本，失败即中断启动；关掉它则要先自行在目标库上按版本顺序应用。详见 [升级与迁移](../docs/backend/upgrade.md)。
 
 ## 测试
 
