@@ -121,6 +121,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ISqlSugarTenantConnectionProvider>(sp => sp.GetRequiredService<SaasTenantConnectionProvider>());
         services.AddSingleton<ITenantConnectionCacheInvalidator>(sp => sp.GetRequiredService<SaasTenantConnectionProvider>());
         services.AddSaasMySqlConnectionConvention();
+        services.AddSaasSqlServerConnectionConvention();
         // 跨租户后台作业逐作用域（平台与每个数据可达的租户）切入执行，不靠「无租户上下文看全部」
         services.AddScoped<ITenantDataScopeRunner, TenantDataScopeRunner>();
         services.AddScoped<IConfigDomainService, ConfigDomainService>();
@@ -521,6 +522,35 @@ public static class ServiceCollectionExtensions
                 foreach (var config in configs)
                 {
                     MySqlConnectionStrings.Apply(config);
+                }
+            };
+        });
+
+        return services;
+    }
+
+    /// <summary>
+    /// 添加 SQL Server 连接约定：框架构建 SqlSugar 连接配置前，为 SQL Server 连接开启 CodeFirst 字符串列 nvarchar
+    /// </summary>
+    /// <remarks>
+    /// 链在已有的 <c>ConfigureConnectionConfigs</c> 钩子之后执行，经过的连接与 <see cref="AddSaasMySqlConnectionConvention"/> 相同；
+    /// 租户模块库（如 <c>Tenant_{id}_Erp</c>）与经 <c>IDynamicConnectionRegistrar</c> 注册的连接不经过。
+    /// </remarks>
+    /// <param name="services">服务集合</param>
+    /// <returns>服务集合</returns>
+    public static IServiceCollection AddSaasSqlServerConnectionConvention(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.PostConfigure<XiHanSqlSugarCoreOptions>(options =>
+        {
+            var previous = options.ConfigureConnectionConfigs;
+            options.ConfigureConnectionConfigs = configs =>
+            {
+                previous?.Invoke(configs);
+                foreach (var config in configs)
+                {
+                    SqlServerConnectionSettings.Apply(config);
                 }
             };
         });
