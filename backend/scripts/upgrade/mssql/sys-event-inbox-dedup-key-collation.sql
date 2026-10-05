@@ -1,7 +1,8 @@
 -- SQL Server：收件箱去重键 Sys_Event_Inbox.Dedup_Key 改为 nvarchar，使用区分大小写、区分重音的排序规则。
 --
--- 目标排序规则由数据库默认排序规则推导：按下划线分段，CI 换成 CS、AI 换成 AS，其余分段不变，
--- 与 SaasEventBoxCodeFirstConvention.ToCaseSensitiveCollation 一致；推导出的排序规则不存在时报错，不做改动。
+-- 目标排序规则由数据库默认排序规则推导，与 SaasEventBoxCodeFirstConvention.GetSqlServerDedupKeyCollationCandidates 一致：
+-- 按下划线分段，CI 换成 CS、AI 换成 AS，去掉原有的 KS、WS，得到 <base>_CS_AS；在 AS 之后插入 KS_WS，得到 <base>_CS_AS_KS_WS。
+-- sys.fn_helpcollations() 中有 <base>_CS_AS_KS_WS 时用它，否则用 <base>_CS_AS，两者都没有时报错，不做改动；二进制排序规则原样使用。
 -- 列改为 nvarchar，字符长度与可空性保持原样；包含该列的索引先删除，改列后按原名、原定义重建。
 -- 表或列不存在、列已是 nvarchar 且排序规则已是目标值时不做任何改动，可重复执行。
 -- 该列不是 varchar/nvarchar、长度超过 4000，或被外键、检查约束、计算列、手工统计信息、非行存储索引引用时报错，不做改动。
@@ -14,9 +15,28 @@ SET XACT_ABORT ON;
 DECLARE @tableName sysname = N'Sys_Event_Inbox';
 DECLARE @columnName sysname = N'Dedup_Key';
 DECLARE @databaseCollation sysname = CONVERT(sysname, DATABASEPROPERTYEX(DB_NAME(), 'Collation'));
-DECLARE @derivedCollation nvarchar(260) =
-    REPLACE(REPLACE(N'_' + @databaseCollation + N'_', N'_CI_', N'_CS_'), N'_AI_', N'_AS_');
-DECLARE @targetCollation sysname = SUBSTRING(@derivedCollation, 2, LEN(@derivedCollation) - 2);
+DECLARE @segments nvarchar(300) = N'_' + @databaseCollation + N'_';
+DECLARE @preferredCollation sysname;
+DECLARE @fallbackCollation sysname;
+DECLARE @targetCollation sysname;
+
+IF CHARINDEX(N'_BIN_', @segments) > 0 OR CHARINDEX(N'_BIN2_', @segments) > 0
+BEGIN
+    SET @preferredCollation = @databaseCollation;
+    SET @fallbackCollation = @databaseCollation;
+END
+ELSE
+BEGIN
+    SET @segments = REPLACE(REPLACE(REPLACE(REPLACE(@segments, N'_CI_', N'_CS_'), N'_AI_', N'_AS_'), N'_KS_', N'_'), N'_WS_', N'_');
+    SET @fallbackCollation = SUBSTRING(@segments, 2, LEN(@segments) - 2);
+    SET @segments = REPLACE(@segments, N'_AS_', N'_AS_KS_WS_');
+    SET @preferredCollation = SUBSTRING(@segments, 2, LEN(@segments) - 2);
+END;
+
+SELECT @targetCollation = CASE
+        WHEN EXISTS (SELECT 1 FROM sys.fn_helpcollations() WHERE name = @preferredCollation) THEN @preferredCollation
+        WHEN EXISTS (SELECT 1 FROM sys.fn_helpcollations() WHERE name = @fallbackCollation) THEN @fallbackCollation
+    END;
 
 DECLARE @objectId int = OBJECT_ID(QUOTENAME(@tableName), N'U');
 DECLARE @columnId int;
@@ -37,9 +57,9 @@ BEGIN
     WHERE c.object_id = @objectId AND c.name = @columnName;
 END;
 
-IF @columnId IS NOT NULL AND (@typeName <> N'nvarchar' OR @currentCollation <> @targetCollation)
+IF @columnId IS NOT NULL AND (@typeName <> N'nvarchar' OR @targetCollation IS NULL OR @currentCollation <> @targetCollation)
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM sys.fn_helpcollations() WHERE name = @targetCollation)
+    IF @targetCollation IS NULL
     BEGIN
         THROW 50001, N'由数据库默认排序规则推导出的区分大小写排序规则不存在，脚本未做改动。', 1;
     END;

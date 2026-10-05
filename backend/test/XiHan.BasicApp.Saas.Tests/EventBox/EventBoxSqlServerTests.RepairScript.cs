@@ -16,7 +16,7 @@ public sealed partial class EventBoxSqlServerTests
     private const string InboxTable = "Sys_Event_Inbox";
 
     /// <summary>
-    /// 建表时去重键使用 nvarchar 与数据库默认排序规则对应的区分大小写版本
+    /// 建表时去重键使用 nvarchar；SQL_ 默认排序规则没有 CS_AS_KS_WS 版本，退回 CS_AS
     /// </summary>
     [Fact]
     public async Task InitTables_DedupKeyCollationIsDerivedFromDatabaseDefault()
@@ -26,6 +26,7 @@ public sealed partial class EventBoxSqlServerTests
         var databaseDefault = await ReadDatabaseCollationAsync(connection);
 
         Assert.Equal("SQL_Latin1_General_CP1_CI_AS", databaseDefault);
+        Assert.False(await CollationExistsAsync(connection, "SQL_Latin1_General_CP1_CS_AS_KS_WS"));
         Assert.Equal(new DedupKeyColumn("nvarchar", 512, false, "SQL_Latin1_General_CP1_CS_AS"), await ReadDedupKeyColumnAsync(connection));
     }
 
@@ -157,6 +158,13 @@ public sealed partial class EventBoxSqlServerTests
     {
         await using var command = new SqlCommand("SELECT CONVERT(nvarchar(128), DATABASEPROPERTYEX(DB_NAME(), 'Collation'))", connection);
         return (string)(await command.ExecuteScalarAsync())!;
+    }
+
+    private static async Task<bool> CollationExistsAsync(SqlConnection connection, string collation)
+    {
+        await using var command = new SqlCommand("SELECT COUNT(*) FROM sys.fn_helpcollations() WHERE name = @name", connection);
+        command.Parameters.AddWithValue("@name", collation);
+        return (int)(await command.ExecuteScalarAsync())! > 0;
     }
 
     private static async Task<DedupKeyColumn> ReadDedupKeyColumnAsync(SqlConnection connection)

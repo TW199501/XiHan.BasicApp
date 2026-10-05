@@ -28,7 +28,7 @@ public sealed class SaasEventBoxCodeFirstConventionTests
     }
 
     /// <summary>
-    /// SQL Server 的去重键使用 nvarchar 与数据库默认排序规则对应的区分大小写版本，数据库默认排序规则只读取一次
+    /// SQL Server 的去重键使用 nvarchar 与按连接解析出的排序规则，排序规则只解析一次
     /// </summary>
     [Fact]
     public void Apply_SetsSqlServerDedupKeyColumnTypeFromDatabaseCollation()
@@ -40,18 +40,18 @@ public sealed class SaasEventBoxCodeFirstConventionTests
         {
             Assert.Same(config, readConfig);
             reads++;
-            return "Chinese_PRC_CI_AS";
+            return "Chinese_PRC_CS_AS_KS_WS";
         });
 
         var column = GetColumn(config, nameof(SysEventInbox.DedupKey));
-        Assert.Equal("nvarchar(256) COLLATE Chinese_PRC_CS_AS", column.DataType);
+        Assert.Equal("nvarchar(256) COLLATE Chinese_PRC_CS_AS_KS_WS", column.DataType);
         Assert.Equal(0, column.Length);
-        Assert.Equal("nvarchar(256) COLLATE Chinese_PRC_CS_AS", GetColumn(config, nameof(SysEventInbox.DedupKey)).DataType);
+        Assert.Equal("nvarchar(256) COLLATE Chinese_PRC_CS_AS_KS_WS", GetColumn(config, nameof(SysEventInbox.DedupKey)).DataType);
         Assert.Equal(1, reads);
     }
 
     /// <summary>
-    /// 读取数据库默认排序规则失败后，下一次映射会重新读取
+    /// 解析排序规则失败后，下一次映射会重新解析
     /// </summary>
     [Fact]
     public void Apply_RetriesDatabaseCollationAfterReadFailure()
@@ -61,7 +61,7 @@ public sealed class SaasEventBoxCodeFirstConventionTests
         SaasEventBoxCodeFirstConvention.Apply(config, _ =>
         {
             reads++;
-            return reads == 1 ? throw new InvalidOperationException("unreachable") : "SQL_Latin1_General_CP1_CI_AS";
+            return reads == 1 ? throw new InvalidOperationException("unreachable") : "SQL_Latin1_General_CP1_CS_AS";
         });
 
         Assert.ThrowsAny<Exception>(() => GetColumn(config, nameof(SysEventInbox.DedupKey)));
@@ -71,7 +71,7 @@ public sealed class SaasEventBoxCodeFirstConventionTests
     }
 
     /// <summary>
-    /// 不是 SQL Server 时不读取数据库默认排序规则
+    /// 不是 SQL Server 时不解析排序规则
     /// </summary>
     [Theory]
     [InlineData(DbType.MySql)]
@@ -86,27 +86,57 @@ public sealed class SaasEventBoxCodeFirstConventionTests
     }
 
     /// <summary>
-    /// 区分大小写版本：CI 换成 CS、AI 换成 AS，其余部分不变
+    /// 候选排序规则按优先顺序为 CS_AS_KS_WS、CS_AS：CI 换成 CS、AI 换成 AS，去掉原有的 KS、WS，其余分段不变
     /// </summary>
     [Theory]
-    [InlineData("SQL_Latin1_General_CP1_CI_AS", "SQL_Latin1_General_CP1_CS_AS")]
-    [InlineData("Chinese_PRC_CI_AS", "Chinese_PRC_CS_AS")]
-    [InlineData("Latin1_General_100_CI_AI_SC_UTF8", "Latin1_General_100_CS_AS_SC_UTF8")]
-    [InlineData("Latin1_General_100_CI_AS_KS_WS", "Latin1_General_100_CS_AS_KS_WS")]
-    [InlineData("SQL_Latin1_General_CP1_CS_AS", "SQL_Latin1_General_CP1_CS_AS")]
-    [InlineData("Latin1_General_100_BIN2", "Latin1_General_100_BIN2")]
-    public void ToCaseSensitiveCollation_ReplacesInsensitiveParts(string collation, string expected)
+    [InlineData("SQL_Latin1_General_CP1_CI_AS", "SQL_Latin1_General_CP1_CS_AS_KS_WS", "SQL_Latin1_General_CP1_CS_AS")]
+    [InlineData("Chinese_PRC_CI_AS", "Chinese_PRC_CS_AS_KS_WS", "Chinese_PRC_CS_AS")]
+    [InlineData("Latin1_General_100_CI_AI_SC_UTF8", "Latin1_General_100_CS_AS_KS_WS_SC_UTF8", "Latin1_General_100_CS_AS_SC_UTF8")]
+    [InlineData("Latin1_General_CI_AS_KS_WS", "Latin1_General_CS_AS_KS_WS", "Latin1_General_CS_AS")]
+    [InlineData("Latin1_General_CS_AS", "Latin1_General_CS_AS_KS_WS", "Latin1_General_CS_AS")]
+    public void GetSqlServerDedupKeyCollationCandidates_PrefersKanaAndWidthSensitive(string databaseCollation, string preferred, string fallback)
     {
-        Assert.Equal(expected, SaasEventBoxCodeFirstConvention.ToCaseSensitiveCollation(collation));
+        Assert.Equal([preferred, fallback], SaasEventBoxCodeFirstConvention.GetSqlServerDedupKeyCollationCandidates(databaseCollation));
     }
 
     /// <summary>
-    /// 既没有大小写部分也不是二进制排序规则时报错
+    /// 二进制排序规则原样作为唯一候选
     /// </summary>
     [Fact]
-    public void ToCaseSensitiveCollation_RejectsUnknownCollation()
+    public void GetSqlServerDedupKeyCollationCandidates_KeepsBinaryCollation()
     {
-        Assert.Throws<ArgumentException>(() => SaasEventBoxCodeFirstConvention.ToCaseSensitiveCollation("Latin1_General"));
+        Assert.Equal(["Latin1_General_100_BIN2"], SaasEventBoxCodeFirstConvention.GetSqlServerDedupKeyCollationCandidates("Latin1_General_100_BIN2"));
+    }
+
+    /// <summary>
+    /// 既没有大小写分段也不是二进制排序规则时报错
+    /// </summary>
+    [Fact]
+    public void GetSqlServerDedupKeyCollationCandidates_RejectsUnknownCollation()
+    {
+        Assert.Throws<ArgumentException>(() => SaasEventBoxCodeFirstConvention.GetSqlServerDedupKeyCollationCandidates("Latin1_General"));
+    }
+
+    /// <summary>
+    /// 选用第一个可用的候选：有 CS_AS_KS_WS 时用它，没有时退回 CS_AS
+    /// </summary>
+    [Theory]
+    [InlineData("Chinese_PRC_CI_AS", "Chinese_PRC_CS_AS_KS_WS")]
+    [InlineData("SQL_Latin1_General_CP1_CI_AS", "SQL_Latin1_General_CP1_CS_AS")]
+    public void SelectSqlServerDedupKeyCollation_UsesFirstAvailableCandidate(string databaseCollation, string expected)
+    {
+        string[] available = ["Chinese_PRC_CS_AS", "Chinese_PRC_CS_AS_KS_WS", "SQL_Latin1_General_CP1_CS_AS"];
+
+        Assert.Equal(expected, SaasEventBoxCodeFirstConvention.SelectSqlServerDedupKeyCollation(databaseCollation, available));
+    }
+
+    /// <summary>
+    /// 没有可用的候选时报错
+    /// </summary>
+    [Fact]
+    public void SelectSqlServerDedupKeyCollation_ThrowsWhenNoCandidateAvailable()
+    {
+        Assert.Throws<InvalidOperationException>(() => SaasEventBoxCodeFirstConvention.SelectSqlServerDedupKeyCollation("Chinese_PRC_CI_AS", ["Latin1_General_CS_AS"]));
     }
 
     /// <summary>
