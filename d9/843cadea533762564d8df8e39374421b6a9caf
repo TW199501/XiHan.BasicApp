@@ -1,0 +1,24 @@
+backend/test/XiHan.BasicApp.Saas.Tests/EventBox/EventBoxSqlServerTests.RepairScript.cs
+  s_94057b8e5cf9b6::t_91a24b8540bb34 1-236
+  s_94057b8e5cf9b6::t_e317d96cede106 237
+backend/scripts/upgrade/mssql/sys-event-inbox-dedup-key-collation.sql
+  s_94057b8e5cf9b6::t_0c88218e9dea2a 1-119
+backend/src/modules/XiHan.BasicApp.Saas/Infrastructure/EventBus/SaasEventBoxCodeFirstConvention.cs
+  s_94057b8e5cf9b6::t_23e6c8e7492cca 15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d9843cadea533762564d8df8e39374421b6a9caf",
+  "prompts": {},
+  "sessions": {
+    "s_94057b8e5cf9b6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "90574393-d99d-4685-85bc-153dc25d1750",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
