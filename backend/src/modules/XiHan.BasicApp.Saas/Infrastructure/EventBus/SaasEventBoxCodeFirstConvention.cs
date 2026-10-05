@@ -12,7 +12,7 @@ namespace XiHan.BasicApp.Saas.Infrastructure.EventBus;
 /// <remarks>
 /// 收件箱去重键在 MySQL 使用 <see cref="MySqlDedupKeyCollation"/>、在 SQL Server 使用 <see cref="SqlServerDedupKeyCollation"/>，
 /// 比较与唯一索引都区分大小写；列类型与 SqlSugar 对字符串的建表映射一致（MySQL varchar；SQL Server 默认 varchar，开启 <c>SqlServerCodeFirstNvarchar</c> 时 nvarchar），其他数据库沿用默认列定义。
-/// 只影响建表，不修改已存在的表。
+/// 只影响建表，不修改已存在的表；SQL Server 既有库的修复脚本见 <c>backend/scripts/upgrade/mssql/sys-event-inbox-dedup-key-collation.sql</c>。
 /// </remarks>
 public static class SaasEventBoxCodeFirstConvention
 {
