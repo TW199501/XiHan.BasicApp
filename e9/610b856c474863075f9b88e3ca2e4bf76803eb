@@ -1,0 +1,19 @@
+backend/src/main/XiHan.BasicApp.WebHost/UpdateScripts/README.md
+  s_e341848ede711f::t_18b026bfcd8e49 81
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e9610b856c474863075f9b88e3ca2e4bf76803eb",
+  "prompts": {},
+  "sessions": {
+    "s_e341848ede711f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "db6c0729-14d9-4317-989a-dd3108172b84",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
