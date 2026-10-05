@@ -4,13 +4,22 @@
 -- 按下划线分段，CI 换成 CS、AI 换成 AS，去掉原有的 KS、WS，得到 <base>_CS_AS；在 AS 之后插入 KS_WS，得到 <base>_CS_AS_KS_WS。
 -- sys.fn_helpcollations() 中有 <base>_CS_AS_KS_WS 时用它，否则用 <base>_CS_AS，两者都没有时报错，不做改动；二进制排序规则原样使用。
 -- 列改为 nvarchar，字符长度与可空性保持原样；包含该列的索引先删除，改列后按原名、原定义重建。
+-- 重建时保留键列顺序与 ASC/DESC、INCLUDE 列、筛选条件、唯一性、主键/唯一约束、聚集与否，
+-- 以及 IGNORE_DUP_KEY、FILLFACTOR、PAD_INDEX、ALLOW_ROW_LOCKS、ALLOW_PAGE_LOCKS、DATA_COMPRESSION 与文件组。
 -- 表或列不存在、列已是 nvarchar 且排序规则已是目标值时不做任何改动，可重复执行。
--- 该列不是 varchar/nvarchar、长度超过 4000，或被外键、检查约束、计算列、手工统计信息、非行存储索引引用时报错，不做改动。
+-- 该列不是 varchar/nvarchar、长度超过 4000，或被外键、检查约束、计算列、手工统计信息、非行存储索引、分区索引引用时报错，不做改动。
 -- 原列为 varchar 时，写入时无法用该代码页表示的字符已存成 ?，转换后仍是 ?，无法恢复。
--- 整个脚本作为一个批次执行，改动在一个事务内完成。
+-- 整个脚本作为一个批次执行，改动在一个事务内完成；开头的 SET 选项满足筛选索引的建立要求，与客户端的默认设置无关。
 
 SET NOCOUNT ON;
 SET XACT_ABORT ON;
+SET ANSI_NULLS ON;
+SET ANSI_PADDING ON;
+SET ANSI_WARNINGS ON;
+SET ARITHABORT ON;
+SET CONCAT_NULL_YIELDS_NULL ON;
+SET QUOTED_IDENTIFIER ON;
+SET NUMERIC_ROUNDABORT OFF;
 
 DECLARE @tableName sysname = N'Sys_Event_Inbox';
 DECLARE @columnName sysname = N'Dedup_Key';
@@ -89,9 +98,10 @@ BEGIN
                    WHERE s.object_id = @objectId AND sc.column_id = @columnId AND s.user_created = 1)
         OR EXISTS (SELECT 1 FROM sys.indexes AS i
                    JOIN sys.index_columns AS ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id
-                   WHERE i.object_id = @objectId AND ic.column_id = @columnId AND i.type NOT IN (1, 2))
+                   JOIN sys.data_spaces AS ds ON ds.data_space_id = i.data_space_id
+                   WHERE i.object_id = @objectId AND ic.column_id = @columnId AND (i.type NOT IN (1, 2) OR ds.type <> 'FG'))
     BEGIN
-        THROW 50003, N'Sys_Event_Inbox.Dedup_Key 被外键、检查约束、计算列、手工统计信息或非行存储索引引用，脚本未做改动。', 1;
+        THROW 50003, N'Sys_Event_Inbox.Dedup_Key 被外键、检查约束、计算列、手工统计信息、非行存储索引或分区索引引用，脚本未做改动。', 1;
     END;
 
     DECLARE @qualifiedTable nvarchar(600) = QUOTENAME(OBJECT_SCHEMA_NAME(@objectId)) + N'.' + QUOTENAME(@tableName);
@@ -104,8 +114,17 @@ BEGIN
     DECLARE @createIndexes nvarchar(max);
 
     WITH affected AS (
-        SELECT i.index_id, i.name, i.type_desc, i.is_unique, i.is_primary_key, i.is_unique_constraint, i.filter_definition
+        SELECT i.index_id, i.name, i.type_desc, i.is_unique, i.is_primary_key, i.is_unique_constraint, i.filter_definition,
+               N' WITH (PAD_INDEX = ' + CASE WHEN i.is_padded = 1 THEN N'ON' ELSE N'OFF' END +
+               CASE WHEN i.fill_factor > 0 THEN N', FILLFACTOR = ' + CONVERT(nvarchar(3), i.fill_factor) ELSE N'' END +
+               CASE WHEN i.is_unique = 1 THEN N', IGNORE_DUP_KEY = ' + CASE WHEN i.ignore_dup_key = 1 THEN N'ON' ELSE N'OFF' END ELSE N'' END +
+               N', ALLOW_ROW_LOCKS = ' + CASE WHEN i.allow_row_locks = 1 THEN N'ON' ELSE N'OFF' END +
+               N', ALLOW_PAGE_LOCKS = ' + CASE WHEN i.allow_page_locks = 1 THEN N'ON' ELSE N'OFF' END +
+               N', DATA_COMPRESSION = ' + p.data_compression_desc COLLATE DATABASE_DEFAULT +
+               N') ON ' + QUOTENAME(ds.name) AS storage_options
         FROM sys.indexes AS i
+        JOIN sys.data_spaces AS ds ON ds.data_space_id = i.data_space_id
+        JOIN sys.partitions AS p ON p.object_id = i.object_id AND p.index_id = i.index_id AND p.partition_number = 1
         WHERE i.object_id = @objectId
           AND EXISTS (SELECT 1 FROM sys.index_columns AS ic
                       WHERE ic.object_id = i.object_id AND ic.index_id = i.index_id AND ic.column_id = @columnId)
@@ -133,11 +152,11 @@ BEGIN
             CASE WHEN is_primary_key = 1 OR is_unique_constraint = 1
                  THEN N'ALTER TABLE ' + @qualifiedTable + N' ADD CONSTRAINT ' + QUOTENAME(name) +
                       CASE WHEN is_primary_key = 1 THEN N' PRIMARY KEY ' ELSE N' UNIQUE ' END + type_desc +
-                      N' (' + key_columns + N');'
+                      N' (' + key_columns + N')' + storage_options + N';'
                  ELSE N'CREATE ' + CASE WHEN is_unique = 1 THEN N'UNIQUE ' ELSE N'' END + type_desc +
                       N' INDEX ' + QUOTENAME(name) + N' ON ' + @qualifiedTable + N' (' + key_columns + N')' +
                       ISNULL(N' INCLUDE (' + included_columns + N')', N'') +
-                      ISNULL(N' WHERE ' + filter_definition, N'') + N';'
+                      ISNULL(N' WHERE ' + filter_definition, N'') + storage_options + N';'
             END) COLLATE DATABASE_DEFAULT, NCHAR(10))
     FROM definitions;
 

@@ -100,6 +100,40 @@ public sealed partial class EventBoxSqlServerTests
     }
 
     /// <summary>
+    /// 修复脚本重建索引时保留筛选条件、IGNORE_DUP_KEY、填充因子、压缩与文件组
+    /// </summary>
+    [Fact]
+    public async Task DedupKeyRepairScript_PreservesIndexOptions()
+    {
+        var connectionString = RequireConnectionString();
+        using var legacy = CreateLegacyClient(connectionString);
+        legacy.DbMaintenance.DropTable(InboxTable);
+        legacy.CodeFirst.InitTables<SysEventInbox>();
+        await using var connection = await OpenConnectionAsync(connectionString);
+        await using (var command = new SqlCommand($"""
+            DROP INDEX [UX_{InboxTable}_DeKe] ON [{InboxTable}];
+            CREATE UNIQUE NONCLUSTERED INDEX [UX_{InboxTable}_DeKe] ON [{InboxTable}] ([Dedup_Key] ASC)
+                WITH (IGNORE_DUP_KEY = ON, FILLFACTOR = 80, PAD_INDEX = ON, DATA_COMPRESSION = PAGE) ON [PRIMARY];
+            CREATE NONCLUSTERED INDEX [IX_{InboxTable}_DeKe_Pending] ON [{InboxTable}] ([Dedup_Key] DESC)
+                INCLUDE ([Status]) WHERE [Status] = 0;
+            """, connection))
+        {
+            await command.ExecuteNonQueryAsync();
+        }
+
+        var indexesBefore = await ReadIndexesAsync(connection);
+        var optionsBefore = await ReadIndexOptionsAsync(connection);
+        Assert.Contains($"UX_{InboxTable}_DeKe|1|80|1|PAGE|PRIMARY|", optionsBefore);
+        Assert.Contains($"IX_{InboxTable}_DeKe_Pending|0|0|0|NONE|PRIMARY|([Status]=(0))", optionsBefore);
+
+        await ExecuteRepairScriptAsync(connection);
+
+        Assert.Equal("nvarchar", (await ReadDedupKeyColumnAsync(connection)).TypeName);
+        Assert.Equal(indexesBefore, await ReadIndexesAsync(connection));
+        Assert.Equal(optionsBefore, await ReadIndexOptionsAsync(connection));
+    }
+
+    /// <summary>
     /// 收件箱表不存在时，修复脚本不报错也不建表
     /// </summary>
     [Fact]
@@ -206,6 +240,28 @@ public sealed partial class EventBoxSqlServerTests
         }
 
         return indexes;
+    }
+
+    private static async Task<List<string>> ReadIndexOptionsAsync(SqlConnection connection)
+    {
+        const string sql = """
+            SELECT i.name, i.ignore_dup_key, i.fill_factor, i.is_padded, p.data_compression_desc, ds.name, ISNULL(i.filter_definition, N'')
+            FROM sys.indexes i
+            JOIN sys.partitions p ON p.object_id = i.object_id AND p.index_id = i.index_id
+            JOIN sys.data_spaces ds ON ds.data_space_id = i.data_space_id
+            WHERE i.object_id = OBJECT_ID(@table, N'U') AND i.name IS NOT NULL
+            ORDER BY i.name
+            """;
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.AddWithValue("@table", InboxTable);
+        await using var reader = await command.ExecuteReaderAsync();
+        var options = new List<string>();
+        while (await reader.ReadAsync())
+        {
+            options.Add($"{reader.GetString(0)}|{(reader.GetBoolean(1) ? 1 : 0)}|{reader.GetByte(2)}|{(reader.GetBoolean(3) ? 1 : 0)}|{reader.GetString(4)}|{reader.GetString(5)}|{reader.GetString(6)}");
+        }
+
+        return options;
     }
 
     private static async Task<List<string>> ReadRowsAsync(SqlConnection connection)
