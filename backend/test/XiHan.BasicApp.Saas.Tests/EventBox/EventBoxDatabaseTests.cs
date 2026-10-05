@@ -407,6 +407,24 @@ public abstract class EventBoxDatabaseTests : IDisposable
     }
 
     /// <summary>
+    /// 消息标识前后带空白字符时拒绝入箱，不写入任何记录
+    /// </summary>
+    [Theory]
+    [InlineData(" msg-ws")]
+    [InlineData("msg-ws ")]
+    [InlineData("	msg-ws")]
+    public async Task InboxEnqueue_MessageIdWithSurroundingWhitespace_Throws(string messageId)
+    {
+        var context = RequireContext();
+        var inbox = context.CreateInbox();
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() => inbox.EnqueueAsync(NewIncomingEvent(context, messageId)));
+
+        Assert.Equal("incomingEvent", exception.ParamName);
+        Assert.Equal(0, await context.Client.Queryable<SysEventInbox>().CountAsync());
+    }
+
+    /// <summary>
     /// 删除本实例建立的收发件箱表并释放上下文
     /// </summary>
     public void Dispose()

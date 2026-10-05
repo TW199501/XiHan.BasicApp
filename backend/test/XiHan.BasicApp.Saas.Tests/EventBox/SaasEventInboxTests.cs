@@ -260,6 +260,38 @@ public sealed class SaasEventInboxTests : IDisposable
     }
 
     /// <summary>
+    /// 消息标识前后带空白字符时拒绝入箱，不写入任何记录
+    /// </summary>
+    [Theory]
+    [InlineData(" msg-ws")]
+    [InlineData("msg-ws ")]
+    [InlineData("	msg-ws")]
+    public async Task Enqueue_MessageIdWithSurroundingWhitespace_Throws(string messageId)
+    {
+        var inbox = _context.CreateInbox();
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() => inbox.EnqueueAsync(NewEvent(messageId)));
+
+        Assert.Equal("incomingEvent", exception.ParamName);
+        Assert.Equal(0, await _context.Client.Queryable<SysEventInbox>().CountAsync());
+    }
+
+    /// <summary>
+    /// 只含空白的消息标识视为没有消息标识，照常入箱
+    /// </summary>
+    [Fact]
+    public async Task Enqueue_WhitespaceOnlyMessageId_StoredWithoutMessageId()
+    {
+        var inbox = _context.CreateInbox();
+
+        await inbox.EnqueueAsync(NewEvent("   "));
+
+        var entity = await _context.Client.Queryable<SysEventInbox>().FirstAsync();
+        Assert.Null(entity.MessageId);
+        Assert.StartsWith(EventInboxMapper.NoMessageIdKeyPrefix, entity.DedupKey, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// 释放测试上下文
     /// </summary>
     public void Dispose()

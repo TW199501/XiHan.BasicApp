@@ -18,6 +18,7 @@ namespace XiHan.BasicApp.Saas.Infrastructure.EventBus;
 /// <remarks>
 /// 全部读写脱离租户上下文在平台主库执行；以去重键唯一索引按消息标识去重。
 /// 完结与重试只作用于已领取状态的记录，已完结的记录不会被改回待处理。
+/// 消息标识以空白字符开头或结尾时拒绝入箱。
 /// </remarks>
 public class SaasEventInbox : IEventInbox
 {
@@ -55,9 +56,15 @@ public class SaasEventInbox : IEventInbox
     /// 将事件信息添加到收件箱，去重键已存在时忽略
     /// </summary>
     /// <param name="incomingEvent">入站事件信息</param>
+    /// <exception cref="ArgumentException">消息标识以空白字符开头或结尾</exception>
     public async Task EnqueueAsync(IncomingEventInfo incomingEvent)
     {
         ArgumentNullException.ThrowIfNull(incomingEvent);
+
+        if (HasSurroundingWhiteSpace(incomingEvent.MessageId))
+        {
+            throw new ArgumentException("消息标识不能以空白字符开头或结尾。", nameof(incomingEvent));
+        }
 
         var entity = EventInboxMapper.ToEntity(incomingEvent);
         var dedupKey = entity.DedupKey;
@@ -85,6 +92,15 @@ public class SaasEventInbox : IEventInbox
                 _logger.LogDebug(ex, "收件箱已存在去重键为 {DedupKey} 的记录，本次入箱已忽略。", dedupKey);
             }
         }
+    }
+
+    /// <summary>
+    /// 判断消息标识是否以空白字符开头或结尾；空值与只含空白的值返回 false
+    /// </summary>
+    private static bool HasSurroundingWhiteSpace(string? messageId)
+    {
+        return !string.IsNullOrWhiteSpace(messageId) &&
+               (char.IsWhiteSpace(messageId[0]) || char.IsWhiteSpace(messageId[^1]));
     }
 
     /// <summary>
