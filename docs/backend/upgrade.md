@@ -72,7 +72,7 @@ UpdateScripts/
 规则：
 
 1. 目录名即版本号，如 `UpdateScripts/5.6.1/5.6.1.sql`。只有高于库中 `DbVersion` 的版本会执行，与程序版本 `backend/props/version.props` 无关。
-2. 当前脚本使用 **PostgreSQL 方言**；文档中的 MySQL / MariaDB 支持主要指 ORM 与首次 CodeFirst，不代表现有升级脚本可直接跨库运行。引擎不区分方言，会把脚本原样交给当前库执行：非 PostgreSQL 的存量库开着 `EnableAutoCheckOnStartup` 升级时，`DO $$ … $$` 这类 PostgreSQL 专有语法会执行失败并中断启动，需要自备对应方言的脚本，或关掉自动升级另行处理。
+2. 脚本按数据库种类分目录：版本目录根层的 `.sql` 是 PostgreSQL 脚本（3.10.0～5.6.0 的历史脚本只有 PostgreSQL），`pgsql/`、`mssql/`、`mysql/` 子目录分别放 PostgreSQL、SQL Server、MySQL 脚本。升级时按当前连接的 `DbType` 只执行对应方言（`DialectAwareUpgradeScriptProvider`），平台库与各库隔离租户的独立库各自判断。自 5.6.1 起每个版本都要有三种方言的脚本：PostgreSQL 放在版本目录根层或 `pgsql/` 均可，`mssql/` 与 `mysql/` 必须有。某版本缺少当前数据库的方言脚本时升级失败并中断启动，不会跳过，也不写台账；同一版本同时有根层 `.sql` 与 `pgsql/`，或出现其他子目录，启动时也会失败。新建的 SQL Server、MySQL 库登记为最新版本，不执行历史脚本。缺方言导致的失败，升级结果消息是系统的路径不存在异常（如 `升级失败: Could not find a part of the path '…/5.7.0/mssql/__missing__.sql'`），日志中对应一行 `执行迁移脚本: 5.7.0/[缺少 mssql 方言脚本]`，两处都带有缺少的版本与方言。各方言的写法见 `UpdateScripts/README.md` 的「方言目录」。
 3. PostgreSQL 标识符使用小写且不加引号，匹配 SqlSugar 实际创建的表列名。
 4. 尽量用 `IF EXISTS` / `IF NOT EXISTS` 写成可重试脚本。
 5. 一个版本内若存在多个脚本，引擎按脚本名排序；版本之间按语义版本升序执行。

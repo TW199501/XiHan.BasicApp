@@ -306,7 +306,7 @@ public sealed partial class EventBoxSqlServerTests
             ?? throw new InvalidOperationException("无法解析测试源文件目录。");
 
         return Path.GetFullPath(Path.Combine(
-            testDirectory, "..", "..", "..", "scripts", "upgrade", "mssql", "sys-event-inbox-dedup-key-collation.sql"));
+            testDirectory, "..", "..", "..", "src", "main", "XiHan.BasicApp.WebHost", "UpdateScripts", "5.6.1", "mssql", "5.6.1.sql"));
     }
 
     private sealed record DedupKeyColumn(string TypeName, short MaxLength, bool IsNullable, string Collation);

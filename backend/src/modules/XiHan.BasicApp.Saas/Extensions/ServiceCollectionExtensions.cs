@@ -91,6 +91,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IUpgradeLockProvider, SaasUpgradeLockProvider>();
         services.AddScoped<IUpgradeTenantProvider, SaasUpgradeTenantProvider>();
         services.AddScoped<IUpgradeMigrationExecutor, SaasUpgradeMigrationExecutor>();
+        // 以按当前连接 DbType 取对应方言脚本的提供者替换框架注册的文件系统脚本提供者
+        services.Replace(ServiceDescriptor.Scoped<IUpgradeScriptProvider, DialectAwareUpgradeScriptProvider>());
         // 升级脚本先于种子执行：存量表的新列补齐后，种子才能按最新实体读写
         services.AddScoped<IDbSchemaUpgrader, SaasSchemaUpgrader>();
 

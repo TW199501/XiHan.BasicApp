@@ -110,10 +110,11 @@ public sealed class OrderNumberService(INumberGenerator numberGenerator)
   - SQL Server：`nvarchar` + 由数据库默认排序规则推导的排序规则，首次映射时按连接查询一次。`CI` 换成 `CS`、`AI` 换成 `AS`，优先 `<基底>_CS_AS_KS_WS`，`sys.fn_helpcollations()` 中没有时用 `<基底>_CS_AS`，两者都没有时，该库上收件箱的所有读写（包括已存在的表）都会抛出 `InvalidOperationException` 并列出候选，不会退回不区分大小写的定义。
   - PostgreSQL：沿用默认定义，本身区分大小写。
   - 已知限制：SQL Server 的 `SQL_` 开头排序规则没有 `KS_WS` 版本，全角与半角、平假名与片假名视为相同；两种基底都把内嵌 NUL 与 Unicode 合成、分解形式视为相同；`SQL_*Pref*` 等少数旧排序规则推导不出候选，默认排序规则是这类的 SQL Server 库上收件箱无法读写，需改数据库默认排序规则。
-  - 既有 SQL Server 库用 `backend/scripts/upgrade/mssql/sys-event-inbox-dedup-key-collation.sql` 修补：可重复执行，列改为 `nvarchar` 并换排序规则，重建原有索引；原先已存成 `?` 的值无法还原。
+  - 既有 SQL Server 库由升级脚本 `UpdateScripts/5.6.1/mssql/5.6.1.sql` 修补（启动升级时自动执行）：可重复执行，列改为 `nvarchar` 并换排序规则，重建原有索引；原先已存成 `?` 的值无法还原。
+  - 既有 MySQL 库由升级脚本 `UpdateScripts/5.6.1/mysql/5.6.1.sql` 改为 `utf8mb4_bin`。`utf8mb4_bin` 比较时忽略尾端空格，旧数据中有只差尾端空格的去重键时脚本失败、表保持原样，需先清理这些行。
 - 入箱时消息标识以空白字符开头或结尾会抛出 `ArgumentException`，与数据库种类无关（包括 PostgreSQL）；`ExistsByMessageIdAsync` 对这类标识返回 false；只含空白的消息标识视为没有消息标识。
 - 时间列保留 6 位小数秒：MySQL `datetime(6)`、SQL Server `datetimeoffset(6)`、PostgreSQL `timestamptz(6)`。幂等记录表 `Sys_Idempotency_Record` 同样如此。
-- 建表只建不改：在此之前已由 CodeFirst 建好的 MySQL／SQL Server 收发件箱与幂等记录表不会被改列，需要重建表或另行执行对应方言的结构变更。
+- 建表只建不改：已由 CodeFirst 建好的表由 5.6.1 升级脚本补齐。MySQL 收发件箱与幂等记录表的时间列改为 `datetime(6)`，原值不变；SQL Server 既有表的时间列保留 `datetimeoffset(7)`，不改；PostgreSQL 不需要变更。
 - 不支持 `filter` 参数。
 
 ## 接口幂等存储
