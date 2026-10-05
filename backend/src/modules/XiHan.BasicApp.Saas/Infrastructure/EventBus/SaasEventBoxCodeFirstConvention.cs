@@ -14,7 +14,7 @@ namespace XiHan.BasicApp.Saas.Infrastructure.EventBus;
 /// 收件箱去重键在 MySQL 使用 <c>varchar</c> 与 <see cref="MySqlDedupKeyCollation"/>；
 /// 在 SQL Server 使用 <c>nvarchar</c> 与由数据库默认排序规则推导的排序规则（见 <see cref="GetSqlServerDedupKeyCollationCandidates"/>
 /// 与 <see cref="SelectSqlServerDedupKeyCollation"/>），首次映射该列时按连接解析一次。比较与唯一索引都区分大小写，其他数据库沿用默认列定义。
-/// 列定义只在建表时生效，不修改已存在的表；SQL Server 既有库的修复脚本见 <c>backend/scripts/upgrade/mssql/sys-event-inbox-dedup-key-collation.sql</c>。
+/// 列定义只在建表时生效，不修改已存在的表；既有库由升级脚本 <c>UpdateScripts/5.6.1/mssql/5.6.1.sql</c>（SQL Server）与 <c>UpdateScripts/5.6.1/mysql/5.6.1.sql</c>（MySQL）修复。
 /// SQL Server 上推导不出可用的排序规则时，每次映射收件箱实体都会抛出 <see cref="InvalidOperationException"/>，
 /// 该库上收件箱的所有读写（包括已存在的表）都会失败，不会退回不区分大小写的定义。
 /// </remarks>

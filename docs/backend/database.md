@@ -203,7 +203,7 @@ CodeFirst 负责首次建表；已有库的结构和数据变化由 Framework Up
 ## MySQL 与 SQL Server 的约定
 
 - **MySQL 时间按 UTC 读写**：BasicApp 的每条 MySQL 连接都把连接串规范化为 `DateTimeKind=Utc`，连接串显式设成其他值时，构建连接配置（启动时创建 SqlSugarScope，或运行时新增租户连接）即抛出异常（消息不含连接串）；执行前把 `DateTimeOffset` 参数转成 UTC（挂在 `AopEvents.OnExecutingChangeSql`，串接已有委派）。经 `ConfigureConnectionConfigs` 生效，覆盖平台库、平台模块库与运行时新增的租户主库。
-- **时间列 6 位小数秒**：新建表的时间列为 MySQL `datetime(6)`、SQL Server `datetimeoffset(6)`、PostgreSQL `timestamptz(6)`。已存在的 MySQL 库不会自动改列，时间列仍是 `datetime(0)`，在提供 MySQL 升级脚本（E-86）之前需手动改列。
+- **时间列 6 位小数秒**：新建表的时间列为 MySQL `datetime(6)`、SQL Server `datetimeoffset(6)`、PostgreSQL `timestamptz(6)`。已存在的 MySQL 库由升级脚本 `UpdateScripts/5.6.1/mysql/5.6.1.sql` 从 `datetime(0)` 改为 `datetime(6)`，原值不变；已存在的 SQL Server 表保留 `datetimeoffset(7)`。
 - **收件箱去重键**：区分大小写的排序规则与既有 SQL Server 库的修补脚本，见 `backend/src/modules/XiHan.BasicApp.Saas/README.md` 的「事件收发件箱」。
 
 已知限制（MySQL，追踪于 E-115）：
@@ -226,7 +226,7 @@ CodeFirst 负责首次建表；已有库的结构和数据变化由 Framework Up
 
 - 未设置的变量对应的测试跳过，跳过不算通过；CI 不起数据库，全部跳过。
 - 连接的库必须是专用的一次性测试库：测试会删除并重建 `Sys_Event_Outbox`、`Sys_Event_Inbox`、`Sys_Idempotency_Record` 与自己写入的 `Sys_Task_Log_` 月表。
-- SQL Server 账号需要 `CREATE DATABASE` 权限：部分用例会新建默认排序规则为 `Chinese_PRC_CI_AS` 的临时库，用完即删除。
+- SQL Server 与 MySQL 账号需要 `CREATE DATABASE` 权限，MySQL 另需 `CREATE ROUTINE`：部分用例会新建临时库（SQL Server 默认排序规则 `Chinese_PRC_CI_AS` 或 `Latin1_General_CI_AS`，MySQL `utf8mb4_0900_ai_ci`），用完即删除；5.6.1 升级脚本测试在临时库里经正式迁移执行器执行脚本。
 - MySQL 测试库保留默认排序规则 `utf8mb4_0900_ai_ci`，用来验证去重键的排序规则。
 - SQL Server 测试库未开启 `READ_COMMITTED_SNAPSHOT`：并发领取用例在 SQL Server 上不覆盖领取更新的状态守卫，去掉守卫时只有 PostgreSQL 与 MySQL 的用例会失败。
 - 在 bash 载入连接串时值要加单引号，否则会在 `;` 处被截断。
