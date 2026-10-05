@@ -1,0 +1,27 @@
+backend/test/XiHan.BasicApp.Saas.Tests/EventBox/EventBoxDatabaseTests.cs
+  s_94057b8e5cf9b6::t_399c7f84ff38c7 423,441,547,557,763
+backend/test/XiHan.BasicApp.Saas.Tests/EventBox/EventBoxSqlServerTests.RepairScript.cs
+  s_94057b8e5cf9b6::t_e8d4913f60f523 8,20,25-26,28,63,90,195,197-212
+backend/test/XiHan.BasicApp.Saas.Tests/EventBox/SaasEventInboxTests.cs
+  s_94057b8e5cf9b6::t_b536bbd3e00d23 268
+backend/test/XiHan.BasicApp.Saas.Tests/Idempotency/IdempotencyDatabaseTests.cs
+  s_94057b8e5cf9b6::t_067a035553b7bd 316,320,326,330,336-338,351-352,361-363
+backend/test/XiHan.BasicApp.Saas.Tests/TaskLogRetention/TaskLogRetentionDatabaseTests.cs
+  s_94057b8e5cf9b6::t_94ab4ab77b3f01 13,197,296,311,326
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "07c0b6d1863342f9c96fbe36d2219286a49e9918",
+  "prompts": {},
+  "sessions": {
+    "s_94057b8e5cf9b6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "90574393-d99d-4685-85bc-153dc25d1750",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
