@@ -1,0 +1,28 @@
+backend/test/XiHan.BasicApp.Saas.Tests/EventBox/EventBoxDatabaseTests.cs
+  s_94057b8e5cf9b6::t_bf5686d32fe20d 203-251
+backend/test/XiHan.BasicApp.Saas.Tests/Idempotency/IdempotencyDatabaseTests.cs
+  s_94057b8e5cf9b6::t_5a06acd99ea01d 260-275
+  s_94057b8e5cf9b6::t_cd11fc707cec85 259
+backend/src/modules/XiHan.BasicApp.Saas/Domain/Entities/SysEventInbox.cs
+  s_94057b8e5cf9b6::t_02e684af69e709 85,109,121,127
+backend/src/modules/XiHan.BasicApp.Saas/Domain/Entities/SysEventOutbox.cs
+  s_94057b8e5cf9b6::t_8ad67f926f4cba 61,85
+backend/src/modules/XiHan.BasicApp.Saas/Domain/Entities/SysIdempotencyRecord.cs
+  s_94057b8e5cf9b6::t_8ab36f9a4deeb5 114,120,138,144
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "622896985192880d0498cd8f5602341d30b9c867",
+  "prompts": {},
+  "sessions": {
+    "s_94057b8e5cf9b6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "90574393-d99d-4685-85bc-153dc25d1750",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
