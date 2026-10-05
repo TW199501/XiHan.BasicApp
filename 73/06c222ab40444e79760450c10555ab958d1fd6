@@ -1,0 +1,35 @@
+backend/test/XiHan.BasicApp.Saas.Tests/TestDatabases/IntegrationDatabase.cs
+  s_94057b8e5cf9b6::t_37f27974a9a234 14,66
+backend/test/XiHan.BasicApp.Saas.Tests/TestDatabases/IntegrationDatabaseTests.cs
+  s_58251641b98742::t_0f1bdee2a2b3a5 36-51
+backend/test/XiHan.BasicApp.Saas.Tests/Upgrade/UpgradeScript561DatabaseTests.SqlServerNvarchar.cs
+  s_58251641b98742::t_86b6b128b71a96 1-129
+backend/test/XiHan.BasicApp.Saas.Tests/Upgrade/UpgradeScript561DatabaseTests.cs
+  s_58251641b98742::t_26c03ad62abb4d 24
+backend/test/XiHan.BasicApp.Saas.Tests/XiHan.BasicApp.Saas.Tests.csproj
+  s_58251641b98742::t_85aad6f6caa614 10-14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7306c222ab40444e79760450c10555ab958d1fd6",
+  "prompts": {},
+  "sessions": {
+    "s_58251641b98742": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "09448835-7b31-464d-8b14-4856c781b3eb",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    },
+    "s_94057b8e5cf9b6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "90574393-d99d-4685-85bc-153dc25d1750",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
