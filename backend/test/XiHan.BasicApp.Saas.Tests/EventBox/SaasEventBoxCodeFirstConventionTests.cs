@@ -16,8 +16,8 @@ public sealed class SaasEventBoxCodeFirstConventionTests
     /// MySQL 与 SQL Server 的去重键使用区分大小写的二进制排序规则
     /// </summary>
     [Theory]
-    [InlineData(DbType.MySql, "varchar(256) COLLATE utf8mb4_0900_bin")]
-    [InlineData(DbType.SqlServer, "varchar(256) COLLATE Latin1_General_100_BIN2")]
+    [InlineData(DbType.MySql, "varchar(256) COLLATE utf8mb4_bin")]
+    [InlineData(DbType.SqlServer, "varchar(256) COLLATE SQL_Latin1_General_CP1_CS_AS")]
     public void Apply_SetsCaseSensitiveDedupKeyColumnType(DbType dbType, string expected)
     {
         var config = NewConfig(dbType);
@@ -27,6 +27,20 @@ public sealed class SaasEventBoxCodeFirstConventionTests
         var column = GetColumn(config, nameof(SysEventInbox.DedupKey));
         Assert.Equal(expected, column.DataType);
         Assert.Equal(0, column.Length);
+    }
+
+    /// <summary>
+    /// SQL Server 连接开启 nvarchar 建表时，去重键也用 nvarchar
+    /// </summary>
+    [Fact]
+    public void Apply_UsesNvarcharWhenSqlServerCodeFirstNvarchar()
+    {
+        var config = NewConfig(DbType.SqlServer);
+        config.MoreSettings = new ConnMoreSettings { SqlServerCodeFirstNvarchar = true };
+
+        SaasEventBoxCodeFirstConvention.Apply(config);
+
+        Assert.Equal("nvarchar(256) COLLATE SQL_Latin1_General_CP1_CS_AS", GetColumn(config, nameof(SysEventInbox.DedupKey)).DataType);
     }
 
     /// <summary>
@@ -65,7 +79,7 @@ public sealed class SaasEventBoxCodeFirstConventionTests
         SaasEventBoxCodeFirstConvention.Apply(config);
 
         Assert.Equal("existing", GetColumn(config, nameof(SysEventInbox.EventName)).ColumnDescription);
-        Assert.Equal("varchar(256) COLLATE utf8mb4_0900_bin", GetColumn(config, nameof(SysEventInbox.DedupKey)).DataType);
+        Assert.Equal("varchar(256) COLLATE utf8mb4_bin", GetColumn(config, nameof(SysEventInbox.DedupKey)).DataType);
     }
 
     private static ConnectionConfig NewConfig(DbType dbType)

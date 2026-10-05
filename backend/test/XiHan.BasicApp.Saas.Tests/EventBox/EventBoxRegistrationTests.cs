@@ -119,7 +119,7 @@ public sealed class EventBoxRegistrationTests
         Assert.True(existingHookCalled);
         using var client = new SqlSugarClient(config);
         var column = client.EntityMaintenance.GetEntityInfo<SysEventInbox>().Columns.Single(c => c.PropertyName == nameof(SysEventInbox.DedupKey));
-        Assert.Equal("varchar(256) COLLATE utf8mb4_0900_bin", column.DataType);
+        Assert.Equal("varchar(256) COLLATE utf8mb4_bin", column.DataType);
     }
 
     private static IConfiguration BuildConfiguration(Dictionary<string, string?> values)

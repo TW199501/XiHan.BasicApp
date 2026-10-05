@@ -334,21 +334,30 @@ public abstract class EventBoxDatabaseTests : IDisposable
     }
 
     /// <summary>
-    /// 只有大小写不同的两个消息标识各自入箱，按消息标识查询也区分大小写
+    /// 只有大小写不同的两个消息标识各自入箱，按去重键精确查询与按消息标识判断存在都区分大小写
     /// </summary>
     [Fact]
     public async Task InboxEnqueue_MessageIdsDifferingOnlyByCase_AreBothStored()
     {
         var context = RequireContext();
         var inbox = context.CreateInbox();
+        var upper = NewIncomingEvent(context, "Msg-A");
+        var lower = NewIncomingEvent(context, "msg-a");
 
-        await inbox.EnqueueAsync(NewIncomingEvent(context, "Msg-A"));
-        await inbox.EnqueueAsync(NewIncomingEvent(context, "msg-a"));
+        await inbox.EnqueueAsync(upper);
+        await inbox.EnqueueAsync(lower);
 
         var keys = await context.Client.Queryable<SysEventInbox>().Select(e => e.DedupKey).ToListAsync();
         Assert.Equal(2, keys.Count);
         Assert.Contains("Msg-A", keys);
         Assert.Contains("msg-a", keys);
+
+        var upperRows = await context.Client.Queryable<SysEventInbox>().Where(e => e.DedupKey == "Msg-A").ToListAsync();
+        Assert.Equal(upper.Id, Assert.Single(upperRows).BasicId);
+        var lowerRows = await context.Client.Queryable<SysEventInbox>().Where(e => e.DedupKey == "msg-a").ToListAsync();
+        Assert.Equal(lower.Id, Assert.Single(lowerRows).BasicId);
+
+        Assert.True(await inbox.ExistsByMessageIdAsync("Msg-A"));
         Assert.True(await inbox.ExistsByMessageIdAsync("msg-a"));
         Assert.False(await inbox.ExistsByMessageIdAsync("MSG-A"));
     }
@@ -398,7 +407,11 @@ public abstract class EventBoxDatabaseTests : IDisposable
         return _context!;
     }
 
-    private string RequireConnectionString()
+    /// <summary>
+    /// 获取连接串，未设置时跳过当前用例
+    /// </summary>
+    /// <returns>连接串</returns>
+    protected string RequireConnectionString()
     {
         Assert.SkipWhen(_connectionString is null, $"未设置 {ConnectionStringVariable}");
         return _connectionString!;
@@ -509,7 +522,7 @@ public sealed class EventBoxPostgresTests : EventBoxDatabaseTests
 /// <summary>
 /// 收发件箱在 SQL Server 上的集成测试，未设置 XIHAN_TEST_SQLSERVER 时跳过
 /// </summary>
-public sealed class EventBoxSqlServerTests : EventBoxDatabaseTests
+public sealed partial class EventBoxSqlServerTests : EventBoxDatabaseTests
 {
     /// <summary>
     /// 构造函数
@@ -551,7 +564,7 @@ public sealed class EventBoxSqlServerTests : EventBoxDatabaseTests
     {
         get
         {
-            return "Latin1_General_100_BIN2";
+            return "SQL_Latin1_General_CP1_CS_AS";
         }
     }
 
@@ -607,7 +620,7 @@ public sealed class EventBoxMySqlTests : EventBoxDatabaseTests
     {
         get
         {
-            return "utf8mb4_0900_bin";
+            return "utf8mb4_bin";
         }
     }
 
