@@ -1,0 +1,25 @@
+backend/src/modules/XiHan.BasicApp.Saas/Infrastructure/EventBus/SaasEventBoxCodeFirstConvention.cs
+  s_94057b8e5cf9b6::t_e118591252398a 14-15,22,27,53-54
+backend/test/XiHan.BasicApp.Saas.Tests/EventBox/EventBoxDatabaseTests.cs
+  s_94057b8e5cf9b6::t_26746c7a164434 337,344-345,347-348,354-360,410-414,525,567,623
+backend/test/XiHan.BasicApp.Saas.Tests/EventBox/EventBoxRegistrationTests.cs
+  s_94057b8e5cf9b6::t_72e1de070ab330 122
+backend/test/XiHan.BasicApp.Saas.Tests/EventBox/SaasEventBoxCodeFirstConventionTests.cs
+  s_94057b8e5cf9b6::t_5065fc950409c5 19-20,32-45,82
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fc88e3aa2f980a5357eb9d0cab8b7f13e5d486d8",
+  "prompts": {},
+  "sessions": {
+    "s_94057b8e5cf9b6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "90574393-d99d-4685-85bc-153dc25d1750",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
