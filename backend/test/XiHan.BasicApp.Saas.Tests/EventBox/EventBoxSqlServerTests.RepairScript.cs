@@ -6,6 +6,7 @@ using Microsoft.Data.SqlClient;
 using SqlSugar;
 using XiHan.BasicApp.Saas.Domain.Entities;
 using XiHan.BasicApp.Saas.Infrastructure.EventBus;
+using XiHan.BasicApp.Saas.Tests.TestDatabases;
 
 namespace XiHan.BasicApp.Saas.Tests.EventBox;
 
@@ -34,9 +35,8 @@ public sealed partial class EventBoxSqlServerTests
     [Fact]
     public async Task DedupKeyRepairScript_ConvertsLegacyColumnAndIsIdempotent()
     {
-        var connectionString = RequireConnectionString();
-        using var legacy = CreateLegacyClient(connectionString);
-        legacy.DbMaintenance.DropTable(InboxTable);
+        await using var database = await CreateScratchDatabaseAsync();
+        using var legacy = CreateLegacyClient(database.ConnectionString);
         legacy.CodeFirst.InitTables<SysEventInbox>();
         await legacy.Insertable(new List<SysEventInbox>
         {
@@ -46,7 +46,7 @@ public sealed partial class EventBoxSqlServerTests
             NewLegacyRow("消息-1")
         }).ExecuteCommandAsync();
 
-        await using var connection = await OpenConnectionAsync(connectionString);
+        await using var connection = await OpenConnectionAsync(database.ConnectionString);
         var columnBefore = await ReadDedupKeyColumnAsync(connection);
         var indexesBefore = await ReadIndexesAsync(connection);
         var rowsBefore = await ReadRowsAsync(connection);
@@ -60,7 +60,7 @@ public sealed partial class EventBoxSqlServerTests
         await ExecuteRepairScriptAsync(connection);
 
         var columnAfter = await ReadDedupKeyColumnAsync(connection);
-        Assert.Equal(new DedupKeyColumn("nvarchar", 512, false, ResolveExpectedDedupKeyCollation(connectionString)), columnAfter);
+        Assert.Equal(new DedupKeyColumn("nvarchar", 512, false, ResolveExpectedDedupKeyCollation(database.ConnectionString)), columnAfter);
         Assert.Equal(indexesBefore, await ReadIndexesAsync(connection));
         Assert.Equal(rowsBefore, await ReadRowsAsync(connection));
         var modifiedAfterFirstRun = await ReadTableModifyDateAsync(connection);
@@ -83,11 +83,19 @@ public sealed partial class EventBoxSqlServerTests
     [Fact]
     public async Task DedupKeyRepairScript_LeavesCaseSensitiveColumnUnchanged()
     {
-        await using var connection = await OpenConnectionAsync(RequireConnectionString());
+        await using var database = await CreateScratchDatabaseAsync();
+        var config = IntegrationDatabase.CreateConnectionConfig(DbType.SqlServer, database.ConnectionString);
+        config.ConfigId = $"current-{Guid.NewGuid():N}";
+        using (var current = new SqlSugarClient(config))
+        {
+            current.CodeFirst.InitTables<SysEventInbox>();
+        }
+
+        await using var connection = await OpenConnectionAsync(database.ConnectionString);
         var column = await ReadDedupKeyColumnAsync(connection);
         var indexes = await ReadIndexesAsync(connection);
         var modified = await ReadTableModifyDateAsync(connection);
-        Assert.Equal(new DedupKeyColumn("nvarchar", 512, false, ResolveExpectedDedupKeyCollation(RequireConnectionString())), column);
+        Assert.Equal(new DedupKeyColumn("nvarchar", 512, false, ResolveExpectedDedupKeyCollation(database.ConnectionString)), column);
 
         await Task.Delay(TimeSpan.FromMilliseconds(50));
         await ExecuteRepairScriptAsync(connection);
@@ -103,11 +111,10 @@ public sealed partial class EventBoxSqlServerTests
     [Fact]
     public async Task DedupKeyRepairScript_PreservesIndexOptions()
     {
-        var connectionString = RequireConnectionString();
-        using var legacy = CreateLegacyClient(connectionString);
-        legacy.DbMaintenance.DropTable(InboxTable);
+        await using var database = await CreateScratchDatabaseAsync();
+        using var legacy = CreateLegacyClient(database.ConnectionString);
         legacy.CodeFirst.InitTables<SysEventInbox>();
-        await using var connection = await OpenConnectionAsync(connectionString);
+        await using var connection = await OpenConnectionAsync(database.ConnectionString);
         await using (var command = new SqlCommand($"""
             DROP INDEX [UX_{InboxTable}_DeKe] ON [{InboxTable}];
             CREATE UNIQUE NONCLUSTERED INDEX [UX_{InboxTable}_DeKe] ON [{InboxTable}] ([Dedup_Key] ASC)
@@ -137,14 +144,20 @@ public sealed partial class EventBoxSqlServerTests
     [Fact]
     public async Task DedupKeyRepairScript_WithoutInboxTable_DoesNothing()
     {
-        var connectionString = RequireConnectionString();
-        using var legacy = CreateLegacyClient(connectionString);
-        legacy.DbMaintenance.DropTable(InboxTable);
-        await using var connection = await OpenConnectionAsync(connectionString);
+        await using var database = await CreateScratchDatabaseAsync();
+        using var legacy = CreateLegacyClient(database.ConnectionString);
+        await using var connection = await OpenConnectionAsync(database.ConnectionString);
 
         await ExecuteRepairScriptAsync(connection);
 
         Assert.False(legacy.DbMaintenance.IsAnyTable(InboxTable, false));
+    }
+
+    private async Task<ScratchDatabase> CreateScratchDatabaseAsync()
+    {
+        var connectionString = RequireConnectionString();
+        await using var connection = await OpenConnectionAsync(connectionString);
+        return await ScratchDatabase.CreateAsync(connectionString, await ReadDatabaseCollationAsync(connection));
     }
 
     private static SqlSugarClient CreateLegacyClient(string connectionString)
