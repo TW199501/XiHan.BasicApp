@@ -1,0 +1,27 @@
+backend/scripts/upgrade/mssql/sys-event-inbox-dedup-key-collation.sql
+  s_94057b8e5cf9b6::t_5ca5046d6db86e 1,3-8,16-19,40,42-58,74,79-81
+backend/src/modules/XiHan.BasicApp.Saas/Infrastructure/EventBus/SaasEventBoxCodeFirstConvention.cs
+  s_94057b8e5cf9b6::t_53cf58a101d255 4,14-16,27,29-33,39-40,43,45-46,48-58,71,78,80-86,88-91,93-110
+backend/test/XiHan.BasicApp.Saas.Tests/EventBox/EventBoxDatabaseTests.cs
+  s_94057b8e5cf9b6::t_bb85215b25da09 79-83,337,371-390,541-549,606-614,671-679
+backend/test/XiHan.BasicApp.Saas.Tests/EventBox/EventBoxSqlServerTests.RepairScript.cs
+  s_94057b8e5cf9b6::t_6023e2401d1ef5 19,22,28-29,33,46-47,56-57,64,78,91
+backend/test/XiHan.BasicApp.Saas.Tests/EventBox/SaasEventBoxCodeFirstConventionTests.cs
+  s_94057b8e5cf9b6::t_6d1099370c790c 16,18-19,21,26,31,34,37,39-67,70-109
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2dfd05c510504cb94083b9278062ac20a2ce972a",
+  "prompts": {},
+  "sessions": {
+    "s_94057b8e5cf9b6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "90574393-d99d-4685-85bc-153dc25d1750",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
