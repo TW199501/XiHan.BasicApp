@@ -122,6 +122,34 @@ public sealed class EventBoxRegistrationTests
         Assert.Equal("varchar(256) COLLATE utf8mb4_bin", column.DataType);
     }
 
+    /// <summary>
+    /// 宿主在注册收发件箱之后以 Configure 直接赋值连接配置钩子，去重键列定义仍会套用
+    /// </summary>
+    [Fact]
+    public void AddSaasEventBoxes_AppliesDedupKeyConventionAfterHostAssignsHook()
+    {
+        var services = new ServiceCollection();
+        var hostHookCalled = false;
+        services.AddSaasEventBoxes(BuildConfiguration([]));
+        services.Configure<XiHanSqlSugarCoreOptions>(options => options.ConfigureConnectionConfigs = _ => hostHookCalled = true);
+        using var provider = services.BuildServiceProvider();
+        var config = new ConnectionConfig
+        {
+            ConfigId = $"registration-{Guid.NewGuid():N}",
+            ConnectionString = "Server=127.0.0.1",
+            DbType = DbType.MySql,
+            IsAutoCloseConnection = true,
+            InitKeyType = InitKeyType.Attribute
+        };
+
+        provider.GetRequiredService<IOptions<XiHanSqlSugarCoreOptions>>().Value.ConfigureConnectionConfigs!.Invoke([config]);
+
+        Assert.True(hostHookCalled);
+        using var client = new SqlSugarClient(config);
+        var column = client.EntityMaintenance.GetEntityInfo<SysEventInbox>().Columns.Single(c => c.PropertyName == nameof(SysEventInbox.DedupKey));
+        Assert.Equal("varchar(256) COLLATE utf8mb4_bin", column.DataType);
+    }
+
     private static IConfiguration BuildConfiguration(Dictionary<string, string?> values)
     {
         return new ConfigurationBuilder().AddInMemoryCollection(values).Build();

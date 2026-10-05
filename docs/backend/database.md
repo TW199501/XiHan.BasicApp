@@ -211,7 +211,8 @@ CodeFirst 负责首次建表；已有库的结构和数据变化由 Framework Up
 | 情形 | 表现 |
 | --- | --- |
 | 多行批量写入（`Insertable(list)`、`AddRangeAsync`，很可能也包括 `UpdateRangeAsync`） | 时间以墙上时间字面量写入 SQL，不经参数转换；带非 0 偏移的值会被存成错误时刻 |
-| 租户模块库（`Tenant_{id}_Erp`）与 `IDynamicConnectionRegistrar` 注册的连接 | 不经 `ConfigureConnectionConfigs`，没有 UTC 规范化与参数转换 |
+| 租户模块库（`Tenant_{id}_Erp`） | 连接串由租户主库派生，继承其 `DateTimeKind=Utc`；不经 `ConfigureConnectionConfigs`，没有参数转换，带非 0 偏移的 `DateTimeOffset` 参数会抛出异常 |
+| `IDynamicConnectionRegistrar` 注册的连接 | 不经 `ConfigureConnectionConfigs`，既没有 UTC 规范化也没有参数转换，由注册方自行处理（代码生成的数据源连接已补上 `DateTimeKind=Utc`） |
 
 ## 多数据库集成测试
 
