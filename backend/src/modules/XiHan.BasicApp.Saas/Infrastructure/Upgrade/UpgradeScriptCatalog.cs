@@ -37,7 +37,7 @@ public sealed class UpgradeScriptCatalog
     /// </summary>
     /// <param name="rootPath">升级脚本根目录</param>
     /// <returns>升级脚本目录；根目录不存在时不含任何版本</returns>
-    /// <exception cref="InvalidOperationException">版本目录下有未知子目录，或根层 .sql 与 pgsql 子目录并存</exception>
+    /// <exception cref="InvalidOperationException">版本目录下有未知子目录、仅大小写不同的方言子目录，或根层 .sql 与 pgsql 子目录并存</exception>
     public static UpgradeScriptCatalog Load(string rootPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(rootPath);
@@ -101,6 +101,7 @@ public sealed class UpgradeScriptCatalog
     private static Dictionary<string, IReadOnlyList<string>> LoadVersion(string version, string versionDirectory)
     {
         var scripts = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+        var dialectDirectoryNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var dialectDirectory in Directory.GetDirectories(versionDirectory))
         {
             var dialect = Path.GetFileName(dialectDirectory);
@@ -108,6 +109,12 @@ public sealed class UpgradeScriptCatalog
             {
                 throw new InvalidOperationException(
                     $"升级脚本版本 {version} 下的目录 {dialectDirectory} 不是已知方言（{string.Join("、", UpgradeScriptDialect.All)}）。");
+            }
+
+            if (!dialectDirectoryNames.TryAdd(dialect, dialect))
+            {
+                throw new InvalidOperationException(
+                    $"升级脚本版本 {version} 下的目录 {dialectDirectoryNames[dialect]} 与 {dialect} 仅大小写不同，无法判定以哪份为准：{versionDirectory}");
             }
 
             var files = ListSqlFiles(dialectDirectory);

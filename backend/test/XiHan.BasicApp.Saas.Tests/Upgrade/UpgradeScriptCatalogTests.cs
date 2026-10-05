@@ -92,6 +92,21 @@ public sealed class UpgradeScriptCatalogTests : IDisposable
     }
 
     [Fact]
+    public void 同一版本有仅大小写不同的方言目录时抛异常()
+    {
+        _tree.Add("5.7.0/mssql/5.7.0.sql");
+        Directory.CreateDirectory(_tree.PathOf("5.7.0/MSSQL"));
+        Assert.SkipWhen(Directory.GetDirectories(_tree.PathOf("5.7.0")).Length < 2, "文件系统不区分大小写，无法建立仅大小写不同的目录");
+        _tree.Add("5.7.0/MSSQL/5.7.0.sql");
+
+        var exception = Assert.Throws<InvalidOperationException>(() => UpgradeScriptCatalog.Load(_tree.RootPath));
+
+        Assert.Contains("5.7.0", exception.Message);
+        Assert.Contains("mssql", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("MSSQL", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void 方言子目录里的子目录被忽略()
     {
         var sqlServer = _tree.Add("5.7.0/mssql/5.7.0.sql");
