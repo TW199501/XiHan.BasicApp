@@ -1,0 +1,24 @@
+backend/test/XiHan.BasicApp.Saas.Tests/Upgrade/UpgradeScriptCatalogTests.cs
+  s_94057b8e5cf9b6::t_70c7803fec585d 95-108
+  s_94057b8e5cf9b6::t_0a244fd02ef796 94
+backend/src/modules/XiHan.BasicApp.Saas/Infrastructure/Upgrade/UpgradeScriptCatalog.cs
+  s_94057b8e5cf9b6::t_af33748753bcbe 40
+  s_94057b8e5cf9b6::t_9b6cd7edd1df28 104,114-117
+  s_94057b8e5cf9b6::t_9897f50f492048 118-119
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0bbd348f6b15d7a5d0f15a65d9ab79f79271c0e3",
+  "prompts": {},
+  "sessions": {
+    "s_94057b8e5cf9b6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "90574393-d99d-4685-85bc-153dc25d1750",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
