@@ -311,3 +311,18 @@ public sealed class TaskLogRetentionMySqlTests : TaskLogRetentionDatabaseTests
     {
     }
 }
+
+/// <summary>
+/// 任务执行历史清理在 SQL Server 上的集成测试，未设置 XIHAN_TEST_SQLSERVER 时跳过
+/// </summary>
+public sealed class TaskLogRetentionSqlServerTests : TaskLogRetentionDatabaseTests
+{
+    /// <summary>
+    /// 构造函数
+    /// </summary>
+    /// <param name="output">测试输出</param>
+    public TaskLogRetentionSqlServerTests(ITestOutputHelper output)
+        : base(output, "XIHAN_TEST_SQLSERVER", DbType.SqlServer)
+    {
+    }
+}
