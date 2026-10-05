@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using SqlSugar;
+using XiHan.BasicApp.Saas.Infrastructure.Data;
 
 namespace XiHan.BasicApp.Saas.Tests.TestDatabases;
 
@@ -23,7 +24,10 @@ public sealed class IntegrationDatabaseTests
         var configId = Assert.IsType<string>(config.ConfigId);
 
         Assert.Equal(dbType, config.DbType);
-        Assert.Equal("Server=127.0.0.1", config.ConnectionString);
+        var expectedConnectionString = MySqlConnectionStrings.IsMySql(dbType)
+            ? MySqlConnectionStrings.EnsureUtcDateTimeKind("Server=127.0.0.1")
+            : "Server=127.0.0.1";
+        Assert.Equal(expectedConnectionString, config.ConnectionString);
         Assert.True(config.IsAutoCloseConnection);
         Assert.Equal(InitKeyType.Attribute, config.InitKeyType);
         Assert.Equal($"IntegrationTest_{dbType}", configId);

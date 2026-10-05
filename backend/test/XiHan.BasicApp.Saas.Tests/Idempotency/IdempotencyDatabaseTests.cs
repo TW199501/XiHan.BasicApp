@@ -274,6 +274,28 @@ public abstract class IdempotencyDatabaseTests : IDisposable
     }
 
     /// <summary>
+    /// 带毫秒的取得与完成时刻写入后读回完全相等
+    /// </summary>
+    [Fact]
+    public async Task Record_TimestampsRoundTripExactInstant()
+    {
+        var client = RequireClient();
+        Clock.Advance(new TimeSpan(0, 5, 6, 7, 123));
+        var now = Clock.GetUtcNow();
+        var store = CreateStore(client, Clock);
+        var key = CreateKey("roundtrip");
+
+        var acquired = await store.TryAcquireAsync(key, "fp-a", isTransactional: true);
+        await store.CompleteAsync(key, acquired.OwnerToken, new StoredResponse(200, null));
+
+        var record = FindRecord(client, key)!;
+        Assert.Equal(now.UtcDateTime, record.CreatedTime.UtcDateTime);
+        Assert.Equal(now.Add(IdempotencyOptions.ProcessingLease).UtcDateTime, record.LeaseExpiresTime.UtcDateTime);
+        Assert.Equal(now.UtcDateTime, record.CompletedTime!.Value.UtcDateTime);
+        Assert.Equal(now.Add(IdempotencyOptions.CompletedRetention).UtcDateTime, record.ExpiresTime!.Value.UtcDateTime);
+    }
+
+    /// <summary>
     /// 删除本实例建立的幂等记录表并释放资源
     /// </summary>
     public void Dispose()

@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using SqlSugar;
+using XiHan.BasicApp.Saas.Infrastructure.Data;
 
 namespace XiHan.BasicApp.Saas.Tests.TestDatabases;
 
@@ -9,7 +10,7 @@ namespace XiHan.BasicApp.Saas.Tests.TestDatabases;
 /// 真实数据库集成测试的连接入口
 /// </summary>
 /// <remarks>
-/// 连接串从环境变量读取，ConfigId 为 IntegrationTest_ 加数据库种类。
+/// 连接串从环境变量读取，ConfigId 为 IntegrationTest_ 加数据库种类，MySQL 连接串经 MySqlConnectionStrings 规范化。
 /// </remarks>
 public static class IntegrationDatabase
 {
@@ -51,7 +52,7 @@ public static class IntegrationDatabase
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
 
-        return new ConnectionConfig
+        var config = new ConnectionConfig
         {
             ConfigId = $"IntegrationTest_{dbType}",
             ConnectionString = connectionString,
@@ -59,6 +60,8 @@ public static class IntegrationDatabase
             IsAutoCloseConnection = true,
             InitKeyType = InitKeyType.Attribute
         };
+        MySqlConnectionStrings.Apply(config);
+        return config;
     }
 
     /// <summary>

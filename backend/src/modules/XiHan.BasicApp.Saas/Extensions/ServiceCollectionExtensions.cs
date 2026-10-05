@@ -17,6 +17,7 @@ using XiHan.BasicApp.Saas.Domain.Entities;
 using XiHan.BasicApp.Saas.Domain.Numbering;
 using XiHan.BasicApp.Saas.Domain.Repositories;
 using XiHan.BasicApp.Saas.Infrastructure.Auth;
+using XiHan.BasicApp.Saas.Infrastructure.Data;
 using XiHan.BasicApp.Saas.Infrastructure.EventBus;
 using XiHan.BasicApp.Saas.Infrastructure.Exporting;
 using XiHan.BasicApp.Saas.Infrastructure.Idempotency;
@@ -44,6 +45,7 @@ using XiHan.Framework.Bot.Telegram.Extensions.DependencyInjection;
 using XiHan.Framework.Bot.WeCom.Abstractions;
 using XiHan.Framework.Data.Extensions.DependencyInjection;
 using XiHan.Framework.Data.SqlSugar.Initializers;
+using XiHan.Framework.Data.SqlSugar.Options;
 using XiHan.Framework.Data.SqlSugar.Tenanting;
 using XiHan.Framework.EventBus.Abstractions.Distributed;
 using XiHan.Framework.EventBus.Distributed;
@@ -116,6 +118,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<SaasTenantConnectionProvider>();
         services.AddSingleton<ISqlSugarTenantConnectionProvider>(sp => sp.GetRequiredService<SaasTenantConnectionProvider>());
         services.AddSingleton<ITenantConnectionCacheInvalidator>(sp => sp.GetRequiredService<SaasTenantConnectionProvider>());
+        services.AddSaasMySqlConnectionConvention();
         // 跨租户后台作业逐作用域（平台与每个数据可达的租户）切入执行，不靠「无租户上下文看全部」
         services.AddScoped<ITenantDataScopeRunner, TenantDataScopeRunner>();
         services.AddScoped<IConfigDomainService, ConfigDomainService>();
@@ -490,6 +493,34 @@ public static class ServiceCollectionExtensions
 
         // 注册动态任务执行器（桥接 SysTask.TaskClass/TaskMethod 反射模型，同时实现 IJobWorker）
         services.AddTransient<DynamicJobWorker>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// 添加 MySQL 连接约定：框架构建 SqlSugar 连接配置前，把 MySQL 连接串规范化为 DateTimeKind=Utc
+    /// </summary>
+    /// <remarks>
+    /// 链在已有的 <c>ConfigureConnectionConfigs</c> 钩子之后执行，平台库与运行时新增的租户连接都会经过。
+    /// </remarks>
+    /// <param name="services">服务集合</param>
+    /// <returns>服务集合</returns>
+    public static IServiceCollection AddSaasMySqlConnectionConvention(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.PostConfigure<XiHanSqlSugarCoreOptions>(options =>
+        {
+            var previous = options.ConfigureConnectionConfigs;
+            options.ConfigureConnectionConfigs = configs =>
+            {
+                previous?.Invoke(configs);
+                foreach (var config in configs)
+                {
+                    MySqlConnectionStrings.Apply(config);
+                }
+            };
+        });
 
         return services;
     }

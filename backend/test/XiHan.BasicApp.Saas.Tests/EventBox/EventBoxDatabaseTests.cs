@@ -225,6 +225,31 @@ public abstract class EventBoxDatabaseTests : IDisposable
     }
 
     /// <summary>
+    /// 带毫秒的创建时刻与领取时刻写入后读回完全相等
+    /// </summary>
+    [Fact]
+    public async Task CreatedTime_RoundTripsExactInstant()
+    {
+        var context = RequireContext();
+        var createdTime = new DateTime(2026, 10, 4, 5, 6, 7, 123, DateTimeKind.Utc);
+        var outgoing = new OutgoingEventInfo(Guid.NewGuid(), "order.created", [1, 2, 3], createdTime);
+        var incoming = new IncomingEventInfo(Guid.NewGuid(), "db-roundtrip", "order.created", [1, 2, 3], createdTime);
+        var outbox = context.CreateOutbox();
+        await outbox.EnqueueAsync(outgoing);
+        await context.CreateInbox().EnqueueAsync(incoming);
+
+        context.Clock.Advance(TimeSpan.FromMilliseconds(456));
+        var claimTime = context.Clock.GetUtcNow();
+        Assert.Single(await outbox.GetWaitingEventsAsync(10));
+
+        var outboxRow = await context.Client.Queryable<SysEventOutbox>().Where(e => e.BasicId == outgoing.Id).FirstAsync();
+        var inboxRow = await context.Client.Queryable<SysEventInbox>().Where(e => e.BasicId == incoming.Id).FirstAsync();
+        Assert.Equal(createdTime, outboxRow.CreatedTime.UtcDateTime);
+        Assert.Equal(createdTime, inboxRow.CreatedTime.UtcDateTime);
+        Assert.Equal(claimTime.UtcDateTime, outboxRow.ClaimTime!.Value.UtcDateTime);
+    }
+
+    /// <summary>
     /// 同一秒内先后入箱的事件按创建时刻领取，主键顺序与时间顺序相反
     /// </summary>
     [Fact]

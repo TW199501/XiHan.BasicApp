@@ -7,6 +7,7 @@ using SqlSugar;
 using System.Collections.Concurrent;
 using XiHan.BasicApp.Saas.Domain.DomainServices;
 using XiHan.BasicApp.Saas.Domain.Entities;
+using XiHan.BasicApp.Saas.Infrastructure.Data;
 using XiHan.Framework.Data.SqlSugar.Clients;
 using XiHan.Framework.Data.SqlSugar.Options;
 using XiHan.Framework.Data.SqlSugar.Tenanting;
@@ -122,6 +123,11 @@ public sealed class SaasTenantConnectionProvider : ISqlSugarTenantConnectionProv
                 }
 
                 var dbType = MapDbType(tenant.DatabaseType);
+                if (MySqlConnectionStrings.IsMySql(dbType))
+                {
+                    connectionString = MySqlConnectionStrings.EnsureUtcDateTimeKind(connectionString);
+                }
+
                 return new SqlSugarTenantConnection($"{_tenantConfigIdPrefix}{tenantId}", connectionString, dbType);
 
             default:
