@@ -18,7 +18,7 @@
 -- 若碰撞发生，涉及的行均保持原样，供管理员手工介入。
 --
 -- DBA 查询：列出所有因碰撞而被保留未转的遗留号码（目标值已存在或被其他行独占）：
--- select basicid, phone,
+-- select basic_id, phone,
 --        case
 --          when phone ~ '^861[3-9][0-9]{9}$' then '+' || phone
 --          when phone ~ '^01[3-9][0-9]{9}$' then '+86' || substring(phone from 2)
@@ -30,7 +30,7 @@
 --    and (phone ~ '^861[3-9][0-9]{9}$' or phone ~ '^01[3-9][0-9]{9}$' or phone ~ '^1[3-9][0-9]{9}$')
 --    and exists (
 --      select 1 from sys_user u2
---      where u2.basicid != u1.basicid
+--      where u2.basic_id != u1.basic_id
 --        and (
 --          -- 目标值已存在于另一行
 --          u2.phone = case
@@ -49,7 +49,7 @@
 --    );
 --
 -- 唯一索引重复排查：库里仍有重复号码（含软删维度）时，下方 do $$ 块只会 raise notice、不建唯一索引：
--- select phone, isdeleted, count(*) from sys_user where phone is not null group by phone, isdeleted having count(*) > 1;
+-- select phone, is_deleted, count(*) from sys_user where phone is not null group by phone, is_deleted having count(*) > 1;
 
 update sys_user
 set phone = '+' || phone
@@ -57,7 +57,7 @@ where phone is not null
   and phone ~ '^861[3-9][0-9]{9}$'
   and not exists (
     select 1 from sys_user u2
-    where u2.basicid != sys_user.basicid
+    where u2.basic_id != sys_user.basic_id
       and (
         u2.phone = '+' || sys_user.phone
         or (u2.phone ~ '^01[3-9][0-9]{9}$' and '+86' || substring(u2.phone from 2) = '+' || sys_user.phone)
@@ -71,7 +71,7 @@ where phone is not null
   and phone ~ '^01[3-9][0-9]{9}$'
   and not exists (
     select 1 from sys_user u2
-    where u2.basicid != sys_user.basicid
+    where u2.basic_id != sys_user.basic_id
       and (
         u2.phone = '+86' || substring(sys_user.phone from 2)
         or (u2.phone ~ '^861[3-9][0-9]{9}$' and '+' || u2.phone = '+86' || substring(sys_user.phone from 2))
@@ -85,7 +85,7 @@ where phone is not null
   and phone ~ '^1[3-9][0-9]{9}$'
   and not exists (
     select 1 from sys_user u2
-    where u2.basicid != sys_user.basicid
+    where u2.basic_id != sys_user.basic_id
       and (
         u2.phone = '+86' || sys_user.phone
         or (u2.phone ~ '^861[3-9][0-9]{9}$' and '+' || u2.phone = '+86' || sys_user.phone)
@@ -110,15 +110,15 @@ begin
     select 1
     from sys_user
     where phone is not null
-    group by phone, isdeleted
+    group by phone, is_deleted
     having count(*) > 1
   ) into has_duplicates;
 
   if not has_duplicates then
-    create unique index if not exists ux_sys_user_ph on sys_user (phone, isdeleted);
+    create unique index if not exists ux_sys_user_ph on sys_user (phone, is_deleted);
   else
     -- 绝不因此中断升级：仍有重复留给管理员用脚本头部的 DBA 查询定位、人工处理后重跑本脚本
-    raise notice 'sys_user.phone 仍有重复（按 phone+isdeleted 维度），跳过唯一索引创建。请用脚本头部的 DBA 查询定位重复行并人工处理后重跑本脚本。';
+    raise notice 'sys_user.phone 仍有重复（按 phone+is_deleted 维度），跳过唯一索引创建。请用脚本头部的 DBA 查询定位重复行并人工处理后重跑本脚本。';
   end if;
 
   select exists (
