@@ -21,7 +21,7 @@ namespace XiHan.BasicApp.Saas.Tests.Upgrade;
 /// <remarks>
 /// 各数据库以环境变量门控，未设置即跳过。MySQL 与 SQL Server 用例各自新建临时库，结束时删除。
 /// </remarks>
-public sealed class UpgradeScript561DatabaseTests
+public sealed partial class UpgradeScript561DatabaseTests
 {
     private const string ScriptVersion = "5.6.1";
 

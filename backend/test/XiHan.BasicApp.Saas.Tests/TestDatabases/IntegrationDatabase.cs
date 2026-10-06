@@ -11,7 +11,7 @@ namespace XiHan.BasicApp.Saas.Tests.TestDatabases;
 /// 真实数据库集成测试的连接入口
 /// </summary>
 /// <remarks>
-/// 连接串从环境变量读取；连接配置按正式环境的顺序先套用 MySqlConnectionStrings，再套用 <see cref="SaasEventBoxCodeFirstConvention"/>。
+/// 连接串从环境变量读取；连接配置按正式环境的顺序先套用 MySqlConnectionStrings 与 SqlServerConnectionSettings，再套用 <see cref="SaasEventBoxCodeFirstConvention"/>。
 /// ConfigId 按数据库种类区分，SqlSugar 按 ConfigId 缓存实体信息。
 /// </remarks>
 public static class IntegrationDatabase
@@ -63,6 +63,7 @@ public static class IntegrationDatabase
             InitKeyType = InitKeyType.Attribute
         };
         MySqlConnectionStrings.Apply(config);
+        SqlServerConnectionSettings.Apply(config);
         SaasEventBoxCodeFirstConvention.Apply(config);
         return config;
     }
