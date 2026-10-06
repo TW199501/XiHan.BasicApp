@@ -1,0 +1,21 @@
+backend/src/main/XiHan.BasicApp.WebHost/UpdateScripts/5.2.0/5.2.0.sql
+  s_50280239b096a6::t_35619335b70440 21,33,52,60,74,88,113,118,121
+backend/Dockerfile
+  s_50280239b096a6::t_10f86418ea57b0 15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a20234d0bd2204907dd61830ec9f2f1ddfc8ceb7",
+  "prompts": {},
+  "sessions": {
+    "s_50280239b096a6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1a1f29e7-5ce5-4152-bd28-594200d343d3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
