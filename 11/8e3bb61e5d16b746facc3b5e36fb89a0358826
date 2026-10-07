@@ -1,0 +1,23 @@
+backend/src/modules/XiHan.BasicApp.Saas/Extensions/ServiceCollectionExtensions.cs
+  s_50280239b096a6::t_116ccc07da42e1 504-505,508-510,529-535
+backend/test/XiHan.BasicApp.Saas.Tests/SaasMySqlConnectionConventionTests.cs
+  s_50280239b096a6::t_83e8be7d4e9a7d 119-144
+docs/backend/database.md
+  s_50280239b096a6::t_254ddcb4210afa 205,208,210,214
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "118e3bb61e5d16b746facc3b5e36fb89a0358826",
+  "prompts": {},
+  "sessions": {
+    "s_50280239b096a6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1a1f29e7-5ce5-4152-bd28-594200d343d3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
