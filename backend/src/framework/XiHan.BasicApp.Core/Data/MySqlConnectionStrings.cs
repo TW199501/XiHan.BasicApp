@@ -161,7 +161,13 @@ public static class MySqlConnectionStrings
                 return;
             }
 
-            if (entityInfo.EntityColumnInfo?.PropertyInfo?.GetValue(entityInfo.EntityValue) is DateTimeOffset value && value.Offset != TimeSpan.Zero)
+            var property = entityInfo.EntityColumnInfo?.PropertyInfo;
+            if (property is null || (property.PropertyType != typeof(DateTimeOffset) && property.PropertyType != typeof(DateTimeOffset?)))
+            {
+                return;
+            }
+
+            if (property.GetValue(entityInfo.EntityValue) is DateTimeOffset value && value.Offset != TimeSpan.Zero)
             {
                 entityInfo.SetValue(value.ToUniversalTime());
             }

@@ -127,7 +127,8 @@ public sealed class SaasMySqlConnectionConventionTests
         services.Configure<XiHanSqlSugarCoreOptions>(options => options.ConfigureDbAction = _ => dbActionCalls++);
         services.AddSaasMySqlConnectionConvention();
         var options = services.BuildServiceProvider().GetRequiredService<IOptions<XiHanSqlSugarCoreOptions>>().Value;
-        Action<object, DataFilterModel> framework = (_, _) => { };
+        var frameworkCalls = 0;
+        Action<object, DataFilterModel> framework = (_, _) => frameworkCalls++;
         using var mysql = new SqlSugarClient(new ConnectionConfig { DbType = DbType.MySql, ConnectionString = "Server=h;Database=d", IsAutoCloseConnection = true });
         using var postgres = new SqlSugarClient(new ConnectionConfig { DbType = DbType.PostgreSQL, ConnectionString = "Host=h;Database=d", IsAutoCloseConnection = true });
         mysql.Aop.DataExecuting = framework;
@@ -140,6 +141,31 @@ public sealed class SaasMySqlConnectionConventionTests
         Assert.NotNull(mysql.CurrentConnectionConfig.AopEvents.DataExecuting);
         Assert.NotSame(framework, mysql.CurrentConnectionConfig.AopEvents.DataExecuting);
         Assert.Same(framework, postgres.CurrentConnectionConfig.AopEvents.DataExecuting);
+
+        var time = new DateTimeOffset(2026, 10, 4, 10, 6, 7, 123, TimeSpan.FromHours(5));
+        var row = new TimeRow { Time = time };
+        var property = typeof(TimeRow).GetProperty(nameof(TimeRow.Time))!;
+        mysql.CurrentConnectionConfig.AopEvents.DataExecuting(time, new DataFilterModel
+        {
+            OperationType = DataFilterType.InsertByObject,
+            EntityValue = row,
+            EntityColumnInfo = new EntityColumnInfo { PropertyInfo = property, PropertyName = property.Name, DbColumnName = property.Name }
+        });
+
+        Assert.Equal(1, frameworkCalls);
+        Assert.Equal(TimeSpan.Zero, row.Time.Offset);
+        Assert.Equal(time.UtcDateTime, row.Time.UtcDateTime);
+    }
+
+    /// <summary>
+    /// 带时间列的测试行
+    /// </summary>
+    private sealed class TimeRow
+    {
+        /// <summary>
+        /// 时间
+        /// </summary>
+        public DateTimeOffset Time { get; set; }
     }
 
     private static void InsertTenant(ISqlSugarClient client, long id, TenantDatabaseType databaseType, string connectionString)
