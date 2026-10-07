@@ -1,0 +1,22 @@
+backend/src/framework/XiHan.BasicApp.Core/Data/MySqlConnectionStrings.cs
+  s_50280239b096a6::t_6f228520bb98da 91-116
+  s_50280239b096a6::t_4c0cd554e13766 90,143-169
+backend/test/XiHan.BasicApp.Core.Tests/MySqlConnectionStringsTests.cs
+  s_50280239b096a6::t_944ebab7f6d9b9 243-402
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "067af4a94c39218e62bb4c780e875d90e76e8a5f",
+  "prompts": {},
+  "sessions": {
+    "s_50280239b096a6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1a1f29e7-5ce5-4152-bd28-594200d343d3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
