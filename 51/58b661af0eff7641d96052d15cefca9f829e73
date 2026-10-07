@@ -1,0 +1,21 @@
+backend/test/XiHan.BasicApp.Saas.Tests/EventBox/EventBoxDatabaseTests.cs
+  s_50280239b096a6::t_1cce238df07eb2 92-96,316-363,613-635,787-795,861-869,935-943
+backend/test/XiHan.BasicApp.Saas.Tests/TestDatabases/IntegrationDatabase.cs
+  s_50280239b096a6::t_0d725518ae78a3 14,66
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5158b661af0eff7641d96052d15cefca9f829e73",
+  "prompts": {},
+  "sessions": {
+    "s_50280239b096a6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1a1f29e7-5ce5-4152-bd28-594200d343d3",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
