@@ -14,11 +14,45 @@
 
 ::: tip 部署前置
 - 准备好可连接的 **PostgreSQL** 与 **Redis**。
-- 全新数据库首次启动会自动建库、建表并执行数据种子（对应 `EnableDbInitialization` / `EnableTableInitialization` / `EnableDataSeeding`：框架缺省均为 `false`，仓库的 `appsettings.Development.json` 全部打开，生产配置需自行打开）。存量数据库的变更写在 `UpdateScripts/<版本>/<版本>.sql`，`XiHan:Upgrade:EnableAutoCheckOnStartup` 为 `true`（缺省值）时应用启动会自动执行，失败即中断启动；不希望应用启动时改库，就关掉它并在发布流程里先完成迁移。
-- 基础数据种子始终执行；演示数据（演示租户、组织、账号等）只在 `Saas:Seed:EnableDemoData` 为 `true` 时写入，缺省即不写。生产环境在 `appsettings.Production.json` 里写明 `false`。
+- 全新数据库首次启动会自动建库、建表并执行数据种子（对应 `EnableDbInitialization` / `EnableTableInitialization` / `EnableDataSeeding`：框架缺省均为 `false`，仓库的 `appsettings.Development.json` 与生产范本全部打开）。存量数据库的变更写在 `UpdateScripts/<版本>/<版本>.sql`，`XiHan:Upgrade:EnableAutoCheckOnStartup` 为 `true`（缺省值）时应用启动会自动执行，失败即中断启动；不希望应用启动时改库，就关掉它并在发布流程里先完成迁移。
+- 基础数据种子始终执行；演示数据（演示租户、组织、账号等）只在 `Saas:Seed:EnableDemoData` 为 `true` 时写入，缺省即不写。生产范本已写明 `false`。
 - 生产环境 CORS 仅放行配置中的域名（`XiHan:Web:Api:Cors:AllowedOrigins` 与网关 `XiHan:Web:Gateway:AllowedOrigins`），部署到自己的域名时务必同步修改，否则前端会被跨域拦截。
 - 若用到 AI / 知识库能力，还需准备对应的向量库（如 Qdrant）与嵌入模型配置。
 :::
+
+## 后端：生产配置
+
+`appsettings.Production.json` 被 `.gitignore` 排除，仓库里没有。仓库提供不含真实密钥的范本 `appsettings.Production.example.json`，在 WebHost 目录下复制一份再改：
+
+```bash
+cd backend/src/main/XiHan.BasicApp.WebHost
+cp appsettings.Production.example.json appsettings.Production.json
+```
+
+复制后必改的键（范本里写作 `<...>` 占位符或留空）：
+
+| 键 | 说明 |
+| --- | --- |
+| `XiHan:Authentication:Jwt:SecretKey` | 至少 32 字节的随机值，如 `openssl rand -base64 48` 的输出。范本留空，没填启动即报错 |
+| `XiHan:Data:SqlSugarCore:ConnectionConfigs:0:ConnectionString` | 主库连接串 |
+| `XiHan:Data:SqlSugarCore:ConnectionConfigs:0:ModuleDataSourceConfigs:0:ConnectionString` | ERP 模块库连接串；留空则与主库同库 |
+| `XiHan:Caching:Redis:Configuration` | Redis 连接串；不用 Redis 就把 `IsEnabled` 改为 `false` |
+| `XiHan:Web:Api:Cors:AllowedOrigins` | 前端访问地址 |
+| `XiHan:Authentication:OAuth:FrontendCallbackUrl` | 第三方登录回调页，与前端访问地址同源 |
+
+按需修改：
+
+- 第三方登录：范本的 `XiHan:Authentication:OAuth:Enabled` 为 `false`，各提供商凭据是占位值，换成平台申请的 `ClientId` / `ClientSecret` 后再开启，不用的提供商把各自的 `Enabled` 改为 `false`。
+- 开放接口签名：`XiHan:Web:Api:OpenApiSecurity:Clients` 的 `SecretKey` / `EncryptKey` 与 `frontend/.env.production` 的 `VITE_API_SECURITY_SECRET_KEY` / `VITE_API_SECURITY_ENCRYPT_KEY` 成对，改一处要同步改另一处。
+- 演示数据：范本的 `Saas:Seed:EnableDemoData` 为 `false`，生产环境保持关闭。
+
+范本与 `appsettings.Development.json` 的配置键保持一致（开发专用的 `CodeGeneration` 节除外），由 WebHost 测试检查。开发配置新增键时同步加进范本。
+
+### Docker 部署
+
+`docker-compose.yml` 把宿主机的 `backend/src/main/XiHan.BasicApp.WebHost/appsettings.Production.json` 挂进容器，启动前必须先按上面复制好，否则 Docker 会在该路径建一个空目录挂进去，后端读不到配置。
+
+compose 用环境变量覆盖了监听地址、主库连接串、Redis 与 Qdrant 地址，但**不覆盖 ERP 模块库的连接串**（`ModuleDataSourceConfigs`），其主机要在 `appsettings.Production.json` 里写成容器服务名 `postgres`，用户名与密码同 `.env` 的 `POSTGRES_USER` / `POSTGRES_PASSWORD`。CORS 与 OAuth 回调按 compose 的前端端口填，缺省是 `http://<主机>:8080`。
 
 ## 后端：发布
 
@@ -26,11 +60,11 @@
 dotnet publish backend/src/main/XiHan.BasicApp.WebHost -c Release -o /opt/xihan-basicapp
 ```
 
-发布前在目标环境的 `appsettings.Production.json`（或环境变量）中配置好数据库连接串、Redis、JWT 签名密钥、以及初始超管密码等敏感项。
+发布前按[生产配置](#后端-生产配置)准备好 `appsettings.Production.json`，密钥类配置也可改用环境变量提供。
 
 升级脚本当前使用 PostgreSQL 方言。启动时引擎先处理平台库、再处理配置为独立数据库的租户，并用数据库租约锁协调多副本；没抢到租约的副本不会等待，照常启动。上线前应备份数据库、在同版本副本验证脚本，多副本发布时由编排层控制放流，细节见[升级与迁移](./backend/upgrade)。
 
-应用监听地址与端口由配置项 `Hosting:Urls` 决定（`Program.cs` 启动时读取该值并调用 `UseUrls`）；仓库自带的 `appsettings.Production.json` 默认配置为 `http://127.0.0.1:9708`，可按需调整。对外暴露时建议在前面加一层反向代理（Nginx / Caddy 等）做 TLS 终止与静态资源分流。
+应用监听地址与端口由配置项 `Hosting:Urls` 决定（`Program.cs` 启动时读取该值并调用 `UseUrls`）；生产范本默认配置为 `http://127.0.0.1:9708`，可按需调整。对外暴露时建议在前面加一层反向代理（Nginx / Caddy 等）做 TLS 终止与静态资源分流。
 
 ## 后端：Linux（Supervisor）
 

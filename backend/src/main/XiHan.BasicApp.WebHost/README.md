@@ -43,8 +43,7 @@ XiHan.BasicApp.WebHost/
   XiHanBasicAppWebHostModule.cs
   appsettings.json
   appsettings.Development.json
-  appsettings.Staging.json
-  appsettings.Production.json
+  appsettings.Production.example.json
   Properties/
     launchSettings.json
 ```
