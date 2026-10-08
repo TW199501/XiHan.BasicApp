@@ -1,0 +1,24 @@
+backend/src/modules/XiHan.BasicApp.AI/Domain/DomainServices/Implementations/KnowledgeDocumentDomainService.cs
+  s_d91e80be1b5795::t_5c8dbe9faaaa75 80,93,148
+backend/test/XiHan.BasicApp.AI.Tests/AiKnowledgeDocumentDomainServiceTests.cs
+  s_d91e80be1b5795::t_0cb4af0cb0a4ff 225,245,264,279,420,613,644
+  s_d91e80be1b5795::t_72a0bb25ebec9a 516,520,531-533
+backend/test/XiHan.BasicApp.AI.Tests/AiTestHelper.cs
+  s_d91e80be1b5795::t_f9ad3287ad23cb 292,294,296,307
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "87c60eca7d0feef04cdd817daf1c19ac5c763082",
+  "prompts": {},
+  "sessions": {
+    "s_d91e80be1b5795": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a1173c-845e-7cf0-89c8-697cc198956f",
+        "model": "gpt-6-luna"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
