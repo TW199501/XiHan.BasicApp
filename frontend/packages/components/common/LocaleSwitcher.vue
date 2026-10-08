@@ -60,7 +60,7 @@ const appStore = useAppStore()
 const { setLocale } = useLocale()
 const { t } = useI18n()
 
-// 已上架语言。新增语言时此处、LocaleFlag 的国旗、locales/xihan-ui 的 xhTranslations 三处需同步
+// 已上架语言。新增语言时此处、LocaleFlag 的国旗、locales/xihan-ui 的 xhLocales（组件库有该语言包时）三处需同步
 const LOCALES = [
   { value: 'zh-CN', labelKey: 'header.locale.zh_cn' },
   { value: 'zh-TW', labelKey: 'header.locale.zh_tw' },
@@ -100,6 +100,7 @@ function choose(key: string) {
     :value="selected"
     :size="size"
     :style="selectStyle"
+    lazy-mount
     @update:value="(v: string[]) => v[0] && choose(v[0])"
   >
     <!-- 触发器的名字取自 label 部件 + 值文本；页面上紧挨着的那行「语言」文字并没有关联到它，这里给一份视觉隐藏的 -->
