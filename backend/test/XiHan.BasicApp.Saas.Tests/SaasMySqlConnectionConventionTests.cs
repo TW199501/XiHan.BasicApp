@@ -116,6 +116,58 @@ public sealed class SaasMySqlConnectionConventionTests
         Assert.Equal(TimeSpan.Zero, Assert.IsType<DateTimeOffset>(Assert.Single(result.Value).Value).Offset);
     }
 
+    /// <summary>
+    /// 注册的客户端配置钩子在已有钩子之后包装 MySQL 连接的实体写入事件，其他数据库类型保持原样
+    /// </summary>
+    [Fact]
+    public void ConnectionConvention_ConfigureDbAction_WrapsMySqlDataExecuting()
+    {
+        var dbActionCalls = 0;
+        var services = new ServiceCollection();
+        services.Configure<XiHanSqlSugarCoreOptions>(options => options.ConfigureDbAction = _ => dbActionCalls++);
+        services.AddSaasMySqlConnectionConvention();
+        var options = services.BuildServiceProvider().GetRequiredService<IOptions<XiHanSqlSugarCoreOptions>>().Value;
+        var frameworkCalls = 0;
+        Action<object, DataFilterModel> framework = (_, _) => frameworkCalls++;
+        using var mysql = new SqlSugarClient(new ConnectionConfig { DbType = DbType.MySql, ConnectionString = "Server=h;Database=d", IsAutoCloseConnection = true });
+        using var postgres = new SqlSugarClient(new ConnectionConfig { DbType = DbType.PostgreSQL, ConnectionString = "Host=h;Database=d", IsAutoCloseConnection = true });
+        mysql.Aop.DataExecuting = framework;
+        postgres.Aop.DataExecuting = framework;
+
+        options.ConfigureDbAction!(mysql);
+        options.ConfigureDbAction!(postgres);
+
+        Assert.Equal(2, dbActionCalls);
+        Assert.NotNull(mysql.CurrentConnectionConfig.AopEvents.DataExecuting);
+        Assert.NotSame(framework, mysql.CurrentConnectionConfig.AopEvents.DataExecuting);
+        Assert.Same(framework, postgres.CurrentConnectionConfig.AopEvents.DataExecuting);
+
+        var time = new DateTimeOffset(2026, 10, 4, 10, 6, 7, 123, TimeSpan.FromHours(5));
+        var row = new TimeRow { Time = time };
+        var property = typeof(TimeRow).GetProperty(nameof(TimeRow.Time))!;
+        mysql.CurrentConnectionConfig.AopEvents.DataExecuting(time, new DataFilterModel
+        {
+            OperationType = DataFilterType.InsertByObject,
+            EntityValue = row,
+            EntityColumnInfo = new EntityColumnInfo { PropertyInfo = property, PropertyName = property.Name, DbColumnName = property.Name }
+        });
+
+        Assert.Equal(1, frameworkCalls);
+        Assert.Equal(TimeSpan.Zero, row.Time.Offset);
+        Assert.Equal(time.UtcDateTime, row.Time.UtcDateTime);
+    }
+
+    /// <summary>
+    /// 带时间列的测试行
+    /// </summary>
+    private sealed class TimeRow
+    {
+        /// <summary>
+        /// 时间
+        /// </summary>
+        public DateTimeOffset Time { get; set; }
+    }
+
     private static void InsertTenant(ISqlSugarClient client, long id, TenantDatabaseType databaseType, string connectionString)
     {
         var tenant = new SysTenant

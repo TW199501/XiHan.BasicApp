@@ -240,4 +240,164 @@ public sealed class MySqlConnectionStringsTests
 
         Assert.Same(hook, scope.GetConnectionScope("main").CurrentConnectionConfig.AopEvents.OnExecutingChangeSql);
     }
+
+    /// <summary>
+    /// 非 MySQL 连接不包装实体写入事件
+    /// </summary>
+    [Fact]
+    public void ApplyDataExecuting_NonMySql_LeavesDataExecutingUnchanged()
+    {
+        Action<object, DataFilterModel> existing = (_, _) => { };
+        var config = new ConnectionConfig
+        {
+            DbType = DbType.PostgreSQL,
+            ConnectionString = "Host=h;Database=d",
+            AopEvents = new AopEvents { DataExecuting = existing }
+        };
+
+        MySqlConnectionStrings.ApplyDataExecuting(config);
+
+        Assert.Same(existing, config.AopEvents.DataExecuting);
+    }
+
+    /// <summary>
+    /// MySQL 连接插入与更新实体时，带非 0 偏移的 DateTimeOffset 列值转成 UTC，时刻不变，其他列保持原样
+    /// </summary>
+    [Theory]
+    [InlineData(DataFilterType.InsertByObject)]
+    [InlineData(DataFilterType.UpdateByObject)]
+    public void ApplyDataExecuting_ConvertsDateTimeOffsetColumnsToUtc(DataFilterType operationType)
+    {
+        var config = new ConnectionConfig { DbType = DbType.MySql, ConnectionString = "Server=h;Database=d" };
+        var time = new DateTimeOffset(2026, 10, 4, 10, 6, 7, 123, TimeSpan.FromHours(5));
+        var nullableTime = new DateTimeOffset(2026, 10, 4, 13, 6, 7, 123, TimeSpan.FromHours(8));
+        var plain = new DateTime(2026, 10, 4, 10, 6, 7, DateTimeKind.Unspecified);
+        var entity = new TimeEntity { Time = time, NullableTime = nullableTime, EmptyTime = null, Plain = plain };
+
+        MySqlConnectionStrings.ApplyDataExecuting(config);
+        InvokeForAllColumns(config, entity, operationType);
+
+        Assert.Equal(TimeSpan.Zero, entity.Time.Offset);
+        Assert.Equal(time.UtcDateTime, entity.Time.UtcDateTime);
+        Assert.Equal(TimeSpan.Zero, entity.NullableTime!.Value.Offset);
+        Assert.Equal(nullableTime.UtcDateTime, entity.NullableTime.Value.UtcDateTime);
+        Assert.Null(entity.EmptyTime);
+        Assert.Equal(plain, entity.Plain);
+    }
+
+    /// <summary>
+    /// 按对象删除时不转换
+    /// </summary>
+    [Fact]
+    public void ApplyDataExecuting_DeleteByObject_LeavesValues()
+    {
+        var config = new ConnectionConfig { DbType = DbType.MySql, ConnectionString = "Server=h;Database=d" };
+        var time = new DateTimeOffset(2026, 10, 4, 10, 6, 7, 123, TimeSpan.FromHours(5));
+        var entity = new TimeEntity { Time = time };
+
+        MySqlConnectionStrings.ApplyDataExecuting(config);
+        InvokeForAllColumns(config, entity, DataFilterType.DeleteByObject);
+
+        Assert.Equal(TimeSpan.FromHours(5), entity.Time.Offset);
+    }
+
+    /// <summary>
+    /// 已有的实体写入委派先执行，其写入的值再做 UTC 转换
+    /// </summary>
+    [Fact]
+    public void ApplyDataExecuting_RunsExistingDelegateFirst()
+    {
+        var calls = 0;
+        var assigned = new DateTimeOffset(2026, 10, 4, 10, 6, 7, 123, TimeSpan.FromHours(5));
+        var config = new ConnectionConfig
+        {
+            DbType = DbType.MySqlConnector,
+            ConnectionString = "Server=h;Database=d",
+            AopEvents = new AopEvents
+            {
+                DataExecuting = (_, entityInfo) =>
+                {
+                    calls++;
+                    ((TimeEntity)entityInfo.EntityValue).Time = assigned;
+                }
+            }
+        };
+        var entity = new TimeEntity { Time = DateTimeOffset.UnixEpoch };
+
+        MySqlConnectionStrings.ApplyDataExecuting(config);
+        config.AopEvents.DataExecuting!(entity.Time, CreateFilterModel(entity, nameof(TimeEntity.Time), DataFilterType.InsertByObject));
+
+        Assert.Equal(1, calls);
+        Assert.Equal(TimeSpan.Zero, entity.Time.Offset);
+        Assert.Equal(assigned.UtcDateTime, entity.Time.UtcDateTime);
+    }
+
+    /// <summary>
+    /// 同一连接配置包装两次只挂一层，已有委派每次执行只调用一次
+    /// </summary>
+    [Fact]
+    public void ApplyDataExecuting_Twice_WrapsOnce()
+    {
+        var calls = 0;
+        var config = new ConnectionConfig
+        {
+            DbType = DbType.MySql,
+            ConnectionString = "Server=h;Database=d",
+            AopEvents = new AopEvents { DataExecuting = (_, _) => calls++ }
+        };
+        var entity = new TimeEntity();
+
+        MySqlConnectionStrings.ApplyDataExecuting(config);
+        var first = config.AopEvents.DataExecuting;
+        MySqlConnectionStrings.ApplyDataExecuting(config);
+        config.AopEvents.DataExecuting!(entity.Time, CreateFilterModel(entity, nameof(TimeEntity.Time), DataFilterType.InsertByObject));
+
+        Assert.Same(first, config.AopEvents.DataExecuting);
+        Assert.Equal(1, calls);
+    }
+
+    private static void InvokeForAllColumns(ConnectionConfig config, TimeEntity entity, DataFilterType operationType)
+    {
+        foreach (var property in typeof(TimeEntity).GetProperties())
+        {
+            config.AopEvents!.DataExecuting!(property.GetValue(entity)!, CreateFilterModel(entity, property.Name, operationType));
+        }
+    }
+
+    private static DataFilterModel CreateFilterModel(TimeEntity entity, string propertyName, DataFilterType operationType)
+    {
+        var property = typeof(TimeEntity).GetProperty(propertyName)!;
+        return new DataFilterModel
+        {
+            OperationType = operationType,
+            EntityValue = entity,
+            EntityColumnInfo = new EntityColumnInfo { PropertyInfo = property, PropertyName = property.Name, DbColumnName = property.Name }
+        };
+    }
+
+    /// <summary>
+    /// 带时间列的测试实体
+    /// </summary>
+    private sealed class TimeEntity
+    {
+        /// <summary>
+        /// 时间
+        /// </summary>
+        public DateTimeOffset Time { get; set; }
+
+        /// <summary>
+        /// 可空时间
+        /// </summary>
+        public DateTimeOffset? NullableTime { get; set; }
+
+        /// <summary>
+        /// 为空的可空时间
+        /// </summary>
+        public DateTimeOffset? EmptyTime { get; set; }
+
+        /// <summary>
+        /// 不带偏移的时间
+        /// </summary>
+        public DateTime Plain { get; set; }
+    }
 }

@@ -202,17 +202,16 @@ CodeFirst 负责首次建表；已有库的结构和数据变化由 Framework Up
 
 ## MySQL 与 SQL Server 的约定
 
-- **MySQL 时间按 UTC 读写**：BasicApp 的每条 MySQL 连接都把连接串规范化为 `DateTimeKind=Utc`，连接串显式设成其他值时，构建连接配置（启动时创建 SqlSugarScope，或运行时新增租户连接）即抛出异常（消息不含连接串）；执行前把 `DateTimeOffset` 参数转成 UTC（挂在 `AopEvents.OnExecutingChangeSql`，串接已有委派）。经 `ConfigureConnectionConfigs` 生效，覆盖平台库、平台模块库与运行时新增的租户主库。
+- **MySQL 时间按 UTC 读写**：BasicApp 的每条 MySQL 连接都把连接串规范化为 `DateTimeKind=Utc`，连接串显式设成其他值时，构建连接配置（启动时创建 SqlSugarScope，或运行时新增租户连接）即抛出异常（消息不含连接串）；执行前把 `DateTimeOffset` 参数转成 UTC（挂在 `AopEvents.OnExecutingChangeSql`，串接已有委派）。经 `ConfigureConnectionConfigs` 生效，覆盖平台库、平台模块库与运行时新增的租户主库。插入与更新实体时（含多行批量写入），把实体中带非 0 偏移的 `DateTimeOffset` 列值转成 UTC，传入的实体对象的偏移随之变为 +00:00、时刻不变（经 `ConfigureDbAction` 串接已有委派，在框架的主键、审计与租户注入之后执行；租户模块库也经过）。
 - **时间列 6 位小数秒**：新建表的时间列为 MySQL `datetime(6)`、SQL Server `datetimeoffset(6)`、PostgreSQL `timestamptz(6)`。已存在的 MySQL 库由升级脚本 `UpdateScripts/5.6.1/mysql/5.6.1.sql` 从 `datetime(0)` 改为 `datetime(6)`，原值不变；已存在的 SQL Server 表保留 `datetimeoffset(7)`。
 - **收件箱去重键**：区分大小写的排序规则与既有 SQL Server 库的修补脚本，见 `backend/src/modules/XiHan.BasicApp.Saas/README.md` 的「事件收发件箱」。
-- **SQL Server 字符串列为 nvarchar**：BasicApp 的每条 SQL Server 连接开启 SqlSugar 的 `MoreSettings.SqlServerCodeFirstNvarchar`（`SqlServerConnectionSettings`，经 `ConfigureConnectionConfigs` 生效，覆盖范围与上面的 MySQL 约定相同），新建表的字符串列为 `nvarchar(n)`，中文等非 ASCII 字符按原样存取。建表只建不改，已存在的表由升级脚本 `UpdateScripts/5.6.1/mssql/5.6.1.sql` 把 `dbo` 架构下 `Sys_` 开头的表（含分表）的 `varchar` 列转为 `nvarchar`：长度、排序规则、可空性与索引定义不变，可重复执行，其他表不动。列被外键、默认值约束、架构绑定视图、手工统计信息、主键或唯一约束等引用时脚本报错并列出表名、列名与对象，不做改动，需先手工处理再启动。原先已存成 `?` 的字符无法还原。转换逐列重写整张表，大表先手动执行该脚本再启动（见 `UpdateScripts/README.md`）。租户模块库与 `IDynamicConnectionRegistrar` 注册的连接不经 `ConfigureConnectionConfigs`，在这些连接上新建的表仍是 `varchar`（追踪于 E-115）。
+- **SQL Server 字符串列为 nvarchar**：BasicApp 的每条 SQL Server 连接开启 SqlSugar 的 `MoreSettings.SqlServerCodeFirstNvarchar`（`SqlServerConnectionSettings`，经 `ConfigureConnectionConfigs` 生效，覆盖范围与上面的 MySQL 约定相同），新建表的字符串列为 `nvarchar(n)`，中文等非 ASCII 字符按原样存取。建表只建不改，已存在的表由升级脚本 `UpdateScripts/5.6.1/mssql/5.6.1.sql` 把 `dbo` 架构下 `Sys_` 开头的表（含分表）的 `varchar` 列转为 `nvarchar`：长度、排序规则、可空性与索引定义不变，可重复执行，其他表不动。列被外键、默认值约束、架构绑定视图、手工统计信息、主键或唯一约束等引用时脚本报错并列出表名、列名与对象，不做改动，需先手工处理再启动。原先已存成 `?` 的字符无法还原。转换逐列重写整张表，大表先手动执行该脚本再启动（见 `UpdateScripts/README.md`）。租户模块库与 `IDynamicConnectionRegistrar` 注册的连接不经 `ConfigureConnectionConfigs`，在这些连接上新建的表仍是 `varchar`（追踪于 E-134）。
 
-已知限制（MySQL，追踪于 E-115）：
+已知限制（MySQL，追踪于 E-134）：
 
 | 情形 | 表现 |
 | --- | --- |
-| 多行批量写入（`Insertable(list)`、`AddRangeAsync`，很可能也包括 `UpdateRangeAsync`） | 时间以墙上时间字面量写入 SQL，不经参数转换；带非 0 偏移的值会被存成错误时刻 |
-| 租户模块库（`Tenant_{id}_Erp`） | 连接串由租户主库派生，继承其 `DateTimeKind=Utc`；不经 `ConfigureConnectionConfigs`，没有参数转换，带非 0 偏移的 `DateTimeOffset` 参数会抛出异常 |
+| 租户模块库（`Tenant_{id}_Erp`） | 连接串由租户主库派生，继承其 `DateTimeKind=Utc`；不经 `ConfigureConnectionConfigs`，没有参数转换；实体插入与更新的列值已转成 UTC，其他带非 0 偏移的 `DateTimeOffset` 参数会抛出异常 |
 | `IDynamicConnectionRegistrar` 注册的连接 | 不经 `ConfigureConnectionConfigs`，既没有 UTC 规范化也没有参数转换，由注册方自行处理（代码生成的数据源连接已补上 `DateTimeKind=Utc`） |
 
 ## 多数据库集成测试

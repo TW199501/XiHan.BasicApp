@@ -88,6 +88,33 @@ public static class MySqlConnectionStrings
     }
 
     /// <summary>
+    /// 为 MySQL 连接追加实体写入事件：先执行已有的 DataExecuting 委派，再把插入与更新实体中带非 0 偏移的 DateTimeOffset 列值转成 UTC；其他数据库类型不处理
+    /// </summary>
+    /// <remarks>
+    /// 覆盖多行写入时以字面量写入 SQL 的时间值；转换会改写传入实体对象的属性值。
+    /// 须在框架设定 DataExecuting 之后调用（如 <c>XiHanSqlSugarCoreOptions.ConfigureDbAction</c>）；重复调用只挂一层。
+    /// </remarks>
+    /// <param name="config">连接配置</param>
+    public static void ApplyDataExecuting(ConnectionConfig config)
+    {
+        ArgumentNullException.ThrowIfNull(config);
+
+        if (!IsMySql(config.DbType))
+        {
+            return;
+        }
+
+        config.AopEvents ??= new AopEvents();
+        var previous = config.AopEvents.DataExecuting;
+        if (previous?.Target is UtcEntityValueConverter)
+        {
+            return;
+        }
+
+        config.AopEvents.DataExecuting = new UtcEntityValueConverter(previous).Convert;
+    }
+
+    /// <summary>
     /// 执行前把 DateTimeOffset 参数转成 UTC 的钩子
     /// </summary>
     /// <param name="previous">已有的执行前钩子</param>
@@ -111,6 +138,39 @@ public static class MySqlConnectionStrings
             }
 
             return result;
+        }
+    }
+
+    /// <summary>
+    /// 实体写入前把 DateTimeOffset 列值转成 UTC 的钩子
+    /// </summary>
+    /// <param name="previous">已有的实体写入委派</param>
+    private sealed class UtcEntityValueConverter(Action<object, DataFilterModel>? previous)
+    {
+        /// <summary>
+        /// 先执行已有委派，再把插入与更新实体中该列的 DateTimeOffset 值转成 UTC
+        /// </summary>
+        /// <param name="oldValue">列的原值</param>
+        /// <param name="entityInfo">实体与列信息</param>
+        public void Convert(object oldValue, DataFilterModel entityInfo)
+        {
+            previous?.Invoke(oldValue, entityInfo);
+
+            if (entityInfo.OperationType is not (DataFilterType.InsertByObject or DataFilterType.UpdateByObject))
+            {
+                return;
+            }
+
+            var property = entityInfo.EntityColumnInfo?.PropertyInfo;
+            if (property is null || (property.PropertyType != typeof(DateTimeOffset) && property.PropertyType != typeof(DateTimeOffset?)))
+            {
+                return;
+            }
+
+            if (property.GetValue(entityInfo.EntityValue) is DateTimeOffset value && value.Offset != TimeSpan.Zero)
+            {
+                entityInfo.SetValue(value.ToUniversalTime());
+            }
         }
     }
 }

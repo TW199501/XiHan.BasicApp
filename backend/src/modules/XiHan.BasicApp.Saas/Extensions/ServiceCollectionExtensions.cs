@@ -501,11 +501,13 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// 添加 MySQL 连接约定：框架构建 SqlSugar 连接配置前，把 MySQL 连接串规范化为 DateTimeKind=Utc，并在执行前把 DateTimeOffset 参数转成 UTC
+    /// 添加 MySQL 连接约定：框架构建 SqlSugar 连接配置前，把 MySQL 连接串规范化为 DateTimeKind=Utc，并在执行前把 DateTimeOffset 参数转成 UTC；
+    /// 框架配置连接作用域后，在实体写入事件中把插入与更新实体的 DateTimeOffset 列值转成 UTC
     /// </summary>
     /// <remarks>
-    /// 链在已有的 <c>ConfigureConnectionConfigs</c> 钩子之后执行。平台库、平台模块库与运行时新增的租户主库会经过；
-    /// 租户模块库（如 <c>Tenant_{id}_Erp</c>）与经 <c>IDynamicConnectionRegistrar</c> 注册的连接不经过。
+    /// 分别链在已有的 <c>ConfigureConnectionConfigs</c> 与 <c>ConfigureDbAction</c> 钩子之后执行。
+    /// 连接串与参数转换：平台库、平台模块库与运行时新增的租户主库会经过，租户模块库（如 <c>Tenant_{id}_Erp</c>）不经过；
+    /// 实体写入转换：以上连接与租户模块库都会经过。经 <c>IDynamicConnectionRegistrar</c> 注册的连接两者都不经过。
     /// </remarks>
     /// <param name="services">服务集合</param>
     /// <returns>服务集合</returns>
@@ -523,6 +525,13 @@ public static class ServiceCollectionExtensions
                 {
                     MySqlConnectionStrings.Apply(config);
                 }
+            };
+
+            var previousDbAction = options.ConfigureDbAction;
+            options.ConfigureDbAction = db =>
+            {
+                previousDbAction?.Invoke(db);
+                MySqlConnectionStrings.ApplyDataExecuting(db.CurrentConnectionConfig);
             };
         });
 

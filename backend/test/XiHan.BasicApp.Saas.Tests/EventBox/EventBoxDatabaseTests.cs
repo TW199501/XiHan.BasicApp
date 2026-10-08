@@ -90,6 +90,11 @@ public abstract class EventBoxDatabaseTests : IDisposable
     protected abstract string ExpectedDedupKeyType { get; }
 
     /// <summary>
+    /// 时间列读回时是否保留写入的偏移
+    /// </summary>
+    protected abstract bool PreservesOffset { get; }
+
+    /// <summary>
     /// 时间列、二进制列与事件名称列的定义符合该数据库的预期，收件箱带三个索引
     /// </summary>
     [Fact]
@@ -306,6 +311,54 @@ public abstract class EventBoxDatabaseTests : IDisposable
 
         Assert.Equal(createdTime.UtcDateTime, stored.CreatedTime.UtcDateTime);
         Assert.Equal(claimTime.UtcDateTime, stored.ClaimTime!.Value.UtcDateTime);
+    }
+
+    /// <summary>
+    /// 非 UTC 偏移与本机偏移的时刻经多行插入写入后，读回同一时刻
+    /// </summary>
+    [Fact]
+    public async Task NonUtcOffsetTimes_InsertedAsListRoundTripInstant()
+    {
+        var context = RequireContext();
+        var times = NonUtcOffsetTimes();
+        var rows = times.Select(NewOutboxRow).ToList();
+
+        await context.Client.Insertable(rows).ExecuteCommandAsync();
+
+        var stored = await LoadOutboxRowsAsync(context, rows);
+        for (var i = 0; i < times.Length; i++)
+        {
+            AssertSameTime(times[i], stored[i].CreatedTime);
+        }
+    }
+
+    /// <summary>
+    /// 非 UTC 偏移与本机偏移的时刻经多行更新写入后，读回同一时刻
+    /// </summary>
+    [Fact]
+    public async Task NonUtcOffsetTimes_UpdatedAsListRoundTripInstant()
+    {
+        var context = RequireContext();
+        var createdTime = new DateTimeOffset(2026, 10, 4, 5, 6, 7, 123, TimeSpan.Zero);
+        var rows = new List<SysEventOutbox> { NewOutboxRow(createdTime), NewOutboxRow(createdTime) };
+        foreach (var row in rows)
+        {
+            await context.Client.Insertable(row).ExecuteCommandAsync();
+        }
+
+        var times = NonUtcOffsetTimes();
+        for (var i = 0; i < times.Length; i++)
+        {
+            rows[i].ClaimTime = times[i];
+        }
+
+        await context.Client.Updateable(rows).ExecuteCommandAsync();
+
+        var stored = await LoadOutboxRowsAsync(context, rows);
+        for (var i = 0; i < times.Length; i++)
+        {
+            AssertSameTime(times[i], stored[i].ClaimTime!.Value);
+        }
     }
 
     /// <summary>
@@ -557,6 +610,29 @@ public abstract class EventBoxDatabaseTests : IDisposable
         return _connectionString;
     }
 
+    private static DateTimeOffset[] NonUtcOffsetTimes()
+    {
+        var instant = new DateTimeOffset(2026, 10, 4, 5, 6, 7, 123, TimeSpan.Zero);
+        var localOffset = TimeZoneInfo.Local.GetUtcOffset(instant.UtcDateTime);
+        return [instant.ToOffset(TimeSpan.FromHours(5)), instant.AddMinutes(1).ToOffset(localOffset)];
+    }
+
+    private static async Task<List<SysEventOutbox>> LoadOutboxRowsAsync(EventBoxTestContext context, IReadOnlyList<SysEventOutbox> rows)
+    {
+        var ids = rows.Select(row => row.BasicId).ToList();
+        var stored = await context.Client.Queryable<SysEventOutbox>().Where(e => ids.Contains(e.BasicId)).ToListAsync();
+        return [.. ids.Select(id => stored.Single(row => row.BasicId == id))];
+    }
+
+    private void AssertSameTime(DateTimeOffset expected, DateTimeOffset actual)
+    {
+        Assert.Equal(expected.UtcDateTime, actual.UtcDateTime);
+        if (PreservesOffset)
+        {
+            Assert.Equal(expected.Offset, actual.Offset);
+        }
+    }
+
     private static SysEventOutbox NewOutboxRow(DateTimeOffset createdTime)
     {
         return new SysEventOutbox(Guid.NewGuid())
@@ -709,6 +785,15 @@ public sealed class EventBoxPostgresTests : EventBoxDatabaseTests
     }
 
     /// <inheritdoc />
+    protected override bool PreservesOffset
+    {
+        get
+        {
+            return false;
+        }
+    }
+
+    /// <inheritdoc />
     protected override bool IsDuplicateKeyViolation(Exception exception)
     {
         return IntegrationDatabase.FindException<PostgresException>(exception) is { SqlState: "23505" };
@@ -774,6 +859,15 @@ public sealed partial class EventBoxSqlServerTests : EventBoxDatabaseTests
     }
 
     /// <inheritdoc />
+    protected override bool PreservesOffset
+    {
+        get
+        {
+            return true;
+        }
+    }
+
+    /// <inheritdoc />
     protected override bool IsDuplicateKeyViolation(Exception exception)
     {
         return IntegrationDatabase.FindException<SqlException>(exception) is { Number: 2601 or 2627 };
@@ -835,6 +929,15 @@ public sealed class EventBoxMySqlTests : EventBoxDatabaseTests
         get
         {
             return "varchar";
+        }
+    }
+
+    /// <inheritdoc />
+    protected override bool PreservesOffset
+    {
+        get
+        {
+            return false;
         }
     }
 
