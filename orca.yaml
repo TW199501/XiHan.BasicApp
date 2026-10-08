@@ -1,0 +1,9 @@
+scripts:
+  setup: |
+    set -e
+    cd "$ORCA_WORKTREE_PATH"
+    dotnet restore backend/XiHan.BasicApp.slnx
+    pnpm install --dir frontend --no-frozen-lockfile
+    for f in .env frontend/.env.local backend/src/main/XiHan.BasicApp.WebHost/appsettings.Production.json; do
+      if [ -f "$ORCA_ROOT_PATH/$f" ]; then cp "$ORCA_ROOT_PATH/$f" "$f"; fi
+    done

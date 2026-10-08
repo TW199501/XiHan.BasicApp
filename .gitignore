@@ -422,3 +422,6 @@ appsettings.Production.json
 
 # docker compose 变量文件，含数据库口令；模板见 .env.example
 /.env
+
+# Orca 工作树目录
+/.ocrca/
