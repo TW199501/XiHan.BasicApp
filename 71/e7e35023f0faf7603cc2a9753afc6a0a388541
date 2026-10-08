@@ -1,0 +1,23 @@
+backend/src/modules/XiHan.BasicApp.AI/Domain/DomainServices/Implementations/KnowledgeDocumentDomainService.cs
+  s_02f6cb21cef201::t_8debfa41615e21 80,93,148
+backend/test/XiHan.BasicApp.AI.Tests/AiKnowledgeDocumentDomainServiceTests.cs
+  s_02f6cb21cef201::t_ebd3761a8929f6 225,245,264,279,420,516,520,610,641
+backend/test/XiHan.BasicApp.AI.Tests/AiTestHelper.cs
+  s_02f6cb21cef201::t_24d6fc04923b80 293,295,306
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "71e7e35023f0faf7603cc2a9753afc6a0a388541",
+  "prompts": {},
+  "sessions": {
+    "s_02f6cb21cef201": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7482caea-5d7a-4b50-9ad4-42aaf436fb5c",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
