@@ -222,7 +222,7 @@ public sealed class AiKnowledgeDocumentDomainServiceTests
 
         Assert.Equal("并发冲突", exception.Message, StringComparer.Ordinal);
         fixture.Ingestor.Verify(
-            ingestor => ingestor.RemoveDocumentAsync("100", 5, It.IsAny<CancellationToken>()),
+            ingestor => ingestor.RemoveDocumentAsync("100", 88, 5, It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
@@ -242,7 +242,7 @@ public sealed class AiKnowledgeDocumentDomainServiceTests
             () => fixture.Service.IngestAsync(AiTestHelper.CreateIngestCommand(), source.Token));
 
         fixture.Ingestor.Verify(
-            ingestor => ingestor.RemoveDocumentAsync("100", 5, CancellationToken.None),
+            ingestor => ingestor.RemoveDocumentAsync("100", 88, 5, CancellationToken.None),
             Times.Once);
     }
 
@@ -261,7 +261,7 @@ public sealed class AiKnowledgeDocumentDomainServiceTests
             () => fixture.Service.IngestAsync(AiTestHelper.CreateIngestCommand()));
 
         fixture.Ingestor.Verify(
-            ingestor => ingestor.RemoveDocumentAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
+            ingestor => ingestor.RemoveDocumentAsync(It.IsAny<string>(), It.IsAny<long>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
             Times.Never);
     }
 
@@ -276,7 +276,7 @@ public sealed class AiKnowledgeDocumentDomainServiceTests
             .Setup(repository => repository.UpdateAsync(It.IsAny<SysKnowledgeDocument>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("并发冲突"));
         _ = fixture.Ingestor
-            .Setup(ingestor => ingestor.RemoveDocumentAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Setup(ingestor => ingestor.RemoveDocumentAsync(It.IsAny<string>(), It.IsAny<long>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new TimeoutException("清理超时"));
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(
@@ -417,7 +417,7 @@ public sealed class AiKnowledgeDocumentDomainServiceTests
         var fixture = CreateFixture(existing, chunkCount: 6);
         var callOrder = new List<string>();
         _ = fixture.Ingestor
-            .Setup(ingestor => ingestor.RemoveDocumentAsync("7", 4, It.IsAny<CancellationToken>()))
+            .Setup(ingestor => ingestor.RemoveDocumentAsync("7", 0, 4, It.IsAny<CancellationToken>()))
             .Callback(() => callOrder.Add("remove"))
             .Returns(Task.CompletedTask);
         _ = fixture.Ingestor
@@ -513,11 +513,11 @@ public sealed class AiKnowledgeDocumentDomainServiceTests
     [Fact]
     public async Task DeleteAsync_ShouldRemoveVectorsBeforeSoftDeletingDocument()
     {
-        var existing = AiTestHelper.CreateDocument(7, chunkCount: 4);
+        var existing = AiTestHelper.CreateDocument(7, chunkCount: 4, tenantId: 88);
         var fixture = CreateFixture(existing);
         var callOrder = new List<string>();
         _ = fixture.Ingestor
-            .Setup(ingestor => ingestor.RemoveDocumentAsync("7", 4, It.IsAny<CancellationToken>()))
+            .Setup(ingestor => ingestor.RemoveDocumentAsync("7", 88, 4, It.IsAny<CancellationToken>()))
             .Callback(() => callOrder.Add("remove"))
             .Returns(Task.CompletedTask);
         _ = fixture.Repository
@@ -528,6 +528,9 @@ public sealed class AiKnowledgeDocumentDomainServiceTests
         await fixture.Service.DeleteAsync(7);
 
         Assert.Equal(["remove", "delete"], callOrder, StringComparer.Ordinal);
+        fixture.Ingestor.Verify(
+            ingestor => ingestor.RemoveDocumentAsync("7", 88, 4, It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     /// <summary>
@@ -607,7 +610,7 @@ public sealed class AiKnowledgeDocumentDomainServiceTests
         await fixture.Service.DeleteAsync(7, source.Token);
 
         fixture.Repository.Verify(repository => repository.GetByIdAsync(7, source.Token), Times.Once);
-        fixture.Ingestor.Verify(ingestor => ingestor.RemoveDocumentAsync("7", 4, source.Token), Times.Once);
+        fixture.Ingestor.Verify(ingestor => ingestor.RemoveDocumentAsync("7", 0, 4, source.Token), Times.Once);
         fixture.Repository.Verify(repository => repository.DeleteAsync(existing, source.Token), Times.Once);
     }
 
@@ -638,7 +641,7 @@ public sealed class AiKnowledgeDocumentDomainServiceTests
             .Setup(item => item.IngestAsync(It.IsAny<KnowledgeIngestRequest>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(chunkCount);
         _ = ingestor
-            .Setup(item => item.RemoveDocumentAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .Setup(item => item.RemoveDocumentAsync(It.IsAny<string>(), It.IsAny<long>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
         var service = new KnowledgeDocumentDomainService(

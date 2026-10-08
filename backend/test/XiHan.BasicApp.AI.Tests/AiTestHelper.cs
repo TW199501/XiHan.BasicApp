@@ -289,10 +289,11 @@ public static class AiTestHelper
     /// </summary>
     /// <param name="basicId">主键。</param>
     /// <param name="chunkCount">已入库切片数。</param>
+    /// <param name="tenantId">租户标识。</param>
     /// <returns>知识文档实体。</returns>
-    public static SysKnowledgeDocument CreateDocument(long basicId = 1, int chunkCount = 3)
+    public static SysKnowledgeDocument CreateDocument(long basicId = 1, int chunkCount = 3, long tenantId = 0)
     {
-        return SetBasicId(new SysKnowledgeDocument
+        return SetTenantId(SetBasicId(new SysKnowledgeDocument
         {
             Title = "运维手册",
             SourceType = KnowledgeSourceType.PasteText,
@@ -303,7 +304,7 @@ public static class AiTestHelper
             Status = KnowledgeIndexStatus.Indexed,
             Sort = 0,
             Remark = "备注"
-        }, basicId);
+        }, basicId), tenantId);
     }
 
     /// <summary>
