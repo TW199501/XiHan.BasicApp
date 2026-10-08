@@ -1,0 +1,53 @@
+docs/deployment.md
+  s_75f0910dde6f74::t_99635b265eaaac 17
+  s_75f0910dde6f74::t_82aa511cb09739 67
+  s_75f0910dde6f74::t_cce119c3e11f08 18
+  s_75f0910dde6f74::t_fed27c3fa0e3de 23-56,63
+backend/src/main/XiHan.BasicApp.WebHost/appsettings.Production.example.json
+  s_75f0910dde6f74::t_426650a16e3367 374
+  s_75f0910dde6f74::t_761978fc1eab68 192-194
+  s_75f0910dde6f74::t_38666466cd9626 64-66
+  s_75f0910dde6f74::t_bfa3d31ba38afa 1-4
+  s_75f0910dde6f74::t_83cb9530ad58f7 7,12-13
+  s_75f0910dde6f74::t_92da9936833d9c 407
+  s_75f0910dde6f74::t_bbd10fac3e5fda 209-211
+  s_75f0910dde6f74::t_00662c64e53a32 23,25
+  s_75f0910dde6f74::t_f75f047d3e207f 319-320
+  s_75f0910dde6f74::t_bfb968d6d06338 357-358
+  s_75f0910dde6f74::t_e127afcc939c75 409
+  s_75f0910dde6f74::t_2d1cf3ab2b7c27 5-6,8-11,14-22,24,26-63,67-79,82,85-191,195-208,212-318,321-356,359-373,375-406,408,410-545
+  s_75f0910dde6f74::t_d3e73c6ec0c105 80-81,83-84
+backend/README.md
+  s_75f0910dde6f74::t_dd5f2927d6ebd2 93-94
+docs/configuration.md
+  s_75f0910dde6f74::t_dd5f2927d6ebd2 11-12,20
+backend/src/main/XiHan.BasicApp.WebHost/README.md
+  s_75f0910dde6f74::t_dd5f2927d6ebd2 46
+.env.example
+  s_75f0910dde6f74::t_dd5f2927d6ebd2 3
+backend/README_cn.md
+  s_75f0910dde6f74::t_dd5f2927d6ebd2 93-94
+backend/test/XiHan.BasicApp.WebHost.Tests/WebHostConfigurationLayoutTests.cs
+  s_75f0910dde6f74::t_a6fd6e9651e6bd 310-311
+  s_75f0910dde6f74::t_032e9c54b4309c 19-28,36,42,63,82,95-139,152,166,175,309,312-336,342-351
+  s_75f0910dde6f74::t_8525936842b9ac 337-341
+  s_75f0910dde6f74::t_32025d655f5578 352
+docker-compose.yml
+  s_75f0910dde6f74::t_dd5f2927d6ebd2 7-8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bfdc9a1535cb6df929de599bc25ca9f81bfd4ff7",
+  "prompts": {},
+  "sessions": {
+    "s_75f0910dde6f74": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e78e74b6-7288-4505-b36c-de27d2cfdf48",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
