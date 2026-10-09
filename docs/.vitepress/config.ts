@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
-import { DefaultTheme, HeadConfig, defineConfig } from "vitepress";
-import { renderPageMarkdown, writeLlmsAssets } from "./gen-llms";
+import type { DefaultTheme } from "vitepress";
+import { defineXiHanConfig } from "@xihanfun/vitepress-theme/config";
 const require = createRequire(import.meta.url);
 
 // 导航末项显示的版本号取自应用包 package.json，发版时只改那一处。
@@ -10,18 +10,6 @@ const title: string = "曦寒基础应用文档";
 const description: string = "基于曦寒开发框架的企业级中后台应用";
 const keywords: string =
   "曦寒,曦寒懿,基础应用,中后台,多租户,权限,官方文档,开源,XiHanFun,XiHan.BasicApp";
-const logo: string = "/images/logo.png";
-const head: HeadConfig[] = [
-  ["meta", { name: "author", content: "XiHanFun" }],
-  [
-    "meta",
-    {
-      name: "keywords",
-      content: keywords,
-    },
-  ],
-  ["link", { rel: "icon", href: "/favicon.ico" }],
-];
 
 // 生成手册条目：自动带序号前缀
 function manual(
@@ -127,114 +115,41 @@ const sidebar: DefaultTheme.Sidebar = {
 
 const nav: DefaultTheme.NavItem[] = [
   {
-    text: "开始",
-    link: "/introduction",
+    text: "指南",
     activeMatch:
       "^/(introduction|why|overview|dev-environment|getting-started|project-structure|faq|api-guide|configuration|features|preview|deployment)$",
-  },
-  { text: "后端手册", link: "/backend/introduction", activeMatch: "/backend/" },
-  {
-    text: "前端手册",
-    link: "/frontend/introduction",
-    activeMatch: "/frontend/",
-  },
-  {
-    text: "探索未知",
     items: [
       {
-        text: "关于我们",
+        text: "快速开始",
         items: [
-          {
-            text: "官方网站",
-            link: "https://www.xihanfun.com",
-          },
-          {
-            text: "组织文档",
-            link: "https://docs.xihanfun.com",
-          },
+          { text: "介绍", link: "/introduction" },
+          { text: "快速上手", link: "/getting-started" },
+          { text: "常见问题", link: "/faq" },
         ],
       },
+    ],
+  },
+  { text: "后端", link: "/backend/introduction", activeMatch: "/backend/" },
+  { text: "前端", link: "/frontend/introduction", activeMatch: "/frontend/" },
+  {
+    text: "生态",
+    items: [
       {
-        text: "生态文档",
+        text: "官方生态",
         items: [
-          {
-            text: "后端 | 开发框架",
-            link: "https://framework.docs.xihanfun.com",
-          },
-          {
-            text: "前端 | 视图组件",
-            link: "https://ui.docs.xihanfun.com",
-          },
-        ],
-      },
-      {
-        text: "引用下载",
-        items: [
-          {
-            text: "后端 | nuget",
-            link: "https://www.nuget.org/profiles/XiHanFun",
-          },
-          {
-            text: "前端 | npm",
-            link: "https://www.npmjs.com/org/xihan-ui",
-          },
-        ],
-      },
-      {
-        text: "在线体验",
-        items: [
-          {
-            text: "后端 | 开发框架",
-            link: "https://framework.xihanfun.com",
-          },
-          {
-            text: "前端 | 视图组件",
-            link: "https://ui.xihanfun.com",
-          },
-          {
-            text: "用例 | 基础应用",
-            link: "https://basicapp.xihanfun.com",
-          },
+          { text: "开发框架", link: "https://framework.docs.xihanfun.com" },
+          { text: "视图组件", link: "https://ui.docs.xihanfun.com" },
+          { text: "基础应用", link: "/" },
         ],
       },
     ],
   },
   {
-    text: "代码仓库",
+    text: "支持",
     items: [
-      {
-        text: "Github主库(国际)",
-        link: "https://github.com/XiHanFun/XiHan.BasicApp",
-      },
-      {
-        text: "Gitee同步备库(国内)",
-        link: "https://gitee.com/XiHanFun/XiHan.BasicApp",
-      },
-      {
-        text: "GitCode同步备库(国内)",
-        link: "https://gitcode.com/XiHanFun/XiHan.BasicApp",
-      },
-    ],
-  },
-  {
-    text: "参与贡献",
-    items: [
-      {
-        text: "公约",
-        link: "https://docs.xihanfun.com/cosmos/code-of-conduct",
-      },
-      {
-        text: "指南",
-        link: "https://docs.xihanfun.com/cosmos/contributing",
-      },
-      {
-        text: "贡献者",
-        link: "https://docs.xihanfun.com/cosmos/contributors",
-      },
-      {
-        text: "支持&赞助",
-        link: "https://docs.xihanfun.com/cosmos/sponsor",
-      },
+      { text: "公约", link: "https://docs.xihanfun.com/cosmos/code-of-conduct" },
+      { text: "参与", link: "https://docs.xihanfun.com/cosmos/contributing" },
+      { text: "赞助", link: "https://docs.xihanfun.com/cosmos/sponsor" },
     ],
   },
   {
@@ -243,150 +158,27 @@ const nav: DefaultTheme.NavItem[] = [
   },
 ];
 
-function searchOptions(): Partial<DefaultTheme.AlgoliaSearchOptions> {
-  return {
-    placeholder: "搜索文档",
-    translations: {
-      button: {
-        buttonText: "搜索文档",
-        buttonAriaLabel: "搜索文档",
-      },
-      modal: {
-        searchBox: {
-          resetButtonTitle: "清除查询条件",
-          resetButtonAriaLabel: "清除查询条件",
-          cancelButtonText: "取消",
-          cancelButtonAriaLabel: "取消",
-        },
-        startScreen: {
-          recentSearchesTitle: "搜索历史",
-          noRecentSearchesText: "没有搜索历史",
-          saveRecentSearchButtonTitle: "保存至搜索历史",
-          removeRecentSearchButtonTitle: "从搜索历史中移除",
-          favoriteSearchesTitle: "收藏",
-          removeFavoriteSearchButtonTitle: "从收藏中移除",
-        },
-        errorScreen: {
-          titleText: "无法获取结果",
-          helpText: "你可能需要检查你的网络连接",
-        },
-        footer: {
-          selectText: "选择",
-          navigateText: "切换",
-          closeText: "关闭",
-          searchByText: "搜索提供者",
-        },
-        noResultsScreen: {
-          noResultsText: "无法找到相关结果",
-          suggestedQueryText: "你可以尝试查询",
-          reportMissingResultsText: "你认为该查询应该有结果？",
-          reportMissingResultsLinkText: "点击反馈",
-        },
-      },
-    },
-  };
-}
-
-export default defineConfig({
-  lang: "zh-CN",
-  title: title,
-  description: description,
-  head: head,
-  lastUpdated: true,
-  cleanUrls: true,
-  // 机读资产（llms.txt、全站正文、分册与「取本页 Markdown」的单页 .md）在构建末尾落进产物目录
-  async buildEnd(siteConfig) {
-    await writeLlmsAssets(siteConfig.outDir, {
-      title: "曦寒基础应用",
-      summary:
-        "企业级中后台内核：后端基于 .NET 与 XiHan.Framework，前端基于 Vue 3 与 XiHan.UI，开箱即带多租户、RBAC + 数据范围 + 字段脱敏的权限体系、代码生成与实时通信。",
-      sections: [
-        { dir: ".", label: "开始" },
-        { dir: "backend", label: "后端手册", bundle: "backend" },
-        { dir: "frontend", label: "前端手册", bundle: "frontend" },
-      ],
-    });
-  },
-  vite: {
-    plugins: [
-      {
-        // 开发服务器没有构建产物，链接指向 /__markdown/，这里按需生成同一份
-        name: "xihan-doc-page-markdown",
-        configureServer(server) {
-          server.middlewares.use(async (request, response, next) => {
-            const pathname = new URL(request.url ?? "/", "http://localhost").pathname;
-            const prefix = "/__markdown/";
-            if (!pathname.startsWith(prefix)) {
-              next();
-              return;
-            }
-            try {
-              const markdown = await renderPageMarkdown(decodeURIComponent(pathname.slice(prefix.length)));
-              if (markdown === null) {
-                response.statusCode = 404;
-                response.end("Not Found");
-                return;
-              }
-              response.statusCode = 200;
-              response.setHeader("Content-Type", "text/markdown; charset=utf-8");
-              response.end(markdown);
-            }
-            catch (error) {
-              next(error);
-            }
-          });
-        },
-      },
+export default defineXiHanConfig({
+  title,
+  description,
+  keywords,
+  repo: "XiHan.BasicApp",
+  llms: {
+    title: "曦寒基础应用",
+    summary:
+      "企业级中后台内核：后端基于 .NET 与 XiHan.Framework，前端基于 Vue 3 与 XiHan.UI，开箱即带多租户、RBAC + 数据范围 + 字段脱敏的权限体系、代码生成与实时通信。",
+    sections: [
+      { dir: ".", label: "开始" },
+      { dir: "backend", label: "后端手册" },
+      { dir: "frontend", label: "前端手册" },
+    ],
+    bundles: [
+      { name: "backend", label: "后端手册", dirs: ["backend"] },
+      { name: "frontend", label: "前端手册", dirs: ["frontend"] },
     ],
   },
   themeConfig: {
-    logo: logo,
-    socialLinks: [
-      { icon: "github", link: "https://github.com/XiHanFun/XiHan.BasicApp" },
-      { icon: "gitee", link: "https://gitee.com/XiHanFun/XiHan.BasicApp" },
-      { icon: "gitcode", link: "https://gitcode.com/XiHanFun/XiHan.BasicApp" },
-    ],
-    search: {
-      provider: "local",
-      options: searchOptions(),
-    },
-    nav: nav,
-    sidebar: sidebar,
-    docFooter: {
-      prev: "上一页",
-      next: "下一页",
-    },
-    outline: {
-      label: "目录",
-      level: "deep",
-    },
-    langMenuLabel: "多语言",
-    returnToTopLabel: "回到顶部",
-    sidebarMenuLabel: "菜单",
-    darkModeSwitchLabel: "主题",
-    lightModeSwitchTitle: "切换到浅色模式",
-    darkModeSwitchTitle: "切换到深色模式",
-    skipToContentLabel: "跳转到内容",
-    notFound: {
-      title: "页面未找到",
-      quote:
-        "但如果你不改变方向，并且继续寻找，你可能最终会到达你所前往的地方。",
-      linkLabel: "前往首页",
-      linkText: "带我回首页",
-    },
-    editLink: {
-      text: "在 GitHub 上编辑此页",
-      pattern:
-        "https://github.com/XiHanFun/XiHan.BasicApp/tree/main/docs/:path",
-    },
-    lastUpdated: {
-      text: "最后更新于",
-    },
-    footer: {
-      message:
-        "Released under The <a href='https://opensource.org/license/MIT' target='_blank'>MIT</a> License",
-      copyright:
-        "Copyright ©2021-Present <a href='https://www.xihanfun.com' target='_blank'>XiHanFun</a> and contributors.",
-    },
+    nav,
+    sidebar,
   },
 });
