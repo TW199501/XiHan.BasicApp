@@ -3,9 +3,11 @@
 
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using System.Runtime.CompilerServices;
 using XiHan.BasicApp.Core;
+using XiHan.BasicApp.Web.Core.Idempotency;
 using XiHan.BasicApp.Web.Core.Upgrade;
 using XiHan.Framework.Core.Application;
 using XiHan.Framework.Core.DependencyInjection;
@@ -51,7 +53,7 @@ public sealed class MaintenanceModeRegistrationTests
     public void ConfigureServices_ShouldNotOverridePreRegisteredState()
     {
         var preRegistered = new MaintenanceModeState();
-        var services = new ServiceCollection();
+        var services = CreateServicesWithConfiguration();
         _ = services.AddSingleton(preRegistered);
 
         new XiHanBasicAppWebCoreModule().ConfigureServices(new ServiceConfigurationContext(services));
@@ -82,7 +84,7 @@ public sealed class MaintenanceModeRegistrationTests
     [Fact]
     public void ConfigureServices_ShouldRemoveFrameworkDefaultManagerDescriptor()
     {
-        var services = new ServiceCollection();
+        var services = CreateServicesWithConfiguration();
         _ = services.AddSingleton<IUpgradeMaintenanceModeManager, DefaultUpgradeMaintenanceModeManager>();
 
         new XiHanBasicAppWebCoreModule().ConfigureServices(new ServiceConfigurationContext(services));
@@ -95,14 +97,16 @@ public sealed class MaintenanceModeRegistrationTests
     }
 
     /// <summary>
-    /// 模块只登记这两条注册，不得夹带未声明的副作用注册。
+    /// 模块只登记维护模式的两条注册与接口幂等注册，不得夹带未声明的副作用注册。
     /// </summary>
     [Fact]
-    public void ConfigureServices_ShouldRegisterExactlyTwoDescriptors()
+    public void ConfigureServices_ShouldRegisterOnlyMaintenanceAndIdempotencyDescriptors()
     {
         var services = ConfigureModuleServices();
+        var expected = CreateServicesWithConfiguration();
+        _ = expected.AddBasicAppIdempotency(new ConfigurationBuilder().Build());
 
-        Assert.Equal(2, services.Count);
+        Assert.Equal(expected.Count + 2, services.Count);
     }
 
     /// <summary>
@@ -285,8 +289,19 @@ public sealed class MaintenanceModeRegistrationTests
     /// <returns>模块登记后的服务集合</returns>
     private static IServiceCollection ConfigureModuleServices()
     {
-        var services = new ServiceCollection();
+        var services = CreateServicesWithConfiguration();
         new XiHanBasicAppWebCoreModule().ConfigureServices(new ServiceConfigurationContext(services));
+        return services;
+    }
+
+    /// <summary>
+    /// 创建只含一条空配置注册的服务集合，供模块读取配置。
+    /// </summary>
+    /// <returns>服务集合</returns>
+    private static ServiceCollection CreateServicesWithConfiguration()
+    {
+        var services = new ServiceCollection();
+        _ = services.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
         return services;
     }
 

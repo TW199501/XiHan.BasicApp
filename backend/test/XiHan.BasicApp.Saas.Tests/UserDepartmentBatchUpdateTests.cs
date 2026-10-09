@@ -312,6 +312,7 @@ public sealed class UserDepartmentBatchUpdateTests
 
             Service = new UserDomainService(
                 new Mock<IUserRepository>().Object,
+                Mock.Of<IPhoneIdentityService>(),
                 new Mock<IUserSecurityRepository>().Object,
                 TenantUserRepository.Object,
                 new Mock<IPasswordHasher>().Object,

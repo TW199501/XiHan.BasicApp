@@ -1,0 +1,102 @@
+/**
+ * 手机号码工具单元测试。
+ *
+ * 职责边界：号码正规化为 E.164、E.164 反解为「国家 + 本地号码」、默认国家取值、
+ * 国家选项列表的形状。号码规则本身由 libphonenumber-js 保证，这里只锁本仓库的约定。
+ */
+import { beforeEach, describe, expect, it } from 'vitest'
+import { defaultPhoneCountry, normalizePhone, parsePhone, phoneCountryOptions, rememberPhoneCountry } from './phone'
+
+const COUNTRY_STORAGE_KEY = 'xihan_phone_country'
+
+// 记住的国家写入同一把 localStorage，测试之间必须互相隔离，否则先跑的用例会污染后跑的默认值
+beforeEach(() => {
+  localStorage.clear()
+})
+
+describe('normalizePhone', () => {
+  it('本地号码按所选国家转成 E.164', () => {
+    expect(normalizePhone('0912345678', 'TW')).toBe('+886912345678')
+    expect(normalizePhone('13800138000', 'CN')).toBe('+8613800138000')
+  })
+
+  it('忽略空格与连字符', () => {
+    expect(normalizePhone('09 1234-5678', 'TW')).toBe('+886912345678')
+  })
+
+  it('号码在该国家不成立时返回 null', () => {
+    expect(normalizePhone('0912345', 'TW')).toBeNull()
+    expect(normalizePhone('', 'TW')).toBeNull()
+  })
+})
+
+describe('parsePhone', () => {
+  it('反解 E.164 为国家与本地号码', () => {
+    expect(parsePhone('+886912345678')).toEqual({ country: 'TW', national: '0912345678' })
+  })
+
+  it('空值或无法解析时返回 null', () => {
+    expect(parsePhone(null)).toBeNull()
+    expect(parsePhone('12345')).toBeNull()
+  })
+})
+
+describe('defaultPhoneCountry', () => {
+  it('取浏览器语言里第一个带地区的语言', () => {
+    expect(defaultPhoneCountry(['zh-TW', 'zh', 'en-US'])).toBe('TW')
+    expect(defaultPhoneCountry(['de-DE'])).toBe('DE')
+  })
+
+  it('没有地区信息时回退 CN', () => {
+    expect(defaultPhoneCountry(['zh', 'en'])).toBe('CN')
+    expect(defaultPhoneCountry([])).toBe('CN')
+  })
+
+  it('带文字代码的语言标签也能取出地区', () => {
+    expect(defaultPhoneCountry(['zh-Hant-TW'])).toBe('TW')
+    expect(defaultPhoneCountry(['sr-Latn-RS'])).toBe('RS')
+  })
+
+  it('仅文字代码没有地区时跳过，看下一个语言', () => {
+    expect(defaultPhoneCountry(['zh-Hant', 'ja-JP'])).toBe('JP')
+  })
+
+  it('语言标签格式不合法时跳过，不抛错', () => {
+    expect(defaultPhoneCountry(['not a tag', 'de-DE'])).toBe('DE')
+  })
+
+  it('存过的国家优先于浏览器语言', () => {
+    localStorage.setItem(COUNTRY_STORAGE_KEY, 'JP')
+    expect(defaultPhoneCountry(['zh-TW'])).toBe('JP')
+  })
+
+  it('存的值不是受支持的国家码时忽略，退回浏览器语言', () => {
+    localStorage.setItem(COUNTRY_STORAGE_KEY, 'XX')
+    expect(defaultPhoneCountry(['zh-TW'])).toBe('TW')
+  })
+})
+
+describe('rememberPhoneCountry', () => {
+  it('把选择写入 localStorage，供下次 defaultPhoneCountry 读取', () => {
+    rememberPhoneCountry('JP')
+    expect(localStorage.getItem(COUNTRY_STORAGE_KEY)).toBe('JP')
+    expect(defaultPhoneCountry([])).toBe('JP')
+  })
+})
+
+describe('phoneCountryOptions', () => {
+  it('每个选项都带国家码、本地化国家名与拨号前缀', () => {
+    const options = phoneCountryOptions('zh-CN')
+    const tw = options.find(option => option.value === 'TW')
+
+    expect(tw).toBeDefined()
+    expect(tw!.dialCode).toBe('+886')
+    expect(tw!.label).toContain('+886')
+    expect(options.length).toBeGreaterThan(200)
+  })
+
+  it('国家名跟随传入语言', () => {
+    const de = phoneCountryOptions('de-DE').find(option => option.value === 'JP')
+    expect(de!.label).toContain('Japan')
+  })
+})

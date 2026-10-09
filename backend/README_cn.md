@@ -90,7 +90,8 @@ dotnet test --solution backend/XiHan.BasicApp.slnx --configuration Release
 | --- | --- |
 | `appsettings.json` | 环境无关的少量默认值 |
 | `appsettings.Development.json` | 全量带注释的参考配置，新增配置项以它为准 |
-| `appsettings.Production.json` | **被 `.gitignore` 忽略，仓库里没有**，需自行从 Development 复制改写 |
+| `appsettings.Production.example.json` | 生产配置范本，不含真实密钥；与 Development 配置键保持一致 |
+| `appsettings.Production.json` | **被 `.gitignore` 忽略，仓库里没有**，从范本复制后改写，必改项见 [部署文档](../docs/deployment.md#后端-生产配置) |
 
 配置节全貌：`XiHan:{Observability, DistributedIds, Authentication, Data, Upgrade, Caching, Web, Localization, VirtualFileSystem, ObjectStorage}`。
 

@@ -200,6 +200,44 @@ CodeFirst 负责首次建表；已有库的结构和数据变化由 Framework Up
 `.EnableDiffLogEvent()` 保留，它单独用是安全的。
 :::
 
+## MySQL 与 SQL Server 的约定
+
+- **MySQL 时间按 UTC 读写**：BasicApp 的每条 MySQL 连接都把连接串规范化为 `DateTimeKind=Utc`，连接串显式设成其他值时，构建连接配置（启动时创建 SqlSugarScope，或运行时新增租户连接）即抛出异常（消息不含连接串）；执行前把 `DateTimeOffset` 参数转成 UTC（挂在 `AopEvents.OnExecutingChangeSql`，串接已有委派）。经 `ConfigureConnectionConfigs` 生效，覆盖平台库、平台模块库与运行时新增的租户主库。插入与更新实体时（含多行批量写入），把实体中带非 0 偏移的 `DateTimeOffset` 列值转成 UTC，传入的实体对象的偏移随之变为 +00:00、时刻不变（经 `ConfigureDbAction` 串接已有委派，在框架的主键、审计与租户注入之后执行；租户模块库也经过）。
+- **时间列 6 位小数秒**：新建表的时间列为 MySQL `datetime(6)`、SQL Server `datetimeoffset(6)`、PostgreSQL `timestamptz(6)`。已存在的 MySQL 库由升级脚本 `UpdateScripts/5.6.1/mysql/5.6.1.sql` 从 `datetime(0)` 改为 `datetime(6)`，原值不变；已存在的 SQL Server 表保留 `datetimeoffset(7)`。
+- **收件箱去重键**：区分大小写的排序规则与既有 SQL Server 库的修补脚本，见 `backend/src/modules/XiHan.BasicApp.Saas/README.md` 的「事件收发件箱」。
+- **SQL Server 字符串列为 nvarchar**：BasicApp 的每条 SQL Server 连接开启 SqlSugar 的 `MoreSettings.SqlServerCodeFirstNvarchar`（`SqlServerConnectionSettings`，经 `ConfigureConnectionConfigs` 生效，覆盖范围与上面的 MySQL 约定相同），新建表的字符串列为 `nvarchar(n)`，中文等非 ASCII 字符按原样存取。建表只建不改，已存在的表由升级脚本 `UpdateScripts/5.6.1/mssql/5.6.1.sql` 把 `dbo` 架构下 `Sys_` 开头的表（含分表）的 `varchar` 列转为 `nvarchar`：长度、排序规则、可空性与索引定义不变，可重复执行，其他表不动。列被外键、默认值约束、架构绑定视图、手工统计信息、主键或唯一约束等引用时脚本报错并列出表名、列名与对象，不做改动，需先手工处理再启动。原先已存成 `?` 的字符无法还原。转换逐列重写整张表，大表先手动执行该脚本再启动（见 `UpdateScripts/README.md`）。租户模块库与 `IDynamicConnectionRegistrar` 注册的连接不经 `ConfigureConnectionConfigs`，在这些连接上新建的表仍是 `varchar`（追踪于 E-134）。
+
+已知限制（MySQL，追踪于 E-134）：
+
+| 情形 | 表现 |
+| --- | --- |
+| 租户模块库（`Tenant_{id}_Erp`） | 连接串由租户主库派生，继承其 `DateTimeKind=Utc`；不经 `ConfigureConnectionConfigs`，没有参数转换；实体插入与更新的列值已转成 UTC，其他带非 0 偏移的 `DateTimeOffset` 参数会抛出异常 |
+| `IDynamicConnectionRegistrar` 注册的连接 | 不经 `ConfigureConnectionConfigs`，既没有 UTC 规范化也没有参数转换，由注册方自行处理（代码生成的数据源连接已补上 `DateTimeKind=Utc`） |
+
+## 多数据库集成测试
+
+收发件箱、接口幂等与任务执行历史清理的数据库测试在 PostgreSQL、SQL Server、MySQL 上各跑一遍，每种数据库一个测试类，由环境变量门控：
+
+| 环境变量 | 数据库 | 连接串示例（密码只放环境变量） |
+| --- | --- | --- |
+| `XIHAN_TEST_POSTGRES` | PostgreSQL | `Host=127.0.0.1;Port=15432;Database=xihan_basicapp_test;Username=postgres;Password=***` |
+| `XIHAN_TEST_SQLSERVER` | SQL Server 2022 | `Server=127.0.0.1,14333;Database=xihan_basicapp_test;User Id=sa;Password=***;TrustServerCertificate=True` |
+| `XIHAN_TEST_MYSQL` | MySQL 8.4 | `Server=127.0.0.1;Port=13306;Database=xihan_basicapp_test;Uid=root;Pwd=***;AllowPublicKeyRetrieval=True;SslMode=None` |
+
+- 未设置的变量对应的测试跳过，跳过不算通过；CI 不起数据库，全部跳过。
+- 连接的库必须是专用的一次性测试库：测试会删除并重建 `Sys_Event_Outbox`、`Sys_Event_Inbox`、`Sys_Idempotency_Record` 与自己写入的 `Sys_Task_Log_` 月表。
+- SQL Server 与 MySQL 账号需要 `CREATE DATABASE` 权限，MySQL 另需 `CREATE ROUTINE`：部分用例会新建临时库（SQL Server 默认排序规则 `Chinese_PRC_CI_AS`、`Latin1_General_CI_AS`、`SQL_Latin1_General_CP1_CI_AS` 或与测试库相同，MySQL `utf8mb4_0900_ai_ci`），用完即删除；5.6.1 升级脚本测试与收件箱修补脚本用例都在临时库里执行脚本，不改动共用测试库。
+- MySQL 测试库保留默认排序规则 `utf8mb4_0900_ai_ci`，用来验证去重键的排序规则。
+- SQL Server 测试库未开启 `READ_COMMITTED_SNAPSHOT`：并发领取用例在 SQL Server 上不覆盖领取更新的状态守卫，去掉守卫时只有 PostgreSQL 与 MySQL 的用例会失败。
+- 在 bash 载入连接串时值要加单引号，否则会在 `;` 处被截断。
+
+```bash
+set -a; . ~/.xihan/basicapp-test.env; set +a
+dotnet test --project backend/test/XiHan.BasicApp.Saas.Tests/XiHan.BasicApp.Saas.Tests.csproj -c Release
+```
+
+共用的连接与表结构查询在测试项目的 `TestDatabases/`（`IntegrationDatabase`、`DatabaseSchemaProbe`）。
+
 ## 排查
 
 | 现象 | 原因 |

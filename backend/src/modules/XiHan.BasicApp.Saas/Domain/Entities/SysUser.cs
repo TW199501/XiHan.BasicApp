@@ -36,7 +36,7 @@ namespace XiHan.BasicApp.Saas.Domain.Entities;
 /// - 租户里「看得见哪些用户」由成员关系决定：本租户已接受的成员（含注册在别处的外部成员）；
 ///   身份类操作（资料、密码、锁定、启停、删除）只对注册在本租户的账号开放
 /// - 鉴权决策：UserId + 当前会话 TenantId → 查 SysTenantUser 校验成员身份 → 再查 SysUserRole 加载角色
-/// - 手机查询走 IX_Ph（非唯一，仅作辅助找回/验证）
+/// - 手机查询走 UX_Ph（登录身份标识，全平台唯一，有值必唯一）
 /// - 按激活状态筛选：IX_TeId_St_IsAc
 ///
 /// 删除：
@@ -61,7 +61,7 @@ namespace XiHan.BasicApp.Saas.Domain.Entities;
 [SugarIndex("UX_{table}_TeId_UsNa", nameof(TenantId), OrderByType.Asc, nameof(UserName), OrderByType.Asc, nameof(IsDeleted), OrderByType.Asc, true)]
 [SugarIndex("IX_{table}_UsNa", nameof(UserName), OrderByType.Asc)]
 [SugarIndex("UX_{table}_Em", nameof(Email), OrderByType.Asc, nameof(IsDeleted), OrderByType.Asc, true)]
-[SugarIndex("IX_{table}_Ph", nameof(Phone), OrderByType.Asc)]
+[SugarIndex("UX_{table}_Ph", nameof(Phone), OrderByType.Asc, nameof(IsDeleted), OrderByType.Asc, true)]
 [SugarIndex("IX_{table}_TeId_St", nameof(TenantId), OrderByType.Asc, nameof(Status), OrderByType.Asc)]
 [SugarIndex("IX_{table}_TeId_St_IsAc", nameof(TenantId), OrderByType.Asc, nameof(Status), OrderByType.Asc, nameof(IsActive), OrderByType.Asc)]
 [PlatformDataSource]
@@ -100,7 +100,7 @@ public partial class SysUser : BasicAppAggregateRoot, IStrictMultiTenantEntity
     /// <summary>
     /// 手机号
     /// </summary>
-    [SugarColumn(ColumnName = "Phone", ColumnDescription = "手机号", Length = 20, IsNullable = true)]
+    [SugarColumn(ColumnName = "Phone", ColumnDescription = "手机号（登录身份标识，全平台唯一）", Length = 20, IsNullable = true)]
     public virtual string? Phone { get; set; }
 
     /// <summary>

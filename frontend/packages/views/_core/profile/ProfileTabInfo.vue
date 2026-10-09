@@ -3,7 +3,7 @@ import type { UserProfile } from '~/types'
 import { XhButton, XhButtonIndicator, XhButtonLabel, XhDialogCloseTrigger, XhDialogContent, XhDialogRoot, XhDialogTitle, XhFlex, XhPinInputInput, XhPinInputRoot, XhTagLabel, XhTagRoot } from '@xihan-ui/vue'
 import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { XDatePicker, XInput, XSelect, XUserAvatar } from '~/components'
+import { PhoneInput, XDatePicker, XInput, XSelect, XUserAvatar } from '~/components'
 import { dialog, prompt, toast } from '~/composables'
 import { islandStart } from '~/composables/useDynamicIsland'
 import { Icon } from '~/iconify'
@@ -253,6 +253,9 @@ const verifyResendSeconds = ref(0)
 // 换绑新地址
 const changeTarget = ref<ContactTarget | null>(null)
 const changeNewValue = ref('')
+/** 换绑手机时 PhoneInput 的号码有效性；组件对无效输入吐空串，仅凭 changeNewValue 分不出
+ * 「没填」与「填了但格式不对」，需要这个标记才能给出正确的提示文案 */
+const changePhoneValid = ref(true)
 const changePassword = ref('')
 const changeLoading = ref(false)
 const changeCodeSent = ref(false)
@@ -320,6 +323,7 @@ function cancelVerify() {
 function openChangeDialog(type: ContactTarget) {
   changeTarget.value = type
   changeNewValue.value = ''
+  changePhoneValid.value = true
   changePassword.value = ''
   changeCodeSent.value = false
   changeCode.value = []
@@ -328,7 +332,13 @@ function openChangeDialog(type: ContactTarget) {
 
 async function sendChangeCode() {
   if (!changeNewValue.value.trim()) {
-    toast.warning(changeTarget.value === 'email' ? t('component.profile.info.warn_new_email_required') : t('component.profile.info.warn_new_phone_required'))
+    if (changeTarget.value === 'phone' && !changePhoneValid.value) {
+      // PhoneInput 对「填了但格式不对」的输入吐出的是空串，不能按「没填」提示，否则用户看不出问题在哪
+      toast.warning(t('component.phone_input.invalid'))
+    }
+    else {
+      toast.warning(changeTarget.value === 'email' ? t('component.profile.info.warn_new_email_required') : t('component.profile.info.warn_new_phone_required'))
+    }
     return
   }
   if (!changePassword.value) {
@@ -708,10 +718,16 @@ function cancelChange() {
         <XhDialogCloseTrigger />
         <div class="pf-change-body">
           <template v-if="!changeCodeSent">
-            <XInput
+            <PhoneInput
+              v-if="changeTarget === 'phone'"
               v-model:value="changeNewValue"
-              :placeholder="changeTarget === 'email' ? t('component.profile.info.new_email_placeholder') : t('component.profile.info.new_phone_placeholder')"
-              :aria-label="changeTarget === 'email' ? t('component.profile.info.new_email_placeholder') : t('component.profile.info.new_phone_placeholder')"
+              @valid="(v: boolean) => changePhoneValid = v"
+            />
+            <XInput
+              v-else
+              v-model:value="changeNewValue"
+              :placeholder="t('component.profile.info.new_email_placeholder')"
+              :aria-label="t('component.profile.info.new_email_placeholder')"
             />
             <XInput
               v-model:value="changePassword"

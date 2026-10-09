@@ -76,9 +76,15 @@ public sealed partial class AuthAppService
 
     private readonly IAuthEmailLoginCodeService _emailLoginCodeService;
 
+    private readonly IAuthPhoneLoginCodeService _phoneLoginCodeService;
+
+    private readonly IPhoneNumberNormalizer _phoneNumberNormalizer;
+
     private readonly IImpersonationPolicyService _impersonationPolicyService;
 
     private readonly IProfileVerificationService _profileVerificationService;
+
+    private readonly IVerificationThrottleService _verificationThrottleService;
 
     private readonly IMessageDeliveryService _messageDeliveryService;
 
@@ -149,8 +155,11 @@ public sealed partial class AuthAppService
         ISaasConfigurationService saasConfigurationService,
         IAuthTokenIssueService authTokenIssueService,
         IAuthEmailLoginCodeService emailLoginCodeService,
+        IAuthPhoneLoginCodeService phoneLoginCodeService,
+        IPhoneNumberNormalizer phoneNumberNormalizer,
         IImpersonationPolicyService impersonationPolicyService,
         IProfileVerificationService profileVerificationService,
+        IVerificationThrottleService verificationThrottleService,
         IMessageDeliveryService messageDeliveryService,
         IOtpService otpService,
         IEmailConfigStore emailConfigStore,
@@ -191,8 +200,11 @@ public sealed partial class AuthAppService
         _saasConfigurationService = saasConfigurationService;
         _authTokenIssueService = authTokenIssueService;
         _emailLoginCodeService = emailLoginCodeService;
+        _phoneLoginCodeService = phoneLoginCodeService;
+        _phoneNumberNormalizer = phoneNumberNormalizer;
         _impersonationPolicyService = impersonationPolicyService;
         _profileVerificationService = profileVerificationService;
+        _verificationThrottleService = verificationThrottleService;
         _messageDeliveryService = messageDeliveryService;
         _otpService = otpService;
         _emailConfigStore = emailConfigStore;
@@ -781,6 +793,101 @@ public sealed partial class AuthAppService
                     clientForFailure.UserAgent,
                     input.DeviceId));
             throw new InvalidOperationException(authResult.ErrorMessage ?? "邮箱或验证码错误。");
+        }
+
+        var user = authResult.User ?? throw new InvalidOperationException("认证用户不存在。");
+        return await IssueLoginTokenWithLandingAsync(user, authResult.Security, user.UserName, input.DeviceId, now, initialLockReason: null, cancellationToken);
+    }
+
+    /// <summary>
+    /// 发送手机登录验证码
+    /// </summary>
+    /// <param name="input">手机登录验证码请求</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>验证码下发结果</returns>
+    [AllowAnonymous]
+    [UnitOfWork(true)]
+    public async Task<VerificationCodeResultDto> PhoneLoginCodeAsync(PhoneLoginCodeRequestDto input, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var phone = _phoneNumberNormalizer.NormalizeOrThrow(input.Phone, defaultRegion: null)
+            ?? throw new InvalidOperationException("手机号码不能为空。");
+        var now = DateTimeOffset.UtcNow;
+
+        // 频率限制（手机号+IP，60 秒窗口）：防刷验证码，独立于下面的日配额检查
+        await EnsureNotRateLimitedAsync("phone-code", phone, cancellationToken);
+
+        // 先登录后选租户：平台态按全平台唯一手机号码定位用户
+        using var platformScope = _currentTenant.Change(null);
+
+        // 复用手机登录的用户定位与账号可用性校验，确保仅向有效账号下发验证码
+        var authResult = await _authenticationDomainService.AuthenticatePhoneLoginAsync(phone, tenantId: null, now, cancellationToken);
+        if (!authResult.Succeeded)
+        {
+            throw new InvalidOperationException(authResult.ErrorMessage ?? "手机号码不可用。");
+        }
+
+        var user = authResult.User ?? throw new InvalidOperationException("认证用户不存在。");
+
+        // 日配额（同一手机号每日上限 / 同一来源 IP 每日上限）：复用 IVerificationThrottleService 的机制，
+        // 60 秒窗口只挡"连点"，挡不住"每 61 秒发一条、刷一整天"式的短信轰炸
+        await _verificationThrottleService.EnsureSendAllowedAsync(user.BasicId, ProfileVerificationPurpose.PhoneLoginCode, phone, cancellationToken);
+
+        var code = await IssueAndSendPhoneLoginCodeAsync(user, phone, cancellationToken);
+
+        return new VerificationCodeResultDto
+        {
+            ExpiresInSeconds = _phoneLoginCodeService.ExpiresInSeconds,
+            // 仅开发环境回显验证码便于本地联调；生产绝不回显
+            DebugCode = _webHostEnvironment.IsDevelopment() ? code : null
+        };
+    }
+
+    /// <summary>
+    /// 手机验证码登录
+    /// </summary>
+    /// <param name="input">手机验证码登录请求</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>登录令牌</returns>
+    [AllowAnonymous]
+    [UnitOfWork(true)]
+    public async Task<LoginTokenDto> PhoneLoginAsync(PhoneLoginRequestDto input, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var phone = _phoneNumberNormalizer.NormalizeOrThrow(input.Phone, defaultRegion: null)
+            ?? throw new InvalidOperationException("手机号码不能为空。");
+        var code = NormalizeRequired(input.Code, "验证码不能为空。", 12, "验证码格式无效。");
+        var now = DateTimeOffset.UtcNow;
+
+        // 先登录后选租户：平台态验证 + 智能落点
+        using var platformScope = _currentTenant.Change(null);
+
+        if (!await _phoneLoginCodeService.TryConsumeAsync(tenantId: null, phone, code, cancellationToken))
+        {
+            throw new InvalidOperationException("验证码无效或已过期。");
+        }
+
+        var authResult = await _authenticationDomainService.AuthenticatePhoneLoginAsync(phone, tenantId: null, now, cancellationToken);
+        if (!authResult.Succeeded)
+        {
+            var clientForFailure = _clientInfoProvider.GetCurrent();
+            await _localEventBus.PublishAsync(
+                new AuthLoginFailedDomainEvent(
+                    null,
+                    authResult.User?.BasicId,
+                    phone,
+                    authResult.FailureResult,
+                    authResult.ErrorMessage,
+                    now,
+                    _traceIdProvider.GetCurrentTraceId(),
+                    clientForFailure.IpAddress,
+                    clientForFailure.UserAgent,
+                    input.DeviceId));
+            throw new InvalidOperationException(authResult.ErrorMessage ?? "手机号码或验证码错误。");
         }
 
         var user = authResult.User ?? throw new InvalidOperationException("认证用户不存在。");
@@ -1759,6 +1866,50 @@ public sealed partial class AuthAppService
                     Remark: null),
                 cancellationToken);
         }
+
+        return code;
+    }
+
+    /// <summary>
+    /// 为指定手机号码生成登录验证码并发送短信，返回生成的验证码（供本地联调回显）
+    /// </summary>
+    /// <remarks>
+    /// 与 <see cref="IProfileVerificationService.SendLoginTwoFactorSmsAsync"/> 走同一条短信投递路径（模板 <see cref="SaasMessageTemplateCodes.Auth.SmsLoginCode"/>、纯文本兜底），
+    /// 但不复用其 <see cref="ProfileVerificationPurpose.TwoFactorPhone"/> 一次性码用途：手机登录验证码经 <see cref="_phoneLoginCodeService"/> 独立签发与消费。
+    /// </remarks>
+    private async Task<string> IssueAndSendPhoneLoginCodeAsync(SysUser user, string phone, CancellationToken cancellationToken)
+    {
+        var code = await _phoneLoginCodeService.IssueCodeAsync(tenantId: null, phone, cancellationToken);
+
+        var emailConfig = await _emailConfigStore.GetAsync(cancellationToken);
+        var brand = ResolveEmailBrand(emailConfig);
+        var minutes = Math.Max(1, _phoneLoginCodeService.ExpiresInSeconds / 60);
+        // 纯文本兜底内容（模板缺失/损坏时使用）
+        var content = $"【{brand}】您的登录验证码为 {code}，{minutes} 分钟内有效，请勿泄露。";
+        var templateParams = JsonSerializer.Serialize(new Dictionary<string, string>
+        {
+            ["code"] = code,
+            ["minutes"] = minutes.ToString(),
+            ["brand"] = brand,
+        });
+
+        // 使用登录验证码短信模板（SmsLoginCode），模板优先、纯文本兜底；由发件箱异步发送
+        await _messageDeliveryService.CreateSmsAsync(
+            new SmsCreateCommand(
+                SenderId: null,
+                ReceiverId: user.BasicId,
+                SmsType: SmsType.VerificationCode,
+                ToPhone: phone,
+                Content: content,
+                TemplateCode: SaasMessageTemplateCodes.Auth.SmsLoginCode,
+                TemplateParams: templateParams,
+                Provider: null,
+                ScheduledTime: null,
+                MaxRetryCount: 3,
+                BusinessType: "auth.phone-login",
+                BusinessId: user.BasicId,
+                Remark: null),
+            cancellationToken);
 
         return code;
     }

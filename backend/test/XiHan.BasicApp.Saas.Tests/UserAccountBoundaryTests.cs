@@ -238,6 +238,7 @@ public sealed class UserAccountBoundaryTests
 
             Service = new UserDomainService(
                 Users.Object,
+                Mock.Of<IPhoneIdentityService>(),
                 Securities.Object,
                 TenantUsers.Object,
                 new Mock<IPasswordHasher>().Object,

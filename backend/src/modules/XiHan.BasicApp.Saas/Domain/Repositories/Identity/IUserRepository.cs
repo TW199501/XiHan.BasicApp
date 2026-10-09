@@ -29,6 +29,17 @@ public interface IUserRepository : ISaasAggregateRepository<SysUser>
     Task<SysUser?> GetByEmailGloballyAsync(string email, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// 按手机号码定位账号（全平台范围）
+    /// </summary>
+    /// <remarks>
+    /// 手机号码是登录身份标识、全平台唯一（UX_Ph），E.164 精确匹配，账号可能归属任意租户，显式跨租户查找。
+    /// </remarks>
+    /// <param name="phone">E.164 手机号码</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>用户；不存在返回 null</returns>
+    Task<SysUser?> GetByPhoneGloballyAsync(string phone, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// 检查当前上下文注册的账号里用户名是否已被占用（租户里连带平台账号一起比对）
     /// </summary>
     Task<bool> ExistsUserNameAsync(string userName, long? excludeUserId = null, CancellationToken cancellationToken = default);
@@ -43,6 +54,18 @@ public interface IUserRepository : ISaasAggregateRepository<SysUser>
     /// <param name="excludeUserId">排除的用户主键（更新自身时传入）</param>
     /// <param name="cancellationToken">取消令牌</param>
     Task<bool> ExistsEmailGloballyAsync(string email, long? excludeUserId = null, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 手机号码是否已被其他账号占用（跨租户）
+    /// </summary>
+    /// <remarks>
+    /// 平台态执行：账号注册表落在平台库，租户上下文下连接会被解析到该租户独立库（库隔离部署）。
+    /// </remarks>
+    /// <param name="phone">E.164 手机号码</param>
+    /// <param name="excludeUserId">排除的用户标识（更新自身时传入）</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>是否已被占用</returns>
+    Task<bool> ExistsPhoneGloballyAsync(string phone, long? excludeUserId = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// 检查指定租户下用户名是否已被占用（连带平台账号一起比对，避免与平台账号重名）

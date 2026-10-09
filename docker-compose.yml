@@ -4,7 +4,8 @@
 # 后端配置来源有两层，环境变量优先于 JSON 文件（.NET 配置提供器顺序）：
 #   1. 挂载的 appsettings.Production.json —— 提供 JWT 密钥、密码哈希参数等全部调优项
 #   2. 下方 environment —— 只覆盖容器内的服务地址
-# 该 JSON 文件在 .gitignore 内、也不进镜像层，必须由宿主机挂载进来。
+# 该 JSON 文件在 .gitignore 内、也不进镜像层，必须由宿主机挂载进来：先从同目录的
+# appsettings.Production.example.json 复制，必改项见 docs/deployment.md 的「生产配置」。
 
 name: xihan-basicapp
 

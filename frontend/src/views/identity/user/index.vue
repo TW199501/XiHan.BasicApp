@@ -39,7 +39,7 @@ import {
   ValidityStatus,
 } from '@/api'
 import { GENDER_OPTIONS, ROLE_TYPE_OPTIONS, STATUS_OPTIONS } from '@/constants'
-import { Icon, SchemaPage, XDatePicker, XEditModal, XGrantTransfer, XInput, XNumberInput, XPermissionTransfer, XSelect } from '~/components'
+import { Icon, PhoneInput, SchemaPage, XDatePicker, XEditModal, XGrantTransfer, XInput, XNumberInput, XPermissionTransfer, XSelect } from '~/components'
 import { dialog, toast } from '~/composables'
 import { useEnumOptions, usePermission } from '~/hooks'
 import { useAuthStore, useUserStore } from '~/stores'
@@ -119,6 +119,16 @@ const selDeptIds = ref<ApiId[]>([])
 const existingDepts = ref<UserDepartmentListItemDto[]>([])
 
 const userForm = ref<UserFormState>(createDefaultForm())
+/** PhoneInput 的号码有效性；空号码视为有效（清空手机号），仅拦「填了但格式不对」 */
+const phoneValid = ref(true)
+/**
+ * 弹窗复用同一个 PhoneInput 实例：仅当 props.value 变化时组件才会回填/重判，
+ * 而「上次没保存就关掉的无效号码」→「新开一个空值表单」这两次 props.value 都可能是同一个空串，
+ * 组件感知不到变化，会把上次残留的已输入数字留在输入框里。每次打开（新建/编辑）自增这个计数器
+ * 并绑定为 :key，强制重新挂载一个干净的 PhoneInput。
+ */
+const phoneInputKey = ref(0)
+
 /** 打开表单时的状态与安全设置，保存时据此只提交改过的项 */
 const originalSecurity = ref<UserFormSecurity>(pickSecurity(createDefaultForm()))
 
@@ -641,6 +651,11 @@ function closeModals() {
 
 function openCreate() {
   userForm.value = createDefaultForm()
+  // 弹窗复用同一个 PhoneInput 实例：值从「上次没保存就关掉的无效号码」变回默认空值时，
+  // props 没变（都是空串），组件内部不会再吐一次 valid，这里手动归位避免误挡这次保存
+  phoneValid.value = true
+  // 强制重新挂载 PhoneInput，避免上次残留的已输入数字（同上，props 没变不会自己清）
+  phoneInputKey.value++
   originalSecurity.value = pickSecurity(userForm.value)
   selRoleIds.value = []
   selDeptIds.value = []
@@ -671,6 +686,10 @@ onMounted(() => {
 async function fillFormFromDetail(detail: UserManagementDetailDto) {
   const u = detail.user
   const sec = detail.security
+  // 后端存量数据可能仍有未转换的旧写法（升级脚本转不动的号码原样保留），不保证已是合法 E.164；
+  // 同一处 PhoneInput 被复用，先归位再让组件按新值重新判定，并强制重新挂载避免残留上一个用户的输入
+  phoneValid.value = true
+  phoneInputKey.value++
   userForm.value = {
     basicId: u.basicId,
     userName: u.userName,
@@ -789,6 +808,12 @@ async function saveUser() {
   }
   if (!form.basicId && !form.initialPassword.trim()) {
     toast.warning(t('identity.user.msg_initial_password_required'))
+    formTab.value = '0'
+    return
+  }
+  // 手机号填了但格式不对：PhoneInput 已吐出空串，静默保存会把号码清掉，这里拦下来
+  if (!phoneValid.value) {
+    toast.warning(t('component.phone_input.invalid'))
     formTab.value = '0'
     return
   }
@@ -1419,7 +1444,7 @@ async function confirmDelete() {
             <XhFieldRoot>
               <XhFieldLabel>{{ t('identity.user.label_phone') }}</XhFieldLabel>
               <XhFieldControl>
-                <XInput v-model:value="userForm.phone" :placeholder="t('identity.user.ph_phone')" autocomplete="off" :disabled="identityReadonly" />
+                <PhoneInput :key="phoneInputKey" v-model:value="userForm.phone" :disabled="identityReadonly" @valid="(v: boolean) => phoneValid = v" />
               </XhFieldControl>
               <XhFieldErrorText />
             </XhFieldRoot>

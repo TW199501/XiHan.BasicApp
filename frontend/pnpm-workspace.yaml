@@ -33,6 +33,11 @@ verifyDepsBeforeRun: false
 packages:
   - 'packages/*'
 
+# typescript-eslint 8.71.1 的 no-unused-vars 把 .mjs 里正常使用的变量误判为“only used as a type”，
+# 经 eslint-plugin-unused-imports 报错导致 lint 失败；上游修复发版后删掉本段
+overrides:
+  '@typescript-eslint/eslint-plugin': 8.71.0
+
 # @antv/x6 3.x 的 es / lib 产物运行时 import tslib，但发布清单只把它放在 devDependencies；
 # pnpm 严格隔离下解析不到，生产构建直接失败。上游清单补上后删掉本段
 packageExtensions:
@@ -111,6 +116,7 @@ catalog:
   eslint: ^10.12.0
   eslint-plugin-format: ^2.0.1
   jsdom: ^30.1.1
+  libphonenumber-js: ^1.13.13
   lint-staged: ^17.6.0
   md-editor-v3: ^7.1.0
   monaco-editor: ^0.57.0

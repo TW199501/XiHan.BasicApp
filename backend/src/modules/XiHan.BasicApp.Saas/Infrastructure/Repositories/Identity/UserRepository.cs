@@ -66,6 +66,28 @@ public sealed class UserRepository(
     }
 
     /// <summary>
+    /// 按手机号码定位账号（全平台范围）
+    /// </summary>
+    /// <remarks>
+    /// 手机号码是登录身份标识、全平台唯一（UX_Ph），E.164 精确匹配，账号可能归属任意租户，显式跨租户查找。
+    /// 平台态执行：账号注册表落在平台库，租户上下文下连接会被解析到该租户独立库（库隔离部署）。
+    /// </remarks>
+    /// <param name="phone">E.164 手机号码</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>用户；不存在返回 null</returns>
+    public async Task<SysUser?> GetByPhoneGloballyAsync(string phone, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(phone);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        using var platformScope = currentTenant.Change(null);
+
+        return await CreateNoTenantQueryable()
+            .Where(user => user.Phone == phone)
+            .FirstAsync(cancellationToken);
+    }
+
+    /// <summary>
     /// 检查当前上下文注册的账号里用户名是否已被占用（租户里连带平台账号一起比对）
     /// </summary>
     public async Task<bool> ExistsUserNameAsync(string userName, long? excludeUserId = null, CancellationToken cancellationToken = default)
@@ -103,6 +125,32 @@ public sealed class UserRepository(
         using var platformScope = currentTenant.Change(null);
 
         var query = CreateNoTenantQueryable().Where(user => user.Email == email);
+        if (excludeUserId.HasValue)
+        {
+            query = query.Where(user => user.BasicId != excludeUserId.Value);
+        }
+
+        return await query.AnyAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// 手机号码是否已被其他账号占用（跨租户）
+    /// </summary>
+    /// <remarks>
+    /// 平台态执行：账号注册表落在平台库，租户上下文下连接会被解析到该租户独立库（库隔离部署）。
+    /// </remarks>
+    /// <param name="phone">E.164 手机号码</param>
+    /// <param name="excludeUserId">排除的用户标识（更新自身时传入）</param>
+    /// <param name="cancellationToken">取消令牌</param>
+    /// <returns>是否已被占用</returns>
+    public async Task<bool> ExistsPhoneGloballyAsync(string phone, long? excludeUserId = null, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(phone);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        using var platformScope = currentTenant.Change(null);
+
+        var query = CreateNoTenantQueryable().Where(user => user.Phone == phone);
         if (excludeUserId.HasValue)
         {
             query = query.Where(user => user.BasicId != excludeUserId.Value);

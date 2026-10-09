@@ -10,6 +10,11 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
+  <!-- 接口幂等集成测试以 TestServer 承载 MVC 管线 -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="10.0.12" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\..\src\framework\XiHan.BasicApp.Web.Core\XiHan.BasicApp.Web.Core.csproj" />
   </ItemGroup>

@@ -2,9 +2,8 @@
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using System.Runtime.CompilerServices;
-using Microsoft.Extensions.Options;
-using XiHan.Framework.Upgrade.Options;
-using XiHan.Framework.Upgrade.Services;
+using XiHan.BasicApp.Saas.Infrastructure.Upgrade;
+using XiHan.Framework.Upgrade.Utils;
 
 namespace XiHan.BasicApp.Saas.Tests;
 
@@ -12,38 +11,70 @@ namespace XiHan.BasicApp.Saas.Tests;
 /// 升级脚本目录布局测试。
 /// </summary>
 /// <remarks>
-/// 守的是一件很容易再次发生的事：<c>UpdateScripts</c> 的目录布局必须与框架
-/// <c>FileSystemUpgradeScriptProvider</c> 的扫描方式对得上。
-/// <para>
-/// 它扫的是 <c>UpdateScripts/&lt;版本&gt;/*.sql</c> 子目录（第一步就是 <c>Directory.GetDirectories</c>）。
-/// 2026-08-27 之前脚本是平铺在根目录下的，于是 provider 一条都收不到——四个迁移脚本
-/// 从写下起就没执行过，而且没有任何东西会报错，是静默失效。
-/// </para>
-/// <para>
-/// 这条测试直接拿真实 provider 扫真实目录，布局一退化就红。
-/// </para>
+/// 用真实的 <c>UpdateScripts</c> 检查：布局能被 <see cref="UpgradeScriptCatalog"/> 完整扫到、
+/// PostgreSQL 每个版本都有脚本、自 <see cref="MultiDialectSinceVersion"/> 起每个版本三种方言齐全。
 /// </remarks>
 public sealed class UpgradeScriptLayoutTests
 {
     /// <summary>
-    /// 框架 provider 必须能扫到仓库里的全部升级脚本。
+    /// 自此版本起，每个版本都必须同时提供 pgsql、mssql、mysql 三份脚本
+    /// </summary>
+    private const string MultiDialectSinceVersion = "5.6.1";
+
+    /// <summary>
+    /// 目录下全部 .sql 都能被方言目录扫到，且目录结构合法。
     /// </summary>
     [Fact]
-    public async Task UpdateScripts_ShouldBeDiscoverableByFrameworkProvider()
+    public void UpdateScripts_ShouldBeFullyDiscoverableByCatalog()
     {
         var rootPath = ResolveUpdateScriptsRoot();
         Assert.True(Directory.Exists(rootPath), $"升级脚本目录不存在：{rootPath}");
 
-        // 目录下实际有多少 .sql（含子目录），provider 就该扫出多少
         var actualSqlCount = Directory.GetFiles(rootPath, "*.sql", SearchOption.AllDirectories).Length;
         Assert.True(actualSqlCount > 0, "升级脚本目录下一个 .sql 都没有，测试失去意义");
 
-        var provider = new FileSystemUpgradeScriptProvider(
-            Options.Create(new XiHanUpgradeOptions { MigrationsRootPath = rootPath }));
+        var catalog = UpgradeScriptCatalog.Load(rootPath);
+        var discoveredCount = UpgradeScriptDialect.All
+            .SelectMany(dialect => catalog.For(dialect))
+            .Count(script => File.Exists(script.ScriptPath));
 
-        var scripts = await provider.GetScriptsAsync();
+        Assert.Equal(actualSqlCount, discoveredCount);
+    }
 
-        Assert.Equal(actualSqlCount, scripts.Count);
+    /// <summary>
+    /// PostgreSQL 每个版本都有实际脚本。
+    /// </summary>
+    [Fact]
+    public void UpdateScripts_PostgreSqlShouldCoverEveryVersion()
+    {
+        var catalog = UpgradeScriptCatalog.Load(ResolveUpdateScriptsRoot());
+
+        var missing = catalog.For(UpgradeScriptDialect.PostgreSql)
+            .Where(script => !File.Exists(script.ScriptPath))
+            .Select(script => script.Version)
+            .ToList();
+
+        Assert.True(missing.Count == 0, $"这些版本缺少 PostgreSQL 脚本：{string.Join(", ", missing)}");
+    }
+
+    /// <summary>
+    /// 自 <see cref="MultiDialectSinceVersion"/> 起每个版本三种方言齐全。
+    /// </summary>
+    [Fact]
+    public void UpdateScripts_EveryDialectShouldCoverVersionsSinceMultiDialect()
+    {
+        var catalog = UpgradeScriptCatalog.Load(ResolveUpdateScriptsRoot());
+
+        var missing = UpgradeScriptDialect.All
+            .SelectMany(dialect => catalog.For(dialect)
+                .Where(script => SemanticVersion.Compare(script.Version, MultiDialectSinceVersion) >= 0)
+                .Where(script => !File.Exists(script.ScriptPath))
+                .Select(script => $"{script.Version}/{dialect}"))
+            .ToList();
+
+        Assert.True(
+            missing.Count == 0,
+            $"自 {MultiDialectSinceVersion} 起每个版本都要有 pgsql、mssql、mysql 三份脚本，缺少：{string.Join(", ", missing)}");
     }
 
     /// <summary>

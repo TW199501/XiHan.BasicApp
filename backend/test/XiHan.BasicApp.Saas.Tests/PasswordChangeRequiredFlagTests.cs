@@ -91,6 +91,7 @@ public sealed class PasswordChangeRequiredFlagTests
 
         var service = new ProfileDomainService(
             users.Object,
+            Mock.Of<IPhoneIdentityService>(),
             securities.Object,
             Mock.Of<IUserSessionRepository>(),
             Mock.Of<IExternalLoginRepository>(),

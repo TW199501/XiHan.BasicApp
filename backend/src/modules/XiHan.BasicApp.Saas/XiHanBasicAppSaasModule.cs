@@ -88,6 +88,12 @@ public class XiHanBasicAppSaasModule : XiHanModule
         // 注册任务调度基础设施（替换 DefaultJobStore 为数据库持久化，注册 IJobWorker 实现）
         services.AddSaasJobInfrastructure();
 
+        // 注册事件收发件箱持久化（替换框架默认的进程内收发件箱）
+        services.AddSaasEventBoxes(services.GetConfiguration());
+
+        // 注册接口幂等数据库存储（替换 Web.Core 的进程内存储）
+        services.AddSaasIdempotencyStore(services.GetConfiguration());
+
         // 注册导出中心基础设施（导出引擎 + Provider + 后台执行 worker）
         services.AddSaasExportInfrastructure();
     }

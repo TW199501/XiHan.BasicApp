@@ -98,6 +98,37 @@ public sealed class OrderNumberService(INumberGenerator numberGenerator)
 
 真实发号也可调用受 `saas:numbering:generate` 保护的 Dynamic API。管理页面只提供规则管理、格式预览、安全重置和发号记录查看，不提供真实发号按钮。
 
+## 事件收发件箱
+
+- 表 `Sys_Event_Outbox`、`Sys_Event_Inbox` 只建在平台主库，由 SqlSugar 实现的 `SaasEventOutbox`、`SaasEventInbox` 读写，替换框架默认的进程内收发件箱，并设为分布式事件总线的默认收发件箱。
+- 配置节 `Saas:EventBus:Box`：`ClaimTimeout`（领取超时，默认 5 分钟）、`InboxRetentionPeriod`（收件箱保留期，默认 7 天），两者都必须大于零，否则启动校验失败。
+- 多实例部署时，以条件更新加领取令牌互斥领取待发送事件。
+- 数据库隔离模式的租户发布分布式事件时，入箱会被拒绝。
+- 使用 XiHan.Framework 4.6.1 时，以默认的 `onUnitOfWorkComplete: true` 发布的分布式事件在提交后直接发送，不经过发件箱；只有在进行中的工作单元内以 `PublishAsync(..., onUnitOfWorkComplete: false)` 发布的事件，才会在同一事务内写入发件箱。
+- 收件箱去重键 `Dedup_Key` 区分大小写与重音，由 `SaasEventBoxCodeFirstConvention` 经 `XiHanSqlSugarCoreOptions.ConfigureConnectionConfigs` 挂到每条连接，列定义只在建表时生效：
+  - MySQL：`varchar` + `utf8mb4_bin`。
+  - SQL Server：`nvarchar` + 由数据库默认排序规则推导的排序规则，首次映射时按连接查询一次。`CI` 换成 `CS`、`AI` 换成 `AS`，优先 `<基底>_CS_AS_KS_WS`，`sys.fn_helpcollations()` 中没有时用 `<基底>_CS_AS`，两者都没有时，该库上收件箱的所有读写（包括已存在的表）都会抛出 `InvalidOperationException` 并列出候选，不会退回不区分大小写的定义。
+  - PostgreSQL：沿用默认定义，本身区分大小写。
+  - 已知限制：SQL Server 的 `SQL_` 开头排序规则没有 `KS_WS` 版本，全角与半角、平假名与片假名视为相同；两种基底都把内嵌 NUL 与 Unicode 合成、分解形式视为相同；`SQL_*Pref*` 等少数旧排序规则推导不出候选，默认排序规则是这类的 SQL Server 库上收件箱无法读写，需改数据库默认排序规则。
+  - 既有 SQL Server 库由升级脚本 `UpdateScripts/5.6.1/mssql/5.6.1.sql` 修补（启动升级时自动执行）：可重复执行，列改为 `nvarchar` 并换排序规则，重建原有索引；原先已存成 `?` 的值无法还原。
+  - 既有 MySQL 库由升级脚本 `UpdateScripts/5.6.1/mysql/5.6.1.sql` 改为 `utf8mb4_bin`。`utf8mb4_bin` 比较时忽略尾端空格，旧数据中有只差尾端空格的去重键时脚本失败、表保持原样，需先清理这些行。
+- 入箱时消息标识以空白字符开头或结尾会抛出 `ArgumentException`，与数据库种类无关（包括 PostgreSQL）；`ExistsByMessageIdAsync` 对这类标识返回 false；只含空白的消息标识视为没有消息标识。
+- 时间列保留 6 位小数秒：MySQL `datetime(6)`、SQL Server `datetimeoffset(6)`、PostgreSQL `timestamptz(6)`。幂等记录表 `Sys_Idempotency_Record` 同样如此。
+- 建表只建不改：已由 CodeFirst 建好的表由 5.6.1 升级脚本补齐。MySQL 收发件箱与幂等记录表的时间列改为 `datetime(6)`，原值不变；SQL Server 既有表的时间列保留 `datetimeoffset(7)`，不改；PostgreSQL 不需要变更。
+- 不支持 `filter` 参数。
+
+## 接口幂等存储
+
+- 表 `Sys_Idempotency_Record` 只建在平台主库，由 `SaasIdempotencyStore` 读写，替换 Web.Core 的进程内 `DefaultIdempotencyStore`；记录键摘要 `Key_Hash` 上有唯一索引，同一键的并发取得由数据库串行化。
+- 取得、释放、标记不确定与清理使用独立连接立即提交；完成写入经平台库连接登记到当前工作单元。
+- 业务数据在平台库（平台请求与非数据库隔离租户）时，事务型工作单元内完成写入与业务同一事务提交或回滚。`TenantIsolationMode.Database` 租户的业务数据在 `Tenant_{id}` 库，完成记录在平台库，两个事务在工作单元完成时按顺序分别提交，不是原子提交；这类租户的响应快照也保存在平台库。
+- 配置节沿用 `BasicApp:Web:Idempotency`；`MaxKeyLength` 不能超过 128（幂等键列长度），否则启动校验失败。
+- 请求路径超过 512 字符时截断写入端点列。
+- 后台服务 `SaasIdempotencyPurgeHostedService` 每隔 `PurgeInterval`（默认 1 小时）在新的作用域中删除已过期的完成记录与不确定记录；单次失败记录错误日志，不影响下一次清理。
+- 已知限制：非事务型端点的处理中记录没有过期时间，进程在动作执行期间崩溃时，该记录一直保持处理中，同一键始终返回 409，定期清理也不会删除它。
+- 响应体为空（null）时，记录的快照列保持为空，不写入占位内容。
+- 注册 `FieldSecurityIdempotencyResponseProcessor`：快照保存前按当前用户的字段安全规则就地打码，并标记该结果值已打码，`FieldSecurityResponseFilter` 对同一实例不再打码；首次响应只打码一次，快照与重播都是打码后的内容。
+
 ## 架构与职责
 
 - `Application`：应用服务、DTO、查询、映射与 Dynamic API。

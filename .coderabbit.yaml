@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# 除默认分支外，也自动审查以 dev 为目标分支的 PR。
+reviews:
+  auto_review:
+    enabled: true
+    base_branches:
+      - "^dev$"

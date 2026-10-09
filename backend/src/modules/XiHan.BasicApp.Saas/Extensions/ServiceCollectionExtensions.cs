@@ -2,8 +2,10 @@
 // Licensed under the MIT License. See LICENSE in the project root for license information.
 
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using XiHan.BasicApp.Core.Data;
 using XiHan.BasicApp.Saas.Application.Authorization;
 using XiHan.BasicApp.Saas.Application.Caching;
 using XiHan.BasicApp.Saas.Application.Contracts;
@@ -16,7 +18,9 @@ using XiHan.BasicApp.Saas.Domain.Entities;
 using XiHan.BasicApp.Saas.Domain.Numbering;
 using XiHan.BasicApp.Saas.Domain.Repositories;
 using XiHan.BasicApp.Saas.Infrastructure.Auth;
+using XiHan.BasicApp.Saas.Infrastructure.EventBus;
 using XiHan.BasicApp.Saas.Infrastructure.Exporting;
+using XiHan.BasicApp.Saas.Infrastructure.Idempotency;
 using XiHan.BasicApp.Saas.Infrastructure.Upgrade;
 using XiHan.BasicApp.Saas.Infrastructure.Logging;
 using XiHan.BasicApp.Saas.Infrastructure.Messaging;
@@ -25,6 +29,7 @@ using XiHan.BasicApp.Saas.Infrastructure.Repositories;
 using XiHan.BasicApp.Saas.Infrastructure.Security;
 using XiHan.BasicApp.Saas.Infrastructure.Seeders;
 using XiHan.BasicApp.Saas.Infrastructure.Tasks;
+using XiHan.BasicApp.Web.Core.Idempotency;
 using XiHan.Framework.Auditing;
 using XiHan.Framework.Auditing.Writers;
 using XiHan.Framework.Authentication.Jwt;
@@ -40,7 +45,10 @@ using XiHan.Framework.Bot.Telegram.Extensions.DependencyInjection;
 using XiHan.Framework.Bot.WeCom.Abstractions;
 using XiHan.Framework.Data.Extensions.DependencyInjection;
 using XiHan.Framework.Data.SqlSugar.Initializers;
+using XiHan.Framework.Data.SqlSugar.Options;
 using XiHan.Framework.Data.SqlSugar.Tenanting;
+using XiHan.Framework.EventBus.Abstractions.Distributed;
+using XiHan.Framework.EventBus.Distributed;
 using XiHan.Framework.EventBus.Local;
 using XiHan.Framework.Messaging.Abstractions;
 using XiHan.Framework.Security.Services;
@@ -75,12 +83,16 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ITaskScheduleDomainService, TaskScheduleDomainService>();
         // 编号格式器是无共享可变状态的纯计算服务，可安全注册为单例。
         services.AddSingleton<INumberingFormatter, NumberingFormatter>();
+        // 手机号码正规化是无共享可变状态的纯计算服务（PhoneNumberUtil 单例内部线程安全），可安全注册为单例。
+        services.AddSingleton<IPhoneNumberNormalizer, PhoneNumberNormalizer>();
 
         // 升级引擎的四个实现槽。框架侧以 TryAdd 注册内存版默认实现，此处后注册即覆盖解析结果。
         services.AddScoped<IUpgradeVersionStore, SaasUpgradeVersionStore>();
         services.AddScoped<IUpgradeLockProvider, SaasUpgradeLockProvider>();
         services.AddScoped<IUpgradeTenantProvider, SaasUpgradeTenantProvider>();
         services.AddScoped<IUpgradeMigrationExecutor, SaasUpgradeMigrationExecutor>();
+        // 以按当前连接 DbType 取对应方言脚本的提供者替换框架注册的文件系统脚本提供者
+        services.Replace(ServiceDescriptor.Scoped<IUpgradeScriptProvider, DialectAwareUpgradeScriptProvider>());
         // 升级脚本先于种子执行：存量表的新列补齐后，种子才能按最新实体读写
         services.AddScoped<IDbSchemaUpgrader, SaasSchemaUpgrader>();
 
@@ -90,6 +102,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IMenuDomainService, MenuDomainService>();
         services.AddScoped<IRoleDomainService, RoleDomainService>();
         services.AddScoped<IUserDomainService, UserDomainService>();
+        // 依赖 IUserRepository（作用域生命周期的仓储），跟随 UserDomainService 同为作用域注册。
+        services.AddScoped<IPhoneIdentityService, PhoneIdentityService>();
         services.AddScoped<IPasswordHistoryDomainService, PasswordHistoryDomainService>();
         services.AddScoped<IConstraintRuleDomainService, ConstraintRuleDomainService>();
         services.AddScoped<IConstraintRuleEnforcementDomainService, ConstraintRuleEnforcementDomainService>();
@@ -106,6 +120,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<SaasTenantConnectionProvider>();
         services.AddSingleton<ISqlSugarTenantConnectionProvider>(sp => sp.GetRequiredService<SaasTenantConnectionProvider>());
         services.AddSingleton<ITenantConnectionCacheInvalidator>(sp => sp.GetRequiredService<SaasTenantConnectionProvider>());
+        services.AddSaasMySqlConnectionConvention();
+        services.AddSaasSqlServerConnectionConvention();
         // 跨租户后台作业逐作用域（平台与每个数据可达的租户）切入执行，不靠「无租户上下文看全部」
         services.AddScoped<ITenantDataScopeRunner, TenantDataScopeRunner>();
         services.AddScoped<IConfigDomainService, ConfigDomainService>();
@@ -235,6 +251,7 @@ public static class ServiceCollectionExtensions
         // （框架 XiHanWebApiModule 以 TryAddScoped 先注册 DefaultOpenApiSecurityClientStore，故须 Replace，否则 DB 凭证永不生效）
         services.Replace(ServiceDescriptor.Scoped<IOpenApiSecurityClientStore, SaasOpenApiSecurityClientStore>());
         services.AddSingleton<IAuthEmailLoginCodeService, AuthEmailLoginCodeService>();
+        services.AddSingleton<IAuthPhoneLoginCodeService, AuthPhoneLoginCodeService>();
         // 验证码防刷限流（发送间隔/日配额/错误计数封禁）：覆盖 Profile 全部发码用途与消费校验
         services.AddScoped<IVerificationThrottleService, VerificationThrottleService>();
         services.AddScoped<IProfileVerificationService, ProfileVerificationService>();
@@ -479,6 +496,155 @@ public static class ServiceCollectionExtensions
 
         // 注册动态任务执行器（桥接 SysTask.TaskClass/TaskMethod 反射模型，同时实现 IJobWorker）
         services.AddTransient<DynamicJobWorker>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// 添加 MySQL 连接约定：框架构建 SqlSugar 连接配置前，把 MySQL 连接串规范化为 DateTimeKind=Utc，并在执行前把 DateTimeOffset 参数转成 UTC；
+    /// 框架配置连接作用域后，在实体写入事件中把插入与更新实体的 DateTimeOffset 列值转成 UTC
+    /// </summary>
+    /// <remarks>
+    /// 分别链在已有的 <c>ConfigureConnectionConfigs</c> 与 <c>ConfigureDbAction</c> 钩子之后执行。
+    /// 连接串与参数转换：平台库、平台模块库与运行时新增的租户主库会经过，租户模块库（如 <c>Tenant_{id}_Erp</c>）不经过；
+    /// 实体写入转换：以上连接与租户模块库都会经过。经 <c>IDynamicConnectionRegistrar</c> 注册的连接两者都不经过。
+    /// </remarks>
+    /// <param name="services">服务集合</param>
+    /// <returns>服务集合</returns>
+    public static IServiceCollection AddSaasMySqlConnectionConvention(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.PostConfigure<XiHanSqlSugarCoreOptions>(options =>
+        {
+            var previous = options.ConfigureConnectionConfigs;
+            options.ConfigureConnectionConfigs = configs =>
+            {
+                previous?.Invoke(configs);
+                foreach (var config in configs)
+                {
+                    MySqlConnectionStrings.Apply(config);
+                }
+            };
+
+            var previousDbAction = options.ConfigureDbAction;
+            options.ConfigureDbAction = db =>
+            {
+                previousDbAction?.Invoke(db);
+                MySqlConnectionStrings.ApplyDataExecuting(db.CurrentConnectionConfig);
+            };
+        });
+
+        return services;
+    }
+
+    /// <summary>
+    /// 添加 SQL Server 连接约定：框架构建 SqlSugar 连接配置前，为 SQL Server 连接开启 CodeFirst 字符串列 nvarchar
+    /// </summary>
+    /// <remarks>
+    /// 链在已有的 <c>ConfigureConnectionConfigs</c> 钩子之后执行，经过的连接与 <see cref="AddSaasMySqlConnectionConvention"/> 相同；
+    /// 租户模块库（如 <c>Tenant_{id}_Erp</c>）与经 <c>IDynamicConnectionRegistrar</c> 注册的连接不经过。
+    /// </remarks>
+    /// <param name="services">服务集合</param>
+    /// <returns>服务集合</returns>
+    public static IServiceCollection AddSaasSqlServerConnectionConvention(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.PostConfigure<XiHanSqlSugarCoreOptions>(options =>
+        {
+            var previous = options.ConfigureConnectionConfigs;
+            options.ConfigureConnectionConfigs = configs =>
+            {
+                previous?.Invoke(configs);
+                foreach (var config in configs)
+                {
+                    SqlServerConnectionSettings.Apply(config);
+                }
+            };
+        });
+
+        return services;
+    }
+
+    /// <summary>
+    /// 添加 SaaS 事件收发件箱持久化
+    /// </summary>
+    /// <remarks>
+    /// 以 SqlSugar 收发件箱替换框架默认的进程内实现，并设为分布式事件总线的默认收发件箱；
+    /// 在 PostConfigure 阶段经 <see cref="XiHanSqlSugarCoreOptions.ConfigureConnectionConfigs"/> 在每条连接上套用 <see cref="SaasEventBoxCodeFirstConvention"/>，先执行已注册的钩子。
+    /// 配置节：<c>Saas:EventBus:Box</c>。
+    /// </remarks>
+    /// <param name="services">服务集合</param>
+    /// <param name="configuration">配置</param>
+    /// <returns>服务集合</returns>
+    public static IServiceCollection AddSaasEventBoxes(this IServiceCollection services, IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        services.AddOptions<SaasEventBoxOptions>()
+            .Bind(configuration.GetSection(SaasEventBoxOptions.SectionName))
+            .Validate(
+                options => options.ClaimTimeout > TimeSpan.Zero && options.InboxRetentionPeriod > TimeSpan.Zero,
+                "事件收发件箱配置无效：ClaimTimeout 与 InboxRetentionPeriod 必须大于零。")
+            .ValidateOnStart();
+
+        services.Configure<XiHanDistributedEventBusOptions>(options =>
+        {
+            options.Outboxes.Configure(config => config.ImplementationType = typeof(SaasEventOutbox));
+            options.Inboxes.Configure(config => config.ImplementationType = typeof(SaasEventInbox));
+        });
+
+        services.PostConfigure<XiHanSqlSugarCoreOptions>(options =>
+        {
+            var previous = options.ConfigureConnectionConfigs;
+            options.ConfigureConnectionConfigs = configs =>
+            {
+                previous?.Invoke(configs);
+                foreach (var config in configs)
+                {
+                    SaasEventBoxCodeFirstConvention.Apply(config);
+                }
+            };
+        });
+
+        services.TryAddScoped<SaasEventOutbox>();
+        services.Replace(ServiceDescriptor.Scoped<IEventOutbox, SaasEventOutbox>());
+
+        services.TryAddScoped<SaasEventInbox>();
+        services.Replace(ServiceDescriptor.Scoped<IEventInbox, SaasEventInbox>());
+
+        return services;
+    }
+
+    /// <summary>
+    /// 添加 SaaS 接口幂等数据库存储
+    /// </summary>
+    /// <remarks>
+    /// 以 <see cref="SaasIdempotencyStore"/> 替换默认的进程内存储，并在启动时校验幂等键最大长度不超过记录列长度；
+    /// 注册 <see cref="FieldSecurityIdempotencyResponseProcessor"/>，快照保存前按字段安全规则打码；
+    /// 注册 <see cref="SaasIdempotencyPurgeHostedService"/>，按 <see cref="IdempotencyOptions.PurgeInterval"/> 定期清理过期记录。
+    /// </remarks>
+    /// <param name="services">服务集合</param>
+    /// <param name="configuration">配置</param>
+    /// <returns>服务集合</returns>
+    public static IServiceCollection AddSaasIdempotencyStore(this IServiceCollection services, IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        services.AddOptions<IdempotencyOptions>()
+            .Validate(options => options.MaxKeyLength <= SaasIdempotencyStore.MaxKeyColumnLength,
+                $"幂等配置无效：使用数据库存储时 MaxKeyLength 不能超过 {SaasIdempotencyStore.MaxKeyColumnLength}。")
+            .Validate(options => options.PurgeInterval > TimeSpan.Zero, "幂等配置无效：PurgeInterval 必须大于零。")
+            .ValidateOnStart();
+        services.TryAddSingleton(TimeProvider.System);
+        services.TryAddScoped<SaasIdempotencyStore>();
+        services.Replace(ServiceDescriptor.Scoped<IIdempotencyStore, SaasIdempotencyStore>());
+        services.TryAddScoped<IIdempotencyRecordPurger>(provider => provider.GetRequiredService<SaasIdempotencyStore>());
+        services.AddHostedService<SaasIdempotencyPurgeHostedService>();
+        services.TryAddEnumerable(ServiceDescriptor.Scoped<IIdempotencyResponseProcessor, FieldSecurityIdempotencyResponseProcessor>());
 
         return services;
     }

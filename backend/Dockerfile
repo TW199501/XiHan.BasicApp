@@ -12,6 +12,7 @@ RUN dotnet restore src/main/XiHan.BasicApp.WebHost/XiHan.BasicApp.WebHost.csproj
 RUN dotnet publish src/main/XiHan.BasicApp.WebHost/XiHan.BasicApp.WebHost.csproj \
     -c $BUILD_CONFIGURATION \
     -o /app/publish \
+    -p:GeneratePackageOnBuild=false \
     --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime

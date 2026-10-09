@@ -3,7 +3,7 @@ import type { FormRules } from '@xihan-ui/headless'
 import { XhButton, XhFieldControl, XhFieldLabel, XhFieldRoot, XhFormFieldGroup, XhFormRoot, XhFormSubmitTrigger, XhPinInputInput, XhPinInputRoot } from '@xihan-ui/vue'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { XInput } from '~/components'
+import { PhoneInput } from '~/components'
 import { toast } from '~/composables'
 import { useTheme } from '~/hooks'
 import { useAppContext, useAuthStore } from '~/stores'
@@ -21,9 +21,12 @@ const { apis } = useAppContext()
 const resendSeconds = ref(0)
 
 const formData = ref({
+  /** E.164 手机号码，由 PhoneInput 组装吐出 */
   phone: '',
   code: '',
 })
+/** PhoneInput 的号码有效性；required 拦空值，这里拦「填了但格式不对」 */
+const phoneValid = ref(false)
 
 /**
  * 验证码的逐格值。表单里的 code 是拼接后的串（规则按长度校验、发码接口回填调试码都用它），
@@ -41,8 +44,11 @@ watch(() => formData.value.code, (code) => {
 // 没写则回落 validateMessages 模板，这里逐条给了文案就不需要模板
 const rules = computed<FormRules>(() => ({
   phone: [
+    // 校验规则首败即停：PhoneInput 对无效号码吐出的是空串，required 单看 formData.phone
+    // 会把「填了但格式不对」误判成「没填」。validator 只认 phoneValid（空值在该组件里算有效），
+    // 放在 required 前面，格式错误才能在 required 之前先被拦下、显示 phone_invalid 而非必填文案
+    { validator: () => (phoneValid.value ? null : t('page.auth.phone_invalid')) },
     { required: true, message: t('page.auth.phone_placeholder') },
-    { pattern: /^\d{11}$/, message: t('page.auth.phone_invalid') },
   ],
   code: [
     { required: true, message: t('page.auth.code_required') },
@@ -57,7 +63,7 @@ const rules = computed<FormRules>(() => ({
  * 提交那一路仍走表单自己的整表校验。
  */
 function handleSendCode() {
-  if (!/^\d{11}$/.test(formData.value.phone)) {
+  if (!phoneValid.value || !formData.value.phone) {
     toast.warning(t('page.auth.phone_invalid'))
     return
   }
@@ -125,12 +131,11 @@ const onAuthInvalid = useAuthFormInvalid()
             {{ t('page.auth.phone_placeholder') }}
           </XhFieldLabel>
           <XhFieldControl>
-            <XInput
+            <PhoneInput
               size="lg"
               :value="(value as string)"
-              :placeholder="t('page.auth.phone_placeholder')"
-              :max-length="11"
               @update:value="setValue"
+              @valid="(v: boolean) => phoneValid = v"
             />
           </XhFieldControl>
         </XhFieldRoot>
