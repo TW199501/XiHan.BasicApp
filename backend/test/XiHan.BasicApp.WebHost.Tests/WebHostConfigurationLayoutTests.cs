@@ -16,6 +16,16 @@ namespace XiHan.BasicApp.WebHost.Tests;
 /// </remarks>
 public sealed class WebHostConfigurationLayoutTests
 {
+    /// <summary>
+    /// 生产环境配置范本文件名。
+    /// </summary>
+    private const string ProductionExampleFileName = "appsettings.Production.example.json";
+
+    /// <summary>
+    /// 只在开发环境配置的顶层节。
+    /// </summary>
+    private static readonly string[] DevelopmentOnlySections = ["CodeGeneration"];
+
     private static readonly JsonDocumentOptions JsoncOptions = new()
     {
         CommentHandling = JsonCommentHandling.Skip,
@@ -23,12 +33,13 @@ public sealed class WebHostConfigurationLayoutTests
     };
 
     /// <summary>
-    /// 两份 appsettings 都是带注释的 JSONC，必须能被配置提供程序解析。
+    /// 入库的 appsettings 与生产范本都是带注释的 JSONC，必须能被配置提供程序解析。
     /// </summary>
     /// <param name="fileName">配置文件名。</param>
     [Theory]
     [InlineData("appsettings.json")]
     [InlineData("appsettings.Development.json")]
+    [InlineData(ProductionExampleFileName)]
     public void AppSettings_ShouldBeParsableJsonWithComments(string fileName)
     {
         var path = Path.Combine(WebHostTestHelper.ResolveWebHostProjectRoot(), fileName);
@@ -49,6 +60,7 @@ public sealed class WebHostConfigurationLayoutTests
     /// <param name="fileName">配置文件名。</param>
     [Theory]
     [InlineData("appsettings.Development.json")]
+    [InlineData(ProductionExampleFileName)]
     public void AppSettings_MigrationsRootPathShouldMatchRealDirectory(string fileName)
     {
         var root = WebHostTestHelper.ResolveWebHostProjectRoot();
@@ -67,8 +79,7 @@ public sealed class WebHostConfigurationLayoutTests
     /// 演示数据开关由各环境的配置写明：开发环境开启（示例租户与账号）。
     /// </summary>
     /// <remarks>
-    /// 开关缺省按关闭处理，基础配置不写。appsettings.Production.json 不入库（.gitignore），
-    /// 生产环境的取值在部署处的配置里写明，这里只断言入库的开发环境配置。
+    /// 开关缺省按关闭处理，基础配置不写。生产环境的取值由范本断言。
     /// </remarks>
     [Fact]
     public void AppSettings_DevelopmentShouldEnableDemoData()
@@ -79,6 +90,51 @@ public sealed class WebHostConfigurationLayoutTests
         var element = ResolvePath(document.RootElement, "Saas", "Seed", "EnableDemoData");
         Assert.True(element is not null, $"{fileName} 缺少 Saas:Seed:EnableDemoData。");
         Assert.Equal(JsonValueKind.True, element!.Value.ValueKind);
+    }
+
+    /// <summary>
+    /// 生产范本必须显式关闭演示数据。
+    /// </summary>
+    [Fact]
+    public void AppSettings_ProductionExampleShouldDisableDemoData()
+    {
+        using var document = ReadConfiguration(ProductionExampleFileName);
+
+        var element = ResolvePath(document.RootElement, "Saas", "Seed", "EnableDemoData");
+        Assert.True(element is not null, $"{ProductionExampleFileName} 缺少 Saas:Seed:EnableDemoData。");
+        Assert.Equal(JsonValueKind.False, element!.Value.ValueKind);
+    }
+
+    /// <summary>
+    /// 生产范本必须覆盖开发环境配置的全部配置键，只有开发专用的节可以缺省。
+    /// </summary>
+    [Fact]
+    public void AppSettings_ProductionExampleShouldCoverDevelopmentKeys()
+    {
+        using var development = ReadConfiguration("appsettings.Development.json");
+        using var example = ReadConfiguration(ProductionExampleFileName);
+
+        var exampleKeys = CollectKeyPaths(example.RootElement).ToHashSet(StringComparer.Ordinal);
+        var missing = CollectKeyPaths(development.RootElement)
+            .Where(key => !DevelopmentOnlySections.Any(section =>
+                key.Equals(section, StringComparison.Ordinal) || key.StartsWith(section + ":", StringComparison.Ordinal)))
+            .Where(key => !exampleKeys.Contains(key))
+            .ToArray();
+
+        Assert.True(missing.Length == 0, $"{ProductionExampleFileName} 缺少开发环境配置里的键：{string.Join("、", missing)}");
+    }
+
+    /// <summary>
+    /// 入库的生产范本不得带 JWT 签名密钥：留空让漏配的部署在启动时报错。
+    /// </summary>
+    [Fact]
+    public void AppSettings_ProductionExampleShouldLeaveJwtSecretEmpty()
+    {
+        using var document = ReadConfiguration(ProductionExampleFileName);
+
+        var secret = ReadStringPath(document.RootElement, "XiHan", "Authentication", "Jwt", "SecretKey");
+
+        Assert.Equal(string.Empty, secret);
     }
 
     /// <summary>
@@ -93,7 +149,7 @@ public sealed class WebHostConfigurationLayoutTests
     {
         var found = 0;
 
-        foreach (var fileName in new[] { "appsettings.json", "appsettings.Development.json" })
+        foreach (var fileName in new[] { "appsettings.json", "appsettings.Development.json", ProductionExampleFileName })
         {
             using var document = ReadConfiguration(fileName);
             var element = ResolvePath(document.RootElement, "XiHan", "DistributedIds", "SnowflakeId", "WorkerId");
@@ -107,7 +163,7 @@ public sealed class WebHostConfigurationLayoutTests
             Assert.True(element.Value.TryGetInt32(out _), $"{fileName} 的 WorkerId 不是整数。");
         }
 
-        Assert.True(found > 0, "两份配置里都没有 XiHan:DistributedIds:SnowflakeId:WorkerId，多节点部署无从逐节点配置唯一值，雪花 ID 可能生成重复主键。");
+        Assert.True(found > 0, "各份配置里都没有 XiHan:DistributedIds:SnowflakeId:WorkerId，多节点部署无从逐节点配置唯一值，雪花 ID 可能生成重复主键。");
     }
 
     /// <summary>
@@ -116,7 +172,7 @@ public sealed class WebHostConfigurationLayoutTests
     [Fact]
     public void AppSettings_HostingUrlsShouldBeAbsoluteUris()
     {
-        foreach (var fileName in new[] { "appsettings.json", "appsettings.Development.json" })
+        foreach (var fileName in new[] { "appsettings.json", "appsettings.Development.json", ProductionExampleFileName })
         {
             using var document = ReadConfiguration(fileName);
             var configured = ReadStringPath(document.RootElement, "Hosting", "Urls");
@@ -248,6 +304,50 @@ public sealed class WebHostConfigurationLayoutTests
         }
 
         return current;
+    }
+
+    /// <summary>
+    /// 展开 JSON 中全部配置键路径。对象数组的元素以下标作为一级，与配置提供程序的键形式一致；
+    /// 标量数组只取数组本身的键，元素个数随环境不同。
+    /// </summary>
+    /// <param name="element">起始节点。</param>
+    /// <param name="prefix">当前节点的键路径。</param>
+    /// <returns>键路径序列。</returns>
+    private static IEnumerable<string> CollectKeyPaths(JsonElement element, string prefix = "")
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                foreach (var property in element.EnumerateObject())
+                {
+                    var path = prefix.Length == 0 ? property.Name : $"{prefix}:{property.Name}";
+                    yield return path;
+                    foreach (var child in CollectKeyPaths(property.Value, path))
+                    {
+                        yield return child;
+                    }
+                }
+
+                break;
+            case JsonValueKind.Array:
+                var index = 0;
+                foreach (var item in element.EnumerateArray())
+                {
+                    var path = $"{prefix}:{index++}";
+                    if (item.ValueKind != JsonValueKind.Object)
+                    {
+                        continue;
+                    }
+
+                    yield return path;
+                    foreach (var child in CollectKeyPaths(item, path))
+                    {
+                        yield return child;
+                    }
+                }
+
+                break;
+        }
     }
 
     /// <summary>

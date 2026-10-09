@@ -90,7 +90,8 @@ Run `src/main/XiHan.BasicApp.WebHost`. Development listens on `http://127.0.0.1:
 | --- | --- |
 | `appsettings.json` | A handful of environment-independent defaults |
 | `appsettings.Development.json` | The full annotated reference configuration; add new settings here first |
-| `appsettings.Production.json` | **Ignored by `.gitignore` and absent from the repository** — copy it from the Development one and adapt |
+| `appsettings.Production.example.json` | Production template without real secrets; kept key-for-key in sync with the Development one |
+| `appsettings.Production.json` | **Ignored by `.gitignore` and absent from the repository** — copy it from the template and adapt; required changes are listed in the [deployment guide](../docs/deployment.md#后端-生产配置) |
 
 Configuration sections: `XiHan:{Observability, DistributedIds, Authentication, Data, Upgrade, Caching, Web, Localization, VirtualFileSystem, ObjectStorage}`.
 
