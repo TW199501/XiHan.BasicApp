@@ -1,0 +1,21 @@
+orca.yaml
+  s_75f0910dde6f74::t_040f18b68c096b 1-9
+.gitignore
+  s_75f0910dde6f74::t_459fc48afba3cb 425-427
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cbc27f9569fde10a8003ad924a2b2e258efa9155",
+  "prompts": {},
+  "sessions": {
+    "s_75f0910dde6f74": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e78e74b6-7288-4505-b36c-de27d2cfdf48",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
