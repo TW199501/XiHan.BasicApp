@@ -77,7 +77,7 @@ public sealed class KnowledgeDocumentDomainService : IKnowledgeDocumentDomainSer
         var document = await GetDocumentOrThrowAsync(id, cancellationToken);
 
         // 先清旧向量（按当前已入库切片数），再用原文重新索引
-        await _ingestor.RemoveDocumentAsync(document.BasicId.ToString(), document.TenantId, document.ChunkCount, cancellationToken);
+        await _ingestor.RemoveDocumentAsync(document.BasicId.ToString(), document.ChunkCount, cancellationToken);
         await IndexAsync(document, cancellationToken);
         return new KnowledgeDocumentCommandResult(document);
     }
@@ -90,7 +90,7 @@ public sealed class KnowledgeDocumentDomainService : IKnowledgeDocumentDomainSer
         cancellationToken.ThrowIfCancellationRequested();
 
         var document = await GetDocumentOrThrowAsync(id, cancellationToken);
-        await _ingestor.RemoveDocumentAsync(document.BasicId.ToString(), document.TenantId, document.ChunkCount, cancellationToken);
+        await _ingestor.RemoveDocumentAsync(document.BasicId.ToString(), document.ChunkCount, cancellationToken);
         if (!await _documentRepository.DeleteAsync(document, cancellationToken))
         {
             throw new InvalidOperationException("知识文档删除失败。");
@@ -145,7 +145,7 @@ public sealed class KnowledgeDocumentDomainService : IKnowledgeDocumentDomainSer
             {
                 try
                 {
-                    await _ingestor.RemoveDocumentAsync(document.BasicId.ToString(), document.TenantId, writtenChunkCount, CancellationToken.None);
+                    await _ingestor.RemoveDocumentAsync(document.BasicId.ToString(), writtenChunkCount, CancellationToken.None);
                 }
                 catch (Exception cleanupEx)
                 {
