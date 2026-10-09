@@ -76,6 +76,8 @@ Saas 模块在 `OnPostApplicationInitialization`（**所有模块都就绪之后
 
 `SysTaskLog`（`Sys_Task_Log_{yyyyMM}`，按月分表）记录每次执行的开始/结束、耗时、结果与异常。分表数据要走 SqlSugar 的分表 API 按时间范围查，不能当普通表直接查。
 
+执行历史随日志保留期清理：平台任务 `log-retention-cleanup`（`LogRetentionCleanupTask`）按平台参数 `saas.log.retention-days`（缺省 180 天）删除 `CreatedTime` 早于保留期的行，只删行、不 `DROP` 月表。`SysTaskLog` 存放在平台库，平台与各租户（含库隔离租户）的执行历史都在平台库中按租户逐个清理。
+
 ## 与其它异步机制的分工
 
 | 需求 | 用什么 |

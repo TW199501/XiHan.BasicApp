@@ -10,7 +10,8 @@
 backend/src/main/XiHan.BasicApp.WebHost/
 ├── appsettings.json                 # 基础（Logging / AllowedHosts / CodeGeneration）
 ├── appsettings.Development.json     # 开发环境（完整示例，带逐项注释）
-└── appsettings.Production.json      # 生产环境
+├── appsettings.Production.example.json  # 生产环境范本（入库，不含真实密钥）
+└── appsettings.Production.json      # 生产环境（不入库，从范本复制）
 ```
 
 优先级（后者覆盖前者）：`appsettings.json` → `appsettings.{Environment}.json` → 环境变量 → 命令行。
@@ -18,7 +19,7 @@ backend/src/main/XiHan.BasicApp.WebHost/
 ::: tip 环境变量写法
 配置层级用**双下划线**表示：`XiHan:Authentication:Jwt:SecretKey` → `XiHan__Authentication__Jwt__SecretKey`。
 
-**生产的密钥类配置一律走环境变量或密钥库，不要提交明文。** 生产 `appsettings` 通常被 gitignore，需要在服务器上单独维护——这也是几个开关（如 `EnableDiffLog`）最容易漏配的原因。
+**生产的密钥类配置一律走环境变量或密钥库，不要提交明文。** 生产 `appsettings.Production.json` 被 gitignore，从 `appsettings.Production.example.json` 复制后在服务器上单独维护，必改项见[部署](./deployment#后端-生产配置)。
 :::
 
 ## `Hosting`

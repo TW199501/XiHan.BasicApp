@@ -1209,7 +1209,8 @@ Hub 侧**没有** `long → string` 与枚举的自动转换器（那是 MVC JSO
 backend/src/main/XiHan.BasicApp.WebHost/
 ├── appsettings.json                 # 基础（Logging / AllowedHosts / CodeGeneration）
 ├── appsettings.Development.json     # 开发环境（完整示例，带逐项注释）
-└── appsettings.Production.json      # 生产环境
+├── appsettings.Production.example.json  # 生产环境范本（入库，不含真实密钥）
+└── appsettings.Production.json      # 生产环境（不入库，从范本复制）
 ```
 
 优先级（后者覆盖前者）：`appsettings.json` → `appsettings.{Environment}.json` → 环境变量 → 命令行。
@@ -1217,7 +1218,7 @@ backend/src/main/XiHan.BasicApp.WebHost/
 ::: tip 环境变量写法
 配置层级用**双下划线**表示：`XiHan:Authentication:Jwt:SecretKey` → `XiHan__Authentication__Jwt__SecretKey`。
 
-**生产的密钥类配置一律走环境变量或密钥库，不要提交明文。** 生产 `appsettings` 通常被 gitignore，需要在服务器上单独维护——这也是几个开关（如 `EnableDiffLog`）最容易漏配的原因。
+**生产的密钥类配置一律走环境变量或密钥库，不要提交明文。** 生产 `appsettings.Production.json` 被 gitignore，从 `appsettings.Production.example.json` 复制后在服务器上单独维护，必改项见[部署](./deployment#后端-生产配置)。
 :::
 
 ## `Hosting`
@@ -1548,11 +1549,45 @@ backend/src/main/XiHan.BasicApp.WebHost/
 
 ::: tip 部署前置
 - 准备好可连接的 **PostgreSQL** 与 **Redis**。
-- 全新数据库首次启动会自动建库、建表并执行数据种子（对应 `EnableDbInitialization` / `EnableTableInitialization` / `EnableDataSeeding`：框架缺省均为 `false`，仓库的 `appsettings.Development.json` 全部打开，生产配置需自行打开）。存量数据库的变更写在 `UpdateScripts/<版本>/<版本>.sql`，`XiHan:Upgrade:EnableAutoCheckOnStartup` 为 `true`（缺省值）时应用启动会自动执行，失败即中断启动；不希望应用启动时改库，就关掉它并在发布流程里先完成迁移。
-- 基础数据种子始终执行；演示数据（演示租户、组织、账号等）只在 `Saas:Seed:EnableDemoData` 为 `true` 时写入，缺省即不写。生产环境在 `appsettings.Production.json` 里写明 `false`。
+- 全新数据库首次启动会自动建库、建表并执行数据种子（对应 `EnableDbInitialization` / `EnableTableInitialization` / `EnableDataSeeding`：框架缺省均为 `false`，仓库的 `appsettings.Development.json` 与生产范本全部打开）。存量数据库的变更写在 `UpdateScripts/<版本>/<版本>.sql`，`XiHan:Upgrade:EnableAutoCheckOnStartup` 为 `true`（缺省值）时应用启动会自动执行，失败即中断启动；不希望应用启动时改库，就关掉它并在发布流程里先完成迁移。
+- 基础数据种子始终执行；演示数据（演示租户、组织、账号等）只在 `Saas:Seed:EnableDemoData` 为 `true` 时写入，缺省即不写。生产范本已写明 `false`。
 - 生产环境 CORS 仅放行配置中的域名（`XiHan:Web:Api:Cors:AllowedOrigins` 与网关 `XiHan:Web:Gateway:AllowedOrigins`），部署到自己的域名时务必同步修改，否则前端会被跨域拦截。
 - 若用到 AI / 知识库能力，还需准备对应的向量库（如 Qdrant）与嵌入模型配置。
 :::
+
+## 后端：生产配置
+
+`appsettings.Production.json` 被 `.gitignore` 排除，仓库里没有。仓库提供不含真实密钥的范本 `appsettings.Production.example.json`，在 WebHost 目录下复制一份再改：
+
+```bash
+cd backend/src/main/XiHan.BasicApp.WebHost
+cp appsettings.Production.example.json appsettings.Production.json
+```
+
+复制后必改的键（范本里写作 `<...>` 占位符或留空）：
+
+| 键 | 说明 |
+| --- | --- |
+| `XiHan:Authentication:Jwt:SecretKey` | 至少 32 字节的随机值，如 `openssl rand -base64 48` 的输出。范本留空，没填启动即报错 |
+| `XiHan:Data:SqlSugarCore:ConnectionConfigs:0:ConnectionString` | 主库连接串 |
+| `XiHan:Data:SqlSugarCore:ConnectionConfigs:0:ModuleDataSourceConfigs:0:ConnectionString` | ERP 模块库连接串；留空则与主库同库 |
+| `XiHan:Caching:Redis:Configuration` | Redis 连接串；不用 Redis 就把 `IsEnabled` 改为 `false` |
+| `XiHan:Web:Api:Cors:AllowedOrigins` | 前端访问地址 |
+| `XiHan:Authentication:OAuth:FrontendCallbackUrl` | 第三方登录回调页，与前端访问地址同源 |
+
+按需修改：
+
+- 第三方登录：范本的 `XiHan:Authentication:OAuth:Enabled` 为 `false`，各提供商凭据是占位值，换成平台申请的 `ClientId` / `ClientSecret` 后再开启，不用的提供商把各自的 `Enabled` 改为 `false`。
+- 开放接口签名：`XiHan:Web:Api:OpenApiSecurity:Clients` 的 `SecretKey` / `EncryptKey` 与 `frontend/.env.production` 的 `VITE_API_SECURITY_SECRET_KEY` / `VITE_API_SECURITY_ENCRYPT_KEY` 成对，改一处要同步改另一处。
+- 演示数据：范本的 `Saas:Seed:EnableDemoData` 为 `false`，生产环境保持关闭。
+
+范本与 `appsettings.Development.json` 的配置键保持一致（开发专用的 `CodeGeneration` 节除外），由 WebHost 测试检查。开发配置新增键时同步加进范本。
+
+### Docker 部署
+
+`docker-compose.yml` 把宿主机的 `backend/src/main/XiHan.BasicApp.WebHost/appsettings.Production.json` 挂进容器，启动前必须先按上面复制好，否则 Docker 会在该路径建一个空目录挂进去，后端读不到配置。
+
+compose 用环境变量覆盖了监听地址、主库连接串、Redis 与 Qdrant 地址，但**不覆盖 ERP 模块库的连接串**（`ModuleDataSourceConfigs`），其主机要在 `appsettings.Production.json` 里写成容器服务名 `postgres`，用户名与密码同 `.env` 的 `POSTGRES_USER` / `POSTGRES_PASSWORD`。CORS 与 OAuth 回调按 compose 的前端端口填，缺省是 `http://<主机>:8080`。
 
 ## 后端：发布
 
@@ -1560,11 +1595,11 @@ backend/src/main/XiHan.BasicApp.WebHost/
 dotnet publish backend/src/main/XiHan.BasicApp.WebHost -c Release -o /opt/xihan-basicapp
 ```
 
-发布前在目标环境的 `appsettings.Production.json`（或环境变量）中配置好数据库连接串、Redis、JWT 签名密钥、以及初始超管密码等敏感项。
+发布前按[生产配置](#后端-生产配置)准备好 `appsettings.Production.json`，密钥类配置也可改用环境变量提供。
 
 升级脚本当前使用 PostgreSQL 方言。启动时引擎先处理平台库、再处理配置为独立数据库的租户，并用数据库租约锁协调多副本；没抢到租约的副本不会等待，照常启动。上线前应备份数据库、在同版本副本验证脚本，多副本发布时由编排层控制放流，细节见[升级与迁移](./backend/upgrade)。
 
-应用监听地址与端口由配置项 `Hosting:Urls` 决定（`Program.cs` 启动时读取该值并调用 `UseUrls`）；仓库自带的 `appsettings.Production.json` 默认配置为 `http://127.0.0.1:9708`，可按需调整。对外暴露时建议在前面加一层反向代理（Nginx / Caddy 等）做 TLS 终止与静态资源分流。
+应用监听地址与端口由配置项 `Hosting:Urls` 决定（`Program.cs` 启动时读取该值并调用 `UseUrls`）；生产范本默认配置为 `http://127.0.0.1:9708`，可按需调整。对外暴露时建议在前面加一层反向代理（Nginx / Caddy 等）做 TLS 终止与静态资源分流。
 
 ## 后端：Linux（Supervisor）
 
@@ -4836,6 +4871,44 @@ CodeFirst 负责首次建表；已有库的结构和数据变化由 Framework Up
 `.EnableDiffLogEvent()` 保留，它单独用是安全的。
 :::
 
+## MySQL 与 SQL Server 的约定
+
+- **MySQL 时间按 UTC 读写**：BasicApp 的每条 MySQL 连接都把连接串规范化为 `DateTimeKind=Utc`，连接串显式设成其他值时，构建连接配置（启动时创建 SqlSugarScope，或运行时新增租户连接）即抛出异常（消息不含连接串）；执行前把 `DateTimeOffset` 参数转成 UTC（挂在 `AopEvents.OnExecutingChangeSql`，串接已有委派）。经 `ConfigureConnectionConfigs` 生效，覆盖平台库、平台模块库与运行时新增的租户主库。插入与更新实体时（含多行批量写入），把实体中带非 0 偏移的 `DateTimeOffset` 列值转成 UTC，传入的实体对象的偏移随之变为 +00:00、时刻不变（经 `ConfigureDbAction` 串接已有委派，在框架的主键、审计与租户注入之后执行；租户模块库也经过）。
+- **时间列 6 位小数秒**：新建表的时间列为 MySQL `datetime(6)`、SQL Server `datetimeoffset(6)`、PostgreSQL `timestamptz(6)`。已存在的 MySQL 库由升级脚本 `UpdateScripts/5.6.1/mysql/5.6.1.sql` 从 `datetime(0)` 改为 `datetime(6)`，原值不变；已存在的 SQL Server 表保留 `datetimeoffset(7)`。
+- **收件箱去重键**：区分大小写的排序规则与既有 SQL Server 库的修补脚本，见 `backend/src/modules/XiHan.BasicApp.Saas/README.md` 的「事件收发件箱」。
+- **SQL Server 字符串列为 nvarchar**：BasicApp 的每条 SQL Server 连接开启 SqlSugar 的 `MoreSettings.SqlServerCodeFirstNvarchar`（`SqlServerConnectionSettings`，经 `ConfigureConnectionConfigs` 生效，覆盖范围与上面的 MySQL 约定相同），新建表的字符串列为 `nvarchar(n)`，中文等非 ASCII 字符按原样存取。建表只建不改，已存在的表由升级脚本 `UpdateScripts/5.6.1/mssql/5.6.1.sql` 把 `dbo` 架构下 `Sys_` 开头的表（含分表）的 `varchar` 列转为 `nvarchar`：长度、排序规则、可空性与索引定义不变，可重复执行，其他表不动。列被外键、默认值约束、架构绑定视图、手工统计信息、主键或唯一约束等引用时脚本报错并列出表名、列名与对象，不做改动，需先手工处理再启动。原先已存成 `?` 的字符无法还原。转换逐列重写整张表，大表先手动执行该脚本再启动（见 `UpdateScripts/README.md`）。租户模块库与 `IDynamicConnectionRegistrar` 注册的连接不经 `ConfigureConnectionConfigs`，在这些连接上新建的表仍是 `varchar`（追踪于 E-134）。
+
+已知限制（MySQL，追踪于 E-134）：
+
+| 情形 | 表现 |
+| --- | --- |
+| 租户模块库（`Tenant_{id}_Erp`） | 连接串由租户主库派生，继承其 `DateTimeKind=Utc`；不经 `ConfigureConnectionConfigs`，没有参数转换；实体插入与更新的列值已转成 UTC，其他带非 0 偏移的 `DateTimeOffset` 参数会抛出异常 |
+| `IDynamicConnectionRegistrar` 注册的连接 | 不经 `ConfigureConnectionConfigs`，既没有 UTC 规范化也没有参数转换，由注册方自行处理（代码生成的数据源连接已补上 `DateTimeKind=Utc`） |
+
+## 多数据库集成测试
+
+收发件箱、接口幂等与任务执行历史清理的数据库测试在 PostgreSQL、SQL Server、MySQL 上各跑一遍，每种数据库一个测试类，由环境变量门控：
+
+| 环境变量 | 数据库 | 连接串示例（密码只放环境变量） |
+| --- | --- | --- |
+| `XIHAN_TEST_POSTGRES` | PostgreSQL | `Host=127.0.0.1;Port=15432;Database=xihan_basicapp_test;Username=postgres;Password=***` |
+| `XIHAN_TEST_SQLSERVER` | SQL Server 2022 | `Server=127.0.0.1,14333;Database=xihan_basicapp_test;User Id=sa;Password=***;TrustServerCertificate=True` |
+| `XIHAN_TEST_MYSQL` | MySQL 8.4 | `Server=127.0.0.1;Port=13306;Database=xihan_basicapp_test;Uid=root;Pwd=***;AllowPublicKeyRetrieval=True;SslMode=None` |
+
+- 未设置的变量对应的测试跳过，跳过不算通过；CI 不起数据库，全部跳过。
+- 连接的库必须是专用的一次性测试库：测试会删除并重建 `Sys_Event_Outbox`、`Sys_Event_Inbox`、`Sys_Idempotency_Record` 与自己写入的 `Sys_Task_Log_` 月表。
+- SQL Server 与 MySQL 账号需要 `CREATE DATABASE` 权限，MySQL 另需 `CREATE ROUTINE`：部分用例会新建临时库（SQL Server 默认排序规则 `Chinese_PRC_CI_AS`、`Latin1_General_CI_AS`、`SQL_Latin1_General_CP1_CI_AS` 或与测试库相同，MySQL `utf8mb4_0900_ai_ci`），用完即删除；5.6.1 升级脚本测试与收件箱修补脚本用例都在临时库里执行脚本，不改动共用测试库。
+- MySQL 测试库保留默认排序规则 `utf8mb4_0900_ai_ci`，用来验证去重键的排序规则。
+- SQL Server 测试库未开启 `READ_COMMITTED_SNAPSHOT`：并发领取用例在 SQL Server 上不覆盖领取更新的状态守卫，去掉守卫时只有 PostgreSQL 与 MySQL 的用例会失败。
+- 在 bash 载入连接串时值要加单引号，否则会在 `;` 处被截断。
+
+```bash
+set -a; . ~/.xihan/basicapp-test.env; set +a
+dotnet test --project backend/test/XiHan.BasicApp.Saas.Tests/XiHan.BasicApp.Saas.Tests.csproj -c Release
+```
+
+共用的连接与表结构查询在测试项目的 `TestDatabases/`（`IntegrationDatabase`、`DatabaseSchemaProbe`）。
+
 ## 排查
 
 | 现象 | 原因 |
@@ -6043,7 +6116,7 @@ XiHan.BasicApp 把"谁在什么时候、从哪里、对什么做了什么、结�
 - **操作日志 vs 实体变更**：操作日志覆盖宽泛的业务动作；实体变更只记**数据库行**的字段级前后快照，是合规级的数据溯源。
 - **登录日志 vs 操作日志**：认证类动作（登录/登出/令牌刷新/改密/绑定 MFA）由登录日志专门承担，操作日志写入器会**主动跳过**这些动作（见下），不重复记账。
 
-所有六张表都是**只追加、永不更新**的审计数据，并且都是**按月分表**（`Sys_Xxx_Log_{year}{month}{day}`，`SplitType.Month`）。这带来一条硬约束：**查询与清理必须带时间范围**，否则框架会扫描全部月表。业务上不支持删除；清理已自动化——动态任务 `LogRetentionCleanupTask`（覆盖本页六类 + 下文的权限变更日志共 7 类分表日志）按 `CreatedTime` 逐行删除过期数据（只删行、不 `DROP` 表），保留天数读平台参数 `saas.log.retention-days`（缺省 180 天；不是正整数时任务直接失败，不按错误的保留期删数据），不依赖人工 `TRUNCATE`/`DROP`。
+所有六张表都是**只追加、永不更新**的审计数据，并且都是**按月分表**（`Sys_Xxx_Log_{year}{month}{day}`，`SplitType.Month`）。这带来一条硬约束：**查询与清理必须带时间范围**，否则框架会扫描全部月表。业务上不支持删除；清理已自动化——动态任务 `LogRetentionCleanupTask`（覆盖本页六类 + 下文的权限变更日志 + 任务执行历史 `SysTaskLog` 共 8 类分表日志）按 `CreatedTime` 逐行删除过期数据（只删行、不 `DROP` 表），保留天数读平台参数 `saas.log.retention-days`（缺省 180 天；不是正整数时任务直接失败，不按错误的保留期删数据），不依赖人工 `TRUNCATE`/`DROP`。
 
 ## 逐类详解
 
@@ -7726,6 +7799,8 @@ Saas 模块在 `OnPostApplicationInitialization`（**所有模块都就绪之后
 
 `SysTaskLog`（`Sys_Task_Log_{yyyyMM}`，按月分表）记录每次执行的开始/结束、耗时、结果与异常。分表数据要走 SqlSugar 的分表 API 按时间范围查，不能当普通表直接查。
 
+执行历史随日志保留期清理：平台任务 `log-retention-cleanup`（`LogRetentionCleanupTask`）按平台参数 `saas.log.retention-days`（缺省 180 天）删除 `CreatedTime` 早于保留期的行，只删行、不 `DROP` 月表。`SysTaskLog` 存放在平台库，平台与各租户（含库隔离租户）的执行历史都在平台库中按租户逐个清理。
+
 ## 与其它异步机制的分工
 
 | 需求 | 用什么 |
@@ -7817,7 +7892,7 @@ Saas 模块在 `OnPostApplicationInitialization`（**所有模块都就绪之后
 | `saas.auth.impersonation` | JSON | `sessionMinutes` 模仿会话分钟数（按 1~480 归一）；`notifyTarget` 是否通知被模仿者 |
 | `saas.bot.telegram` | JSON | Telegram 机器人平台设置：总开关、Webhook 地址与路由前缀、刷新与缓存周期、兜底回复、网络 |
 | `saas.bot.telegram.webhook-secret-token` | 加密文本 | Webhook 模式必填的密钥令牌，单列是为了加密存储 |
-| `saas.log.retention-days` | 数字 | 7 类分表日志的保留天数，缺省 180 |
+| `saas.log.retention-days` | 数字 | 8 类分表日志（含任务执行历史）的保留天数，缺省 180 |
 | `chat.policy` | JSON | `retentionDays` 聊天消息保留天数（缺省 365）；`sensitiveWords` 敏感词数组 |
 
 种子只补缺的参数、对齐名称与说明等元数据，配置值只在为空时写入初始值，运营改过的值与启停状态不动。
@@ -7988,7 +8063,7 @@ UpdateScripts/
 规则：
 
 1. 目录名即版本号，如 `UpdateScripts/5.6.1/5.6.1.sql`。只有高于库中 `DbVersion` 的版本会执行，与程序版本 `backend/props/version.props` 无关。
-2. 当前脚本使用 **PostgreSQL 方言**；文档中的 MySQL / MariaDB 支持主要指 ORM 与首次 CodeFirst，不代表现有升级脚本可直接跨库运行。引擎不区分方言，会把脚本原样交给当前库执行：非 PostgreSQL 的存量库开着 `EnableAutoCheckOnStartup` 升级时，`DO $$ … $$` 这类 PostgreSQL 专有语法会执行失败并中断启动，需要自备对应方言的脚本，或关掉自动升级另行处理。
+2. 脚本按数据库种类分目录：版本目录根层的 `.sql` 是 PostgreSQL 脚本（3.10.0～5.6.0 的历史脚本只有 PostgreSQL），`pgsql/`、`mssql/`、`mysql/` 子目录分别放 PostgreSQL、SQL Server、MySQL 脚本。升级时按当前连接的 `DbType` 只执行对应方言（`DialectAwareUpgradeScriptProvider`），平台库与各库隔离租户的独立库各自判断。自 5.6.1 起每个版本都要有三种方言的脚本：PostgreSQL 放在版本目录根层或 `pgsql/` 均可，`mssql/` 与 `mysql/` 必须有。某版本缺少当前数据库的方言脚本时升级失败并中断启动，不会跳过，也不写台账；同一版本同时有根层 `.sql` 与 `pgsql/`，或出现其他子目录，启动时也会失败。新建的 SQL Server、MySQL 库登记为最新版本，不执行历史脚本。缺方言导致的失败，升级结果消息是系统的路径不存在异常（如 `升级失败: Could not find a part of the path '…/5.7.0/mssql/__missing__.sql'`），日志中对应一行 `执行迁移脚本: 5.7.0/[缺少 mssql 方言脚本]`，两处都带有缺少的版本与方言。各方言的写法见 `UpdateScripts/README.md` 的「方言目录」。
 3. PostgreSQL 标识符使用小写且不加引号，匹配 SqlSugar 实际创建的表列名。
 4. 尽量用 `IF EXISTS` / `IF NOT EXISTS` 写成可重试脚本。
 5. 一个版本内若存在多个脚本，引擎按脚本名排序；版本之间按语义版本升序执行。
