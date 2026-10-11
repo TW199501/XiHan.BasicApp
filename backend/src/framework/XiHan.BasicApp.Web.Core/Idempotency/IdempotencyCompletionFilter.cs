@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
+using XiHan.BasicApp.Web.Core.Logging;
 
 namespace XiHan.BasicApp.Web.Core.Idempotency;
 
@@ -70,7 +71,7 @@ public class IdempotencyCompletionFilter : IAsyncActionFilter
 
         if (!TryCreateSnapshot(executedContext.Result, out var response))
         {
-            _logger.LogWarning("幂等请求 {Method} {Endpoint} 的结果无法保存为快照", execution.Key.Method, execution.Key.Endpoint);
+            _logger.LogWarning("幂等请求 {Method} {Endpoint} 的结果无法保存为快照", LogValueSanitizer.Clean(execution.Key.Method), LogValueSanitizer.Clean(execution.Key.Endpoint));
             return;
         }
 

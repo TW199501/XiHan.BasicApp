@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging;
 using System.Security.Claims;
 using XiHan.BasicApp.Saas.Application.Contracts;
 using XiHan.BasicApp.Saas.Application.Dtos;
+using XiHan.BasicApp.Web.Core.Logging;
 using XiHan.Framework.Authentication.OAuth;
 using XiHan.Framework.Core.DynamicProxy;
 
@@ -110,7 +111,7 @@ public static class OAuthEndpoints
         catch (Exception ex)
         {
             // 发起跳转若抛异常，不把用户卡在转圈页，统一跳回前端并带错误码，异常落日志便于排查
-            logger.LogError(ex, "OAuth: 发起 Challenge 失败 provider={Provider}", provider);
+            logger.LogError(ex, "OAuth: 发起 Challenge 失败 provider={Provider}", LogValueSanitizer.Clean(provider));
             httpContext.Response.Redirect(AppendParameter(frontendCallback, bindUserId is null ? "error" : "bind", "challenge_failed"));
         }
     }
