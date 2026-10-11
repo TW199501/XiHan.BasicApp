@@ -1,0 +1,39 @@
+backend/src/framework/XiHan.BasicApp.Web.Core/Logging/LogValueSanitizer.cs
+  s_0bfed364084904::t_3a3a7b9b45d9b8 1-22
+backend/test/XiHan.BasicApp.Web.Core.Tests/Logging/LogValueSanitizerTests.cs
+  s_0bfed364084904::t_3c13841c879a36 1-36
+backend/src/framework/XiHan.BasicApp.Web.Core/Idempotency/IdempotencyCompletionFilter.cs
+  s_8b4d020d873f87::t_5e0d6614598e9f 10,74
+backend/src/framework/XiHan.BasicApp.Web.Core/Idempotency/IdempotencyFilter.cs
+  s_8b4d020d873f87::t_967f1b01925569 16,226,231
+backend/src/modules/XiHan.BasicApp.Saas/Infrastructure/OAuth/OAuthConnectEndpoints.cs
+  s_8b4d020d873f87::t_826d3f6f8733b0 11,92
+backend/src/modules/XiHan.BasicApp.Saas/Infrastructure/OAuth/OAuthEndpoints.cs
+  s_8b4d020d873f87::t_23f57ece79f39e 14,114
+backend/src/modules/XiHan.BasicApp.Saas/Infrastructure/Seeders/Demo/SaasDemoSeeder.cs
+  s_8b4d020d873f87::t_3d204b4e072d39 86-87
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3623ec98b4914d3da6c675aac43a909549113e63",
+  "prompts": {},
+  "sessions": {
+    "s_0bfed364084904": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b5688e66-ca29-4455-b853-2bb31e7782f7",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    },
+    "s_8b4d020d873f87": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7d04b68-1c23-47fa-82e5-8f04a4e2f586",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
