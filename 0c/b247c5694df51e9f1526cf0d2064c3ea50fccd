@@ -1,0 +1,26 @@
+frontend/packages/views/_core/authentication/oauth-callback.vue
+  s_0bfed364084904::t_dc73f4414e359b 38,40,42,45-58
+frontend/src/views/oauth/authorize.vue
+  s_0bfed364084904::t_6d58229e189719 98,101-112,114,116
+frontend/packages/utils/notification-text.ts
+  s_0bfed364084904::t_9192efd142f63b 32
+frontend/scripts/check-token-availability.mjs
+  s_0bfed364084904::t_ea288e5735ae5b 9
+  s_0bfed364084904::t_36d52c042930be 40,42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0cb247c5694df51e9f1526cf0d2064c3ea50fccd",
+  "prompts": {},
+  "sessions": {
+    "s_0bfed364084904": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b5688e66-ca29-4455-b853-2bb31e7782f7",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
