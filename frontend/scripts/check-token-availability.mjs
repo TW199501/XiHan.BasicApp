@@ -6,7 +6,7 @@
 // 页面上看不出报错。实测踩过一次：110 处动效引用指向未发版的令牌，12 条动画一帧不播。
 //
 // 真源是 node_modules 里那份 tokens.css 加本仓 packages/design/ 自己声明的名字。
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import process from 'node:process'
 
@@ -37,13 +37,13 @@ function sourceFiles(dir, out = []) {
 }
 
 function declaredIn(path) {
+  let css
   try {
-    statSync(path)
+    css = readFileSync(path, 'utf8')
   }
   catch {
     return new Set()
   }
-  const css = readFileSync(path, 'utf8')
   return new Set([...css.matchAll(/(--xh-[a-z0-9-]+)\s*:/g)].map(m => m[1]))
 }
 
