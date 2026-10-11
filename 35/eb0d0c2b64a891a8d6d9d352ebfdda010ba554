@@ -1,0 +1,14 @@
+backend/src/main/XiHan.BasicApp.WebHost/appsettings.Production.example.json
+  h_be8240d2cfaa4b 221,228-229
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "35eb0d0c2b64a891a8d6d9d352ebfdda010ba554",
+  "prompts": {},
+  "humans": {
+    "h_be8240d2cfaa4b": {
+      "author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
