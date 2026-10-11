@@ -1,0 +1,21 @@
+.github/workflows/ci.yml
+  s_8b4d020d873f87::t_e43ee30c401998 68
+.github/workflows/deploy-docs.yml
+  s_8b4d020d873f87::t_e8feb0353bfc30 56
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ea14d5fc672126404bd179d489e964b05ff91a64",
+  "prompts": {},
+  "sessions": {
+    "s_8b4d020d873f87": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b7d04b68-1c23-47fa-82e5-8f04a4e2f586",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "楊清雲 <41539966+TW199501@users.noreply.github.com>"
+    }
+  }
+}
