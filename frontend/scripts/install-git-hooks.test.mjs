@@ -1,27 +1,16 @@
-// node --test scripts/install-git-hooks.test.mjs
 // 在临时 git 仓里实际跑 install-git-hooks.mjs，检查钩子写到了哪里。
-import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { afterEach, beforeEach, test } from 'node:test'
-import { fileURLToPath } from 'node:url'
+import { join, resolve } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-const SCRIPT = fileURLToPath(new URL('install-git-hooks.mjs', import.meta.url))
+// vitest 以 frontend 为工作目录；jsdom 环境下 import.meta.url 不是 file: 地址
+const SCRIPT = resolve(process.cwd(), 'scripts', 'install-git-hooks.mjs')
+const SHARED_HOOK = '#!/bin/sh\necho shared\n'
 
 let tmp
 let env
-
-beforeEach(() => {
-  tmp = mkdtempSync(join(tmpdir(), 'install-git-hooks-'))
-  // 与真实的全局配置隔离
-  const globalConfig = join(tmp, 'gitconfig')
-  writeFileSync(globalConfig, '')
-  env = { ...process.env, GIT_CONFIG_GLOBAL: globalConfig, GIT_CONFIG_NOSYSTEM: '1' }
-})
-
-afterEach(() => rmSync(tmp, { recursive: true, force: true }))
 
 function git(cwd, ...args) {
   return execFileSync('git', args, { cwd, env, encoding: 'utf8' }).trim()
@@ -40,6 +29,13 @@ function makeRepo() {
   return repo
 }
 
+function makeSharedHooks() {
+  const shared = join(tmp, 'shared-hooks')
+  mkdirSync(shared)
+  writeFileSync(join(shared, 'pre-commit'), SHARED_HOOK)
+  return shared
+}
+
 function runInstaller(repo) {
   execFileSync('node', [join(repo, 'frontend', 'scripts', 'install-git-hooks.mjs')], {
     cwd: join(repo, 'frontend'),
@@ -48,29 +44,53 @@ function runInstaller(repo) {
   })
 }
 
-test('没有设定 core.hooksPath 时写进本仓 .git/hooks', () => {
-  const repo = makeRepo()
-  runInstaller(repo)
-  assert.ok(existsSync(join(repo, '.git', 'hooks', 'pre-commit')))
-})
+describe('install-git-hooks', () => {
+  beforeEach(() => {
+    tmp = mkdtempSync(join(tmpdir(), 'install-git-hooks-'))
+    // 与真实的全局配置隔离
+    const globalConfig = join(tmp, 'gitconfig')
+    writeFileSync(globalConfig, '')
+    env = { ...process.env, GIT_CONFIG_GLOBAL: globalConfig, GIT_CONFIG_NOSYSTEM: '1' }
+  })
 
-test('仓内设定的 core.hooksPath 照旧写进那个目录', () => {
-  const repo = makeRepo()
-  git(repo, 'config', 'core.hooksPath', '.githooks')
-  runInstaller(repo)
-  assert.ok(existsSync(join(repo, '.githooks', 'pre-commit')))
-})
+  afterEach(() => rmSync(tmp, { recursive: true, force: true }))
 
-test('全局 core.hooksPath 指向仓外时，不改共享目录，改写本仓 .git/hooks', () => {
-  const shared = join(tmp, 'shared-hooks')
-  mkdirSync(shared)
-  writeFileSync(join(shared, 'pre-commit'), '#!/bin/sh\necho shared\n')
-  const repo = makeRepo()
-  git(repo, 'config', '--global', 'core.hooksPath', shared)
-  runInstaller(repo)
-  assert.equal(
-    execFileSync('cat', [join(shared, 'pre-commit')], { encoding: 'utf8' }),
-    '#!/bin/sh\necho shared\n',
-  )
-  assert.ok(existsSync(join(repo, '.git', 'hooks', 'pre-commit')))
+  it('没有设定 core.hooksPath 时写进本仓 .git/hooks', () => {
+    const repo = makeRepo()
+    runInstaller(repo)
+    expect(existsSync(join(repo, '.git', 'hooks', 'pre-commit'))).toBe(true)
+  })
+
+  it('仓内设定的 core.hooksPath 照旧写进那个目录', () => {
+    const repo = makeRepo()
+    git(repo, 'config', 'core.hooksPath', '.githooks')
+    runInstaller(repo)
+    expect(existsSync(join(repo, '.githooks', 'pre-commit'))).toBe(true)
+  })
+
+  it('仓内名字以 .. 开头的目录仍算仓内', () => {
+    const repo = makeRepo()
+    git(repo, 'config', 'core.hooksPath', '..hooks')
+    runInstaller(repo)
+    expect(existsSync(join(repo, '..hooks', 'pre-commit'))).toBe(true)
+  })
+
+  it('全局 core.hooksPath 指向仓外时，不改共享目录，改写本仓 .git/hooks', () => {
+    const shared = makeSharedHooks()
+    const repo = makeRepo()
+    git(repo, 'config', '--global', 'core.hooksPath', shared)
+    runInstaller(repo)
+    expect(readFileSync(join(shared, 'pre-commit'), 'utf8')).toBe(SHARED_HOOK)
+    expect(existsSync(join(repo, '.git', 'hooks', 'pre-commit'))).toBe(true)
+  })
+
+  it('仓内的 hooks 目录是指向仓外的符号链接时，同样不改共享目录', () => {
+    const shared = makeSharedHooks()
+    const repo = makeRepo()
+    symlinkSync(shared, join(repo, '.githooks'), 'dir')
+    git(repo, 'config', 'core.hooksPath', '.githooks')
+    runInstaller(repo)
+    expect(readFileSync(join(shared, 'pre-commit'), 'utf8')).toBe(SHARED_HOOK)
+    expect(existsSync(join(repo, '.git', 'hooks', 'pre-commit'))).toBe(true)
+  })
 })

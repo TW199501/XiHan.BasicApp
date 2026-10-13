@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // 把 package.json 的 gitHooks 段写进本仓真正的钩子目录。由 postinstall 在每次安装后跑。
 import { execFileSync } from 'node:child_process'
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { isAbsolute, join, relative, resolve } from 'node:path'
+import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 
@@ -36,6 +36,17 @@ function hookScript(command, workdir) {
   ].join('\n')
 }
 
+/** 解析符号链接后的真实路径；路径还不存在时解析最近一层存在的上级 */
+function realPath(path) {
+  const rest = []
+  let head = path
+  while (!existsSync(head) && dirname(head) !== head) {
+    rest.unshift(basename(head))
+    head = dirname(head)
+  }
+  return join(realpathSync(head), ...rest)
+}
+
 const hooks = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).gitHooks ?? {}
 const names = Object.keys(hooks)
 if (names.length === 0) {
@@ -52,8 +63,9 @@ try {
   ownHooks = join(resolve(ROOT, git('rev-parse', '--git-common-dir')), 'hooks')
   workdir = relative(top, ROOT).replaceAll('\\', '/')
   // 全局或共享的 core.hooksPath 在本仓之外，写进去会改到本机所有仓的钩子；改写本仓 .git/hooks，由全局钩子管理器（如 git-guard）串接执行
-  const fromTop = relative(top, dir)
-  if (dir !== ownHooks && (fromTop.startsWith('..') || isAbsolute(fromTop))) {
+  const fromTop = relative(realPath(top), realPath(dir))
+  const outside = fromTop === '..' || fromTop.startsWith(`..${sep}`) || isAbsolute(fromTop)
+  if (realPath(dir) !== realPath(ownHooks) && outside) {
     console.log(`[install-git-hooks] core.hooksPath 指向仓外（${dir}），改装进 ${ownHooks}`)
     dir = ownHooks
   }
