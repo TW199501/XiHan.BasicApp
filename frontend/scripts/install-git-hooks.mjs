@@ -2,7 +2,7 @@
 // 把 package.json 的 gitHooks 段写进本仓真正的钩子目录。由 postinstall 在每次安装后跑。
 import { execFileSync } from 'node:child_process'
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { join, relative, resolve } from 'node:path'
+import { isAbsolute, join, relative, resolve } from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 
@@ -45,9 +45,18 @@ if (names.length === 0) {
 
 let dir
 let workdir
+let ownHooks
 try {
+  const top = git('rev-parse', '--show-toplevel')
   dir = resolve(ROOT, git('rev-parse', '--git-path', 'hooks'))
-  workdir = relative(git('rev-parse', '--show-toplevel'), ROOT).replaceAll('\\', '/')
+  ownHooks = join(resolve(ROOT, git('rev-parse', '--git-common-dir')), 'hooks')
+  workdir = relative(top, ROOT).replaceAll('\\', '/')
+  // 全局或共享的 core.hooksPath 在本仓之外，写进去会改到本机所有仓的钩子；改写本仓 .git/hooks，由全局钩子管理器（如 git-guard）串接执行
+  const fromTop = relative(top, dir)
+  if (dir !== ownHooks && (fromTop.startsWith('..') || isAbsolute(fromTop))) {
+    console.log(`[install-git-hooks] core.hooksPath 指向仓外（${dir}），改装进 ${ownHooks}`)
+    dir = ownHooks
+  }
 }
 catch {
   // 镜像构建、CI 浅拷贝之类没有 git 仓，那不是错
