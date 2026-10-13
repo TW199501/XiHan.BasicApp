@@ -29,7 +29,7 @@ function htmlToText(html: string): string {
     const spaced = html.replace(/<(\/(?:p|div|li|h[1-6]|tr|blockquote)|br\s*\/?)>/gi, '$& ')
     return new DOMParser().parseFromString(spaced, 'text/html').body.textContent ?? ''
   }
-  return html.replace(/<[^>]+>/g, ' ')
+  return html.replace(/<[^<>]+>/g, ' ')
 }
 
 /** 去掉常见的 Markdown 标记，只留读者看得到的字 */

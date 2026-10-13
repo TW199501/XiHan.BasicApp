@@ -35,20 +35,27 @@ const BIND_ERROR_TEXT: Record<string, string> = {
  * 哈希路由下形如 `#/auth/oauth-callback?accessToken=x`，vue-router 已把它解析进 route.query；
  * history 路由下形如 `/auth/oauth-callback#accessToken=x`，路由取不到，这里补一层从 location.hash 解析。
  */
-function readCallbackParams(): Record<string, string> {
-  const params: Record<string, string> = {}
+const CALLBACK_PARAM_KEYS = ['bind', 'error', 'accessToken', 'refreshToken', 'expiresIn'] as const
 
-  for (const [key, value] of Object.entries(route.query)) {
+type CallbackParamKey = typeof CALLBACK_PARAM_KEYS[number]
+
+function readCallbackParams(): Partial<Record<CallbackParamKey, string>> {
+  const hash = window.location.hash
+  // `#/` 开头的是哈希路由的路径，其中的参数已由 route.query 给出，再解析一次只会得到脏键
+  const fragment = hash.startsWith('#') && !hash.startsWith('#/')
+    ? new URLSearchParams(hash.slice(1))
+    : null
+
+  // 只读取已知参数，route.query 优先，片段补缺
+  const params: Partial<Record<CallbackParamKey, string>> = {}
+  for (const key of CALLBACK_PARAM_KEYS) {
+    const value = route.query[key]
+    const fallback = fragment?.get(key)
     if (typeof value === 'string') {
       params[key] = value
     }
-  }
-
-  const hash = window.location.hash
-  // `#/` 开头的是哈希路由的路径，其中的参数已由 route.query 给出，再解析一次只会得到脏键
-  if (hash.startsWith('#') && !hash.startsWith('#/')) {
-    for (const [key, value] of new URLSearchParams(hash.slice(1))) {
-      params[key] ??= value
+    else if (fallback != null) {
+      params[key] = fallback
     }
   }
 

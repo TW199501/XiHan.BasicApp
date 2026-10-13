@@ -8,6 +8,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System.Text;
 using XiHan.BasicApp.Saas.Application.Services;
+using XiHan.BasicApp.Web.Core.Logging;
 using XiHan.Framework.Authentication.OAuth;
 
 namespace XiHan.BasicApp.Saas.Infrastructure.OAuth;
@@ -88,7 +89,7 @@ public static class OAuthConnectEndpoints
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "OAuth: /connect/token 处理异常 grantType={GrantType}", request.GrantType);
+            logger.LogError(ex, "OAuth: /connect/token 处理异常 grantType={GrantType}", LogValueSanitizer.Clean(request.GrantType));
             await WriteTokenErrorAsync(httpContext, 500, "server_error", "服务器内部错误。");
             return;
         }

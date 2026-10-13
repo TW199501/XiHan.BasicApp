@@ -95,16 +95,25 @@ async function approve() {
  * 仅在预览通过（redirect_uri 已被后端确认为已注册回调）时可达，故跳转安全。
  */
 function deny() {
-  const redirectUri = request.redirectUri
-  if (!redirectUri) {
+  if (!preview.value?.valid || !request.redirectUri) {
     return
   }
-  const separator = redirectUri.includes('?') ? '&' : '?'
-  let url = `${redirectUri}${separator}error=access_denied`
-  if (request.state) {
-    url += `&state=${encodeURIComponent(request.state)}`
+  let url: URL
+  try {
+    url = new URL(request.redirectUri)
   }
-  window.location.replace(url)
+  catch {
+    return
+  }
+  // 只跳转 http(s) 回调地址
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+    return
+  }
+  url.searchParams.set('error', 'access_denied')
+  if (request.state) {
+    url.searchParams.set('state', request.state)
+  }
+  window.location.replace(url.href)
 }
 
 onMounted(async () => {

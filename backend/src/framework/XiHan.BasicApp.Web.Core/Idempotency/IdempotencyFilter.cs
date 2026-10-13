@@ -13,6 +13,7 @@ using System.Globalization;
 using System.Reflection;
 using System.Text.Json;
 using XiHan.BasicApp.Core.Attributes;
+using XiHan.BasicApp.Web.Core.Logging;
 using XiHan.Framework.Application.Contracts.Dtos;
 using XiHan.Framework.Application.Contracts.Enums;
 using XiHan.Framework.MultiTenancy.Abstractions;
@@ -222,12 +223,12 @@ public class IdempotencyFilter : IAsyncActionFilter
                 return;
             }
 
-            _logger.LogWarning("幂等请求 {Method} {Endpoint} 未写入完成，已标记为结果不确定", execution.Key.Method, execution.Key.Endpoint);
+            _logger.LogWarning("幂等请求 {Method} {Endpoint} 未写入完成，已标记为结果不确定", LogValueSanitizer.Clean(execution.Key.Method), LogValueSanitizer.Clean(execution.Key.Endpoint));
             await _store.MarkIndeterminateAsync(execution.Key, execution.OwnerToken, CancellationToken.None);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "幂等请求 {Method} {Endpoint} 收尾时存储调用失败", execution.Key.Method, execution.Key.Endpoint);
+            _logger.LogError(ex, "幂等请求 {Method} {Endpoint} 收尾时存储调用失败", LogValueSanitizer.Clean(execution.Key.Method), LogValueSanitizer.Clean(execution.Key.Endpoint));
         }
     }
 

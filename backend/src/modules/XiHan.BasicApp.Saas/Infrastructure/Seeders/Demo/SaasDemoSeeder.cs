@@ -83,8 +83,8 @@ public sealed class SaasDemoSeeder(
         }
 
         Logger.LogInformation(
-            "{Seeder}：新增演示租户 {TenantCount} 个、平台账号 {AccountCount} 个；已有的不覆盖。演示账号密码 {Password}",
-            Name, created.Count, platformAccounts, SaasDemoScenario.Password);
+            "{Seeder}：新增演示租户 {TenantCount} 个、平台账号 {AccountCount} 个；已有的不覆盖。演示账号密码见文档",
+            Name, created.Count, platformAccounts);
     }
 
     private async Task<Dictionary<string, long>> EnsureGlobalRolesAsync(IReadOnlyList<SysPermission> catalog)

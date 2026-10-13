@@ -65,7 +65,7 @@ jobs:
       # action 在仓库根目录执行，默认只找根 package.json；本仓库的清单在 frontend/ 下，
       # 故显式指路，版本仍取自它的 packageManager 字段，不在此处再写一份版本号。
       - name: 安装 pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           package_json_file: frontend/package.json
 
