@@ -28,7 +28,7 @@ export default defineConfig(async (env) => {
       // 保证测试文件本身也受 TypeScript 与 lint 约束。
       globals: false,
       setupFiles: [fileURLToPath(new URL('./scripts/vitest-setup.ts', import.meta.url))],
-      include: ['src/**/*.{test,spec}.ts', 'packages/**/*.{test,spec}.ts'],
+      include: ['src/**/*.{test,spec}.ts', 'packages/**/*.{test,spec}.ts', 'scripts/**/*.test.mjs'],
       exclude: ['**/node_modules/**', '**/dist/**', '**/.turbo/**'],
       // @xihan-ui/* 不内联的话会走 Node 原生 ESM 解析，拿不到 vite 的别名与 dedupe，
       // 出现两份 Vue 运行时。临时链到同级 XiHan.UI 源码调试时同样要靠这条。
